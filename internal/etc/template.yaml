@@ -8,8 +8,8 @@ auth:
   accessExpire: 86400
 db:
   host: 127.0.0.1
-  port: 3306
-  username: root
+  port: 5432
+  username: nurture
   password: 123456
   dbname: nurture
 redis:

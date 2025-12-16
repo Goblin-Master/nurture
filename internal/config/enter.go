@@ -34,7 +34,13 @@ type DB struct {
 }
 
 func (db *DB) DSN() string {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&timeout=%s", db.Username, db.Password, db.Host, db.Port, db.DBName, "5s")
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		db.Username,
+		db.Password,
+		db.Host,
+		db.Port,
+		db.DBName,
+	)
 	return dsn
 }
 

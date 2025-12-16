@@ -11,7 +11,7 @@ services:
     restart: always
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./sql:/docker-entrypoint-initdb.d:ro
+      - ./schema/:/docker-entrypoint-initdb.d/:ro
       
   redis:
     container_name: redis
