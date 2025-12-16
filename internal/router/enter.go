@@ -3,7 +3,10 @@ package router
 import (
 	"fmt"
 	"nurture/internal/config"
+	"nurture/internal/dto"
+	"nurture/internal/handler"
 	manager "nurture/internal/manger"
+	"nurture/internal/middleware"
 	"nurture/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
@@ -40,5 +43,15 @@ func registerRoutes(routeManager *manager.RouteManager) {
 		rg.GET("/ping", func(c *gin.Context) {
 			response.Response(c, "pong", nil)
 		})
+	})
+
+	routeManager.RegisterUserRoutes(func(rg *gin.RouterGroup) {
+		userHandler := handler.NewUserHandler()
+		rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
+		rg.POST("/register", middleware.BindJsonMiddleware[dto.RegisterReq], userHandler.Register)
+		rg.POST("/code/login", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetLoginCode)
+		rg.POST("/code/register", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetRegisterCode)
+		rg.POST("/code/reset", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetResetCode)
+		rg.POST("/resetPassword", middleware.BindJsonMiddleware[dto.ResetPasswordReq], userHandler.ResetPassword)
 	})
 }

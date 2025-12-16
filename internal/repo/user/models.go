@@ -19,11 +19,11 @@ type User struct {
 	// 更新时间
 	Utime int64
 	// 账号
-	Account pgtype.Text
+	Account string
 	// 密码
 	Password string
 	// 邮箱
-	Email pgtype.Text
+	Email string
 	// 用户名
 	Username string
 	// 头像

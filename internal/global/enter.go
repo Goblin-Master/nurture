@@ -3,6 +3,7 @@ package global
 import (
 	"nurture/internal/pkg/pgsqlx"
 	"nurture/internal/pkg/redisx"
+	"nurture/internal/pkg/syncx"
 	"nurture/internal/pkg/zapx"
 
 	"github.com/go-redis/redis/v8"
@@ -11,13 +12,15 @@ import (
 )
 
 var (
-	Log *zap.SugaredLogger
-	DB  *pgxpool.Pool
-	RDB redis.Cmdable
+	Log       *zap.SugaredLogger
+	DB        *pgxpool.Pool
+	RDB       redis.Cmdable
+	CodeStore *syncx.Map[string, string]
 )
 
 func Init() {
 	Log = zapx.InitZap()
 	DB = pgsqlx.InitPgsql()
 	RDB = redisx.InitRedis()
+	CodeStore = new(syncx.Map[string, string])
 }

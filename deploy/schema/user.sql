@@ -7,9 +7,9 @@ CREATE TABLE IF NOT EXISTS "user" (
   user_id   UUID UNIQUE NOT NULL, -- 直接用github.com/google/uuid生成的字符串
   ctime     BIGINT NOT NULL,
   utime     BIGINT NOT NULL,
-  account   VARCHAR(20) UNIQUE,
+  account   VARCHAR(20) UNIQUE NOT NULL,
   password  VARCHAR(20) NOT NULL,
-  email     VARCHAR(20) UNIQUE,
+  email     VARCHAR(20) UNIQUE NOT NULL,
   username  VARCHAR(20) NOT NULL,
   avatar    VARCHAR(255) NOT NULL,
   role      SMALLINT NOT NULL DEFAULT 1

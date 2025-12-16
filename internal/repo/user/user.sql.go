@@ -23,9 +23,9 @@ type CreateUserParams struct {
 	UserID   pgtype.UUID
 	Ctime    int64
 	Utime    int64
-	Account  pgtype.Text
+	Account  string
 	Password string
-	Email    pgtype.Text
+	Email    string
 	Username string
 	Avatar   string
 	Role     int16
@@ -52,7 +52,7 @@ WHERE account = $1 AND password = $2 LIMIT 1
 `
 
 type GetUserByAccountAndPasswordParams struct {
-	Account  pgtype.Text
+	Account  string
 	Password string
 }
 
@@ -79,7 +79,7 @@ SELECT id, user_id, ctime, utime, account, password, email, username, avatar, ro
 WHERE email = $1 LIMIT 1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error) {
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
 	var i User
 	err := row.Scan(
@@ -123,7 +123,7 @@ WHERE email = $1
 `
 
 type UpdatePasswordByEmailParams struct {
-	Email    pgtype.Text
+	Email    string
 	Password string
 }
 

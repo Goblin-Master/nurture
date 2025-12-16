@@ -17,12 +17,14 @@ type Middleware func() gin.HandlerFunc
 // RouteManager 管理不同的路由组，按业务功能分组
 type RouteManager struct {
 	CommonRoutes *gin.RouterGroup //通用功能相关的路由组
+	UserRoutes   *gin.RouterGroup //用户相关的路由组
 }
 
 // NewRouteManager 创建一个新的 RouteManager 实例，包含各业务功能的路由组
 func NewRouteManager(router *gin.Engine) *RouteManager {
 	return &RouteManager{
 		CommonRoutes: router.Group("/api/common"), //通用功能相关的路由组
+		UserRoutes:   router.Group("/api/user"),   //用户相关的路由组
 	}
 }
 
@@ -31,11 +33,18 @@ func (rm *RouteManager) RegisterCommonRoutes(handler PathHandler) {
 	handler(rm.CommonRoutes)
 }
 
+// RegisterUserRoutes 用户相关的路由组
+func (rm *RouteManager) RegisterUserRoutes(handler PathHandler) {
+	handler(rm.UserRoutes)
+}
+
 // RegisterMiddleware 根据组名为对应的路由组注册中间件
 func (rm *RouteManager) RegisterMiddleware(group string, middleware Middleware) {
 	switch group {
 	case "common":
 		rm.CommonRoutes.Use(middleware())
+	case "user":
+		rm.UserRoutes.Use(middleware())
 	}
 }
 

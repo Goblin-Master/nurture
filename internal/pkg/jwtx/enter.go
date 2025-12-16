@@ -21,14 +21,14 @@ const (
 )
 
 type MyClaims struct {
-	UserID int64 `json:"user_id"`
-	Role   Role  `json:"role"`
+	UserID string `json:"user_id"`
+	Role   Role   `json:"role"`
 	jwt.RegisteredClaims
 }
 
 type Claims struct {
-	UserID int64 `json:"user_id"`
-	Role   Role  `json:"role"`
+	UserID string `json:"user_id"`
+	Role   Role   `json:"role"`
 }
 
 var (
@@ -58,10 +58,10 @@ func GenToken(c Claims) (string, error) {
 	return token.SignedString([]byte(secret))
 }
 
-func ParseToken(c *gin.Context) (int64, Role, error) {
+func ParseToken(c *gin.Context) (string, Role, error) {
 	data := c.GetHeader("Authorization")
 	if data == "" {
-		return 0, 0, ErrTokenEmpty
+		return "", 0, ErrTokenEmpty
 	}
 	token := strings.TrimPrefix(data, "Bearer ")
 	// 解析token
@@ -71,32 +71,32 @@ func ParseToken(c *gin.Context) (int64, Role, error) {
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "token is expired") {
-			return 0, 0, ErrTokenExpired
+			return "", 0, ErrTokenExpired
 		}
 		if strings.Contains(err.Error(), "signature is invalid") {
-			return 0, 0, ErrTokenInvalid
+			return "", 0, ErrTokenInvalid
 		}
 		if strings.Contains(err.Error(), "token contains an invalid") {
-			return 0, 0, ErrTokenInvalid
+			return "", 0, ErrTokenInvalid
 		}
 		fmt.Println(err)
-		return 0, 0, ErrDefault
+		return "", 0, ErrDefault
 	}
 	if claims, ok := t.Claims.(*MyClaims); ok && t.Valid {
 		return claims.UserID, claims.Role, nil
 	}
-	return 0, 0, ErrDefault
+	return "", 0, ErrDefault
 }
 
 // 必须使用了鉴权中间件才能用
-func GetUserID(c *gin.Context) int64 {
+func GetUserID(c *gin.Context) string {
 	if data, exists := c.Get(constant.TOKEN_USER_ID); exists {
-		user_id, ok := data.(int64)
+		user_id, ok := data.(string)
 		if ok {
 			return user_id
 		}
 	}
-	return 0
+	return ""
 }
 
 // 必须使用了鉴权中间件才能用
