@@ -32,24 +32,34 @@ func NewEmailX() *EmailX {
 		store:  global.CodeStore,
 	}
 }
+
 func (ex *EmailX) SendLoginCode(ctx context.Context, to string, code string) (err error) {
-	ex.store.StoreWithTTL(to, code, ex.ttl)
 	subject := fmt.Sprintf("[%s]邮箱登录", ex.config.Subject)
 	text := fmt.Sprintf("你正在进行邮箱登录，登录的验证码是：%s，十分钟内有效", code)
-	return ex.sendEmail(ctx, to, subject, text)
+	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
+		return err
+	}
+	ex.store.StoreWithTTL(to, code, ex.ttl)
+	return nil
 }
 func (ex *EmailX) SendResetPwdCode(ctx context.Context, to string, code string) (err error) {
-	ex.store.StoreWithTTL(to, code, ex.ttl)
 	subject := fmt.Sprintf("[%s]重置密码", ex.config.Subject)
 	text := fmt.Sprintf("你正在进行账号密码重置，重置的验证码是：%s，十分钟内有效", code)
-	return ex.sendEmail(ctx, to, subject, text)
+	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
+		return err
+	}
+	ex.store.StoreWithTTL(to, code, ex.ttl)
+	return nil
 }
 
 func (ex *EmailX) SendBindEmail(ctx context.Context, to string, code string) (err error) {
-	ex.store.StoreWithTTL(to, code, ex.ttl)
 	subject := fmt.Sprintf("[%s]绑定邮箱", ex.config.Subject)
 	text := fmt.Sprintf("你正在进行邮箱绑定，绑定的验证码是：%s，十分钟内有效", code)
-	return ex.sendEmail(ctx, to, subject, text)
+	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
+		return err
+	}
+	ex.store.StoreWithTTL(to, code, ex.ttl)
+	return nil
 }
 
 func (ex *EmailX) sendEmail(ctx context.Context, to, subject, text string) error {
@@ -73,10 +83,8 @@ func (ex *EmailX) sendEmail(ctx context.Context, to, subject, text string) error
 			return context.DeadlineExceeded
 		}
 	} else {
-		timeout = 10 * time.Second // 调用方没给 deadline 就用默认
+		timeout = 3 * time.Second // 调用方没给 deadline 就用默认
 	}
-
-	global.Log.Debug(timeout)
 
 	// 2. 异步发送
 	go func() {
@@ -109,6 +117,13 @@ func (ex *EmailX) VerifyCode(email, code string) bool {
 		}
 	}
 	return ans
+}
+
+func (ex *EmailX) ShowDataForDebug() {
+	ex.store.Range(func(key, value string) bool {
+		global.Log.Debugf("key:%s, value:%s", key, value)
+		return true
+	})
 }
 
 func GenCode() string {
