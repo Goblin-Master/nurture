@@ -1,0 +1,24 @@
+services:
+  postgres:
+    container_name: pg
+    image: pgvector/pgvector:pg18-trixie
+    environment:
+      - POSTGRES_USER=nurture
+      - POSTGRES_PASSWORD=123456
+      - POSTGRES_DB=nurture
+    ports:
+      - "5432:5432"
+    restart: always
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+      
+  redis:
+    container_name: redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: always
+
+volumes:
+  pgdata:
