@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/smtp"
 	"nurture/internal/config"
+	"nurture/internal/constant"
 	"nurture/internal/global"
 	"nurture/internal/pkg/syncx"
 	"strings"
@@ -39,7 +40,7 @@ func (ex *EmailX) SendLoginCode(ctx context.Context, to string, code string) (er
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	ex.store.StoreWithTTL(to, code, ex.ttl)
+	ex.store.StoreWithTTL(fmt.Sprintf(constant.LOGIN_CODE_KEY, to), code, ex.ttl)
 	return nil
 }
 func (ex *EmailX) SendResetPwdCode(ctx context.Context, to string, code string) (err error) {
@@ -48,17 +49,17 @@ func (ex *EmailX) SendResetPwdCode(ctx context.Context, to string, code string) 
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	ex.store.StoreWithTTL(to, code, ex.ttl)
+	ex.store.StoreWithTTL(fmt.Sprintf(constant.RESET_PWD_CODE_KEY, to), code, ex.ttl)
 	return nil
 }
 
-func (ex *EmailX) SendBindEmail(ctx context.Context, to string, code string) (err error) {
-	subject := fmt.Sprintf("[%s]绑定邮箱", ex.config.Subject)
-	text := fmt.Sprintf("你正在进行邮箱绑定，绑定的验证码是：%s，十分钟内有效", code)
+func (ex *EmailX) SendRegisterCode(ctx context.Context, to string, code string) (err error) {
+	subject := fmt.Sprintf("[%s]注册账号", ex.config.Subject)
+	text := fmt.Sprintf("你正在进行账号注册，注册的验证码是：%s，十分钟内有效", code)
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	ex.store.StoreWithTTL(to, code, ex.ttl)
+	ex.store.StoreWithTTL(fmt.Sprintf(constant.REGISTER_CODE_KEY, to), code, ex.ttl)
 	return nil
 }
 
@@ -108,12 +109,12 @@ func (ex *EmailX) sendEmail(ctx context.Context, to, subject, text string) error
 	}
 }
 
-func (ex *EmailX) VerifyCode(email, code string) bool {
+func (ex *EmailX) VerifyCode(key, code string) bool {
 	var ans bool
-	if v, ok := ex.store.Load(email); ok {
+	if v, ok := ex.store.Load(key); ok {
 		if v == code {
 			ans = true
-			ex.store.Delete(email)
+			ex.store.Delete(key)
 		}
 	}
 	return ans
