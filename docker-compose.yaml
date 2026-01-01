@@ -1,0 +1,44 @@
+services:
+  nurture-api:
+    image: ${IMAGE_NAME:-nurture-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nurture-api
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - nurture-net
+    volumes:
+      - ./internal/etc:/app/internal/etc
+
+  postgres:
+    container_name: nurture-pg
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=nurture
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-123456}
+      - POSTGRES_DB=nurture
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/schema/:/docker-entrypoint-initdb.d/:ro
+    networks:
+      - nurture-net
+    restart: always
+
+  redis:
+    container_name: nurture-redis
+    image: redis:7-alpine
+    networks:
+      - nurture-net
+    restart: always
+
+volumes:
+  pgdata:
+
+networks:
+  nurture-net:

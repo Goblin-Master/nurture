@@ -27,7 +27,10 @@ func LoadConfig() {
 	time.Local = cstZone
 	viper.SetConfigName("local")            // 配置文件名称（无扩展名）
 	viper.SetConfigType("yaml")             // 配置类型
-	viper.AddConfigPath(GetRootPath("etc")) // 配置文件路径
+	viper.AddConfigPath("internal/etc")     // 优先查找运行目录下的 internal/etc
+	viper.AddConfigPath("etc")              // 查找 etc
+	viper.AddConfigPath(".")                // 查找当前目录
+	viper.AddConfigPath(GetRootPath("etc")) // 配置文件路径 (开发环境回退)
 	if err := viper.ReadInConfig(); err != nil {
 		panic(fmt.Errorf("配置读取失败: %w", err))
 	}
