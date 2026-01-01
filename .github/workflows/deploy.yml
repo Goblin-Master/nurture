@@ -1,0 +1,62 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ "master", "main" ]
+
+env:
+  # 替换为您的 Docker Hub 用户名/组织名
+  DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/nurture
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ env.DOCKER_IMAGE_NAME }}:latest
+
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          # 将环境变量传递给脚本
+          envs: DOCKER_IMAGE_NAME
+          script: |
+            # 1. 进入项目目录 (假设项目已经在服务器上 git clone 过了)
+            # 如果目录不存在，可以添加 git clone 逻辑
+            cd /app/js/nurture || { echo "Directory not found, please clone repo first"; exit 1; }
+            
+            # 2. 拉取最新代码 (获取最新的 docker-compose.yaml)
+            git pull origin main
+            
+            # 3. 设置环境变量以使用刚构建的镜像
+            export IMAGE_NAME=${{ env.DOCKER_IMAGE_NAME }}:latest
+            
+            # 4. 拉取最新镜像
+            docker pull $IMAGE_NAME
+            
+            # 5. 使用 Docker Compose 启动/更新服务
+            # -d: 后台运行
+            # --remove-orphans: 移除未定义的容器
+            docker-compose up -d --remove-orphans
+            
+            # 6. 清理未使用的镜像
+            docker image prune -f
+            
+            echo "🚀 部署完成！"

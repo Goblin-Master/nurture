@@ -60,16 +60,16 @@ func (redis *Redis) DSN() string {
 
 // JWT 认证需要的密钥和过期时间配置
 type Auth struct {
-	AccessSecret string `json:"accessSecret"`
-	AccessExpire int64  `json:"accessExpire"`
+	AccessSecret string `json:"access_secret"`
+	AccessExpire int64  `json:"access_expire"`
 }
 
 type Email struct {
 	Domain       string `mapstructure:"domain"`
 	Port         int    `mapstructure:"port"`
-	SendEmail    string `mapstructure:"sendEmail"`
-	AuthCode     string `mapstructure:"authCode"`
-	SendNickname string `mapstructure:"sendNickname"`
+	SendEmail    string `mapstructure:"send_email"`
+	AuthCode     string `mapstructure:"auth_code"`
+	SendNickname string `mapstructure:"send_nickname"`
 	Subject      string `mapstructure:"subject"`
 	SSL          bool   `mapstructure:"ssl"`
 	TLS          bool   `mapstructure:"tls"`
