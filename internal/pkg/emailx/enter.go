@@ -84,7 +84,7 @@ func (ex *EmailX) sendEmail(ctx context.Context, to, subject, text string) error
 			return context.DeadlineExceeded
 		}
 	} else {
-		timeout = 3 * time.Second // 调用方没给 deadline 就用默认
+		timeout = 10 * time.Second // 调用方没给 deadline 就用默认,10s 是为了防止邮件发送失败
 	}
 
 	// 2. 异步发送
