@@ -4,8 +4,8 @@ app:
   env : dev
   log : logs
 auth:
-  accessSecret: nurture
-  accessExpire: 86400
+  access_secret: nurture
+  access_expire: 86400
 db:
   host: 127.0.0.1
   port: 5432

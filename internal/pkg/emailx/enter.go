@@ -3,16 +3,17 @@ package emailx
 import (
 	"context"
 	"crypto/rand"
+	_ "embed"
 	"errors"
 	"fmt"
 	"net/smtp"
 	"nurture/internal/config"
 	"nurture/internal/constant"
 	"nurture/internal/global"
-	"nurture/internal/pkg/syncx"
 	"strings"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/jordan-wright/email"
 )
 
@@ -20,47 +21,47 @@ var (
 	ErrSendOverTime = errors.New("邮件发送超时")
 )
 
+//go:embed scripts/verify.lua
+var verifyScript string
+
 type EmailX struct {
 	config config.Email
 	ttl    time.Duration
-	store  *syncx.Map[string, string]
+	rdb    redis.Cmdable
 }
 
 func NewEmailX() *EmailX {
 	return &EmailX{
 		config: config.Conf.Email,
 		ttl:    10 * time.Minute,
-		store:  global.CodeStore,
+		rdb:    global.RDB,
 	}
 }
 
-func (ex *EmailX) SendLoginCode(ctx context.Context, to string, code string) (err error) {
+func (ex *EmailX) SendLoginCode(ctx context.Context, to string, code string) error {
 	subject := fmt.Sprintf("[%s]邮箱登录", ex.config.Subject)
 	text := fmt.Sprintf("你正在进行邮箱登录，登录的验证码是：%s，十分钟内有效", code)
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	ex.store.StoreWithTTL(fmt.Sprintf(constant.LOGIN_CODE_KEY, to), code, ex.ttl)
-	return nil
+	return ex.rdb.Set(ctx, fmt.Sprintf(constant.LOGIN_CODE_KEY, to), code, ex.ttl).Err()
 }
-func (ex *EmailX) SendResetPwdCode(ctx context.Context, to string, code string) (err error) {
+func (ex *EmailX) SendResetPwdCode(ctx context.Context, to string, code string) error {
 	subject := fmt.Sprintf("[%s]重置密码", ex.config.Subject)
 	text := fmt.Sprintf("你正在进行账号密码重置，重置的验证码是：%s，十分钟内有效", code)
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	ex.store.StoreWithTTL(fmt.Sprintf(constant.RESET_PWD_CODE_KEY, to), code, ex.ttl)
-	return nil
+	return ex.rdb.Set(ctx, fmt.Sprintf(constant.RESET_PWD_CODE_KEY, to), code, ex.ttl).Err()
 }
 
-func (ex *EmailX) SendRegisterCode(ctx context.Context, to string, code string) (err error) {
+func (ex *EmailX) SendRegisterCode(ctx context.Context, to string, code string) error {
 	subject := fmt.Sprintf("[%s]注册账号", ex.config.Subject)
 	text := fmt.Sprintf("你正在进行账号注册，注册的验证码是：%s，十分钟内有效", code)
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	ex.store.StoreWithTTL(fmt.Sprintf(constant.REGISTER_CODE_KEY, to), code, ex.ttl)
-	return nil
+	return ex.rdb.Set(ctx, fmt.Sprintf(constant.REGISTER_CODE_KEY, to), code, ex.ttl).Err()
 }
 
 func (ex *EmailX) sendEmail(ctx context.Context, to, subject, text string) error {
@@ -109,22 +110,18 @@ func (ex *EmailX) sendEmail(ctx context.Context, to, subject, text string) error
 	}
 }
 
-func (ex *EmailX) VerifyCode(key, code string) bool {
-	var ans bool
-	if v, ok := ex.store.Load(key); ok {
-		if v == code {
-			ans = true
-			ex.store.Delete(key)
+func (ex *EmailX) VerifyCode(ctx context.Context, key, code string) (bool, error) {
+	res, err := ex.rdb.Eval(ctx, verifyScript, []string{key}, code).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return false, nil
 		}
+		return false, err
 	}
-	return ans
-}
-
-func (ex *EmailX) ShowDataForDebug() {
-	ex.store.Range(func(key, value string) bool {
-		global.Log.Debugf("key:%s, value:%s", key, value)
-		return true
-	})
+	if v, ok := res.(int64); ok {
+		return v == 1, nil
+	}
+	return false, nil
 }
 
 func GenCode() string {

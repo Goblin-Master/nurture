@@ -57,7 +57,12 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 		resp.Token = token
 		return resp, nil
 	case constant.LOGIN_WITH_EMAIL:
-		if ok := ul.email.VerifyCode(fmt.Sprintf(constant.LOGIN_CODE_KEY, req.Email), req.Code); !ok {
+		ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.LOGIN_CODE_KEY, req.Email), req.Code)
+		if err != nil {
+			global.Log.Error(err)
+			return resp, ErrCodeVerify
+		}
+		if !ok {
 			return resp, ErrCodeVerify
 		}
 		data, err := ul.userRepo.LoginWithEmail(ctx, req.Email)
@@ -84,10 +89,15 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 
 func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.RegisterResp, error) {
 	var resp dto.RegisterResp
-	if ok := ul.email.VerifyCode(fmt.Sprintf(constant.REGISTER_CODE_KEY, req.Email), req.Code); !ok {
+	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.REGISTER_CODE_KEY, req.Email), req.Code)
+	if err != nil {
+		global.Log.Error(err)
 		return resp, ErrCodeVerify
 	}
-	err := ul.userRepo.Register(ctx, uuid.NewString(), req.Username, req.Email, req.Account, req.Password)
+	if !ok {
+		return resp, ErrCodeVerify
+	}
+	err = ul.userRepo.Register(ctx, uuid.NewString(), req.Username, req.Email, req.Account, req.Password)
 	if err != nil {
 		if errors.Is(err, repo.ErrEmailIsUsed) {
 			return resp, ErrEmailIsUsed
@@ -104,10 +114,15 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
 
 func (ul *UserLogic) ResetPassword(ctx context.Context, req dto.ResetPasswordReq) (dto.ResetPasswordResp, error) {
 	var resp dto.ResetPasswordResp
-	if ok := ul.email.VerifyCode(fmt.Sprintf(constant.RESET_PWD_CODE_KEY, req.Email), req.Code); !ok {
+	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.RESET_PWD_CODE_KEY, req.Email), req.Code)
+	if err != nil {
+		global.Log.Error(err)
 		return resp, ErrCodeVerify
 	}
-	err := ul.userRepo.ResetPassword(ctx, req.Email, req.NewPassword)
+	if !ok {
+		return resp, ErrCodeVerify
+	}
+	err = ul.userRepo.ResetPassword(ctx, req.Email, req.NewPassword)
 	if err != nil {
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
