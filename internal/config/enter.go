@@ -12,6 +12,7 @@ type Config struct {
 	Redis Redis `mapstructure:"redis"`
 	Auth  Auth  `mapstructure:"auth"`
 	Email Email `mapstructure:"email"`
+	Minio Minio `mapstructure:"minio"`
 }
 
 type App struct {
@@ -56,6 +57,14 @@ type Redis struct {
 func (redis *Redis) DSN() string {
 	dsn := fmt.Sprintf("%s:%d", redis.Host, redis.Port)
 	return dsn
+}
+
+type Minio struct {
+	Endpoint  string `mapstructure:"endpoint"`
+	AccessKey string `mapstructure:"access_key"`
+	SecretKey string `mapstructure:"secret_key"`
+	UseSSL    bool   `mapstructure:"use_ssl"`
+	Bucket    string `mapstructure:"bucket"`
 }
 
 // JWT 认证需要的密钥和过期时间配置

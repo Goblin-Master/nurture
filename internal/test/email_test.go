@@ -13,7 +13,7 @@ import (
 func TestEmailSend(t *testing.T) {
 	// 加载配置
 	config.LoadConfig()
-	// 初始化日志
+	// 初始化全局配置
 	global.Init()
 
 	// 初始化 EmailX
