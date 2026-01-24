@@ -11,6 +11,7 @@ var (
 	ErrDefault      = errors.New("默认错误")
 	ErrFileOverSize = fmt.Errorf("文件大小不能超过%dMB", constant.FILE_MAX_SIZE/1024/1024)
 	ErrFileRead     = errors.New("文件读取失败")
+	ErrFileUpload   = errors.New("文件上传失败")
 )
 var (
 	ErrLoginWithFailedWay = errors.New("暂不支持这种登录方式")

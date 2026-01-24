@@ -18,3 +18,18 @@ redis:
   password:
   db: 0
   enable: true
+minio:
+  endpoint: "xxxxxx" # minio 地址, 格式: ip:port,千万不要暴露地址
+  access_key: "xxxxxx" # minio 登录账号
+  secret_key: "xxxxxx" # minio 登录密码
+  use_ssl: false
+  bucket: "xxxxxx" # minio 存储桶名称
+email:
+  domain: "smtp.qq.com"
+  port: 587
+  send_email: "xxxxxx" # 发送邮箱
+  auth_code: "xxxxxx" # 发送邮箱的授权码
+  send_nickname: "孕育拓扑队"
+  subject: "稚慧云"
+  ssl: false
+  tls: false
