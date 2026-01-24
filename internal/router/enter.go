@@ -7,6 +7,7 @@ import (
 	"nurture/internal/handler"
 	manager "nurture/internal/manger"
 	"nurture/internal/middleware"
+	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
@@ -43,6 +44,8 @@ func registerRoutes(routeManager *manager.RouteManager) {
 		rg.GET("/ping", func(c *gin.Context) {
 			response.Response(c, "pong", nil)
 		})
+		commonHandler := handler.NewCommonHandler()
+		rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
 	})
 
 	routeManager.RegisterUserRoutes(func(rg *gin.RouterGroup) {
