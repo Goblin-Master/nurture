@@ -23,7 +23,7 @@ func NewCommonHandler() *CommonHandler {
 }
 
 func (h *CommonHandler) UploadFile(c *gin.Context) {
-	global.Log.Infof("%s send %s", jwtx.GetUserID(c), c.Request.FormValue("file"))
+	global.Log.Infof("%s: %s", jwtx.GetUserID(c), c.Request.FormValue("file"))
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		response.Response(c, nil, ErrFileRead)
@@ -43,7 +43,7 @@ func (h *CommonHandler) UploadFile(c *gin.Context) {
 func (h *CommonHandler) ChatStream(c *gin.Context) {
 	req := middleware.GetBind[dto.ChatStreamReq](c)
 	userID := jwtx.GetUserID(c)
-	global.Log.Infof("%s send %s", userID, req.Message)
+	global.Log.Infof("%s: %v", userID, req)
 
 	// 如果没有 SessionID，返回错误
 	if req.SessionID == "" {
@@ -71,7 +71,7 @@ func (h *CommonHandler) ChatStream(c *gin.Context) {
 func (h *CommonHandler) UploadKnowledge(c *gin.Context) {
 	req := middleware.GetBind[dto.KnowledgeUploadReq](c)
 	userID := jwtx.GetUserID(c)
-	global.Log.Infof("%s upload %s", userID, req.Content)
+	global.Log.Infof("%s: %v", userID, req)
 	err := h.commonLogic.UploadKnowledge(c.Request.Context(), userID, req)
 	response.Response(c, nil, err)
 }
@@ -80,7 +80,7 @@ func (h *CommonHandler) UploadKnowledge(c *gin.Context) {
 func (h *CommonHandler) GetChatHistory(c *gin.Context) {
 	req := middleware.GetBind[dto.ChatHistoryReq](c)
 	userID := jwtx.GetUserID(c)
-	global.Log.Infof("%s get chat history %s", userID, req.SessionID)
+	global.Log.Infof("%s: %v", userID, req)
 	resp, err := h.commonLogic.GetChatHistory(c.Request.Context(), userID, req)
 	response.Response(c, resp, err)
 }

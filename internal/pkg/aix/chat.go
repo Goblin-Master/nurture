@@ -72,8 +72,21 @@ func (a *AIX) BuildMessages(history []ChatMessage, userMessage string,
 	}
 
 	// 当前用户消息
-	// 简化处理，暂时忽略图片，只处理文本，确保编译通过
-	messages = append(messages, llms.TextParts(llms.ChatMessageTypeHuman, userMessage))
+	var parts []llms.ContentPart
+
+	// 1. 添加图片 (如果有)
+	// 注意：LangChainGo/OpenAI 格式支持 image_url，智谱也兼容此格式
+	for _, imgURL := range images {
+		parts = append(parts, llms.ImageURLPart(imgURL))
+	}
+
+	// 2. 添加文本
+	parts = append(parts, llms.TextPart(userMessage))
+
+	messages = append(messages, llms.MessageContent{
+		Role:  llms.ChatMessageTypeHuman,
+		Parts: parts,
+	})
 
 	return messages
 }

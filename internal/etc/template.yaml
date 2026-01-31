@@ -36,15 +36,15 @@ email:
 ai:
   chat:
     provider: openai
-    model: qwen-flash
+    model: glm-4v-flash
     api_key: xxxxxx
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1/
+    base_url: https://open.bigmodel.cn/api/paas/v4/
     timeout: 3000
   embedding:
     provider: openai
     model: text-embedding-v1
     api_key: xxxxxx
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1/
+    base_url: https://open.bigmodel.cn/api/paas/v4/
   chunking:
     chunk_size: 1000
     chunk_overlap: 200
