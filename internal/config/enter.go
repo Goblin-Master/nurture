@@ -13,6 +13,40 @@ type Config struct {
 	Auth  Auth  `mapstructure:"auth"`
 	Email Email `mapstructure:"email"`
 	Minio Minio `mapstructure:"minio"`
+	AI    AI    `mapstructure:"ai"`
+}
+
+// AI 配置
+type AI struct {
+	Chat      ChatModel      `mapstructure:"chat"`
+	Embedding EmbeddingModel `mapstructure:"embedding"`
+	Chunking  Chunking       `mapstructure:"chunking"`
+	Retrieval Retrieval      `mapstructure:"retrieval"`
+}
+
+type ChatModel struct {
+	Provider string `mapstructure:"provider"`
+	Model    string `mapstructure:"model"`
+	APIKey   string `mapstructure:"api_key"`
+	BaseURL  string `mapstructure:"base_url"`
+	Timeout  int    `mapstructure:"timeout"`
+}
+
+type EmbeddingModel struct {
+	Provider string `mapstructure:"provider"`
+	Model    string `mapstructure:"model"`
+	APIKey   string `mapstructure:"api_key"`
+	BaseURL  string `mapstructure:"base_url"`
+}
+
+type Chunking struct {
+	ChunkSize    int `mapstructure:"chunk_size"`
+	ChunkOverlap int `mapstructure:"chunk_overlap"`
+}
+
+type Retrieval struct {
+	DefaultTopK         int     `mapstructure:"default_top_k"`
+	SimilarityThreshold float32 `mapstructure:"similarity_threshold"`
 }
 
 type App struct {
