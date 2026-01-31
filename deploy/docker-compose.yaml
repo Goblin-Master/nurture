@@ -1,7 +1,27 @@
 services:
+  # App Service (Defined for future use)
+  nurture-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: nurture-api
+    ports:
+      - "9000:9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - nurture-net
+    volumes:
+      - ../internal/etc/local.yaml:/app/internal/etc/local.yaml
+      - ../logs:/app/logs
+
+  # PostgreSQL with pgvector
   postgres:
-    container_name: pg
-    image: pgvector/pgvector:pg18-trixie
+    container_name: nurture-pg
+    image: pgvector/pgvector:pg16
     environment:
       - POSTGRES_USER=nurture
       - POSTGRES_PASSWORD=123456
@@ -11,14 +31,33 @@ services:
     restart: always
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./schema/:/docker-entrypoint-initdb.d/:ro
-      
+      - ./schema:/docker-entrypoint-initdb.d
+    networks:
+      - nurture-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nurture -d nurture"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis
   redis:
-    container_name: redis
+    container_name: nurture-redis
     image: redis:7-alpine
     ports:
       - "6379:6379"
     restart: always
+    networks:
+      - nurture-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+networks:
+  nurture-net:
+    driver: bridge
 
 volumes:
   pgdata:
