@@ -282,7 +282,26 @@ response.Response(c, resp, err)
 ### Handler 层
 
 - 直接传递错误给 `response.Response()`
-- 不做额外错误处理
+- **自定义错误返回**：如果需要提前返回错误，应定义并使用自定义错误，而不是直接返回 HTTP 状态码，保持响应格式统一。
+- **鉴权数据获取**：如果接口需要鉴权，`UserID` 必须从请求头（Token）中获取（使用 `jwtx.GetUserID(c)`），禁止从请求参数中获取（除非特殊场景，如管理员查询用户信息）。
+
+## 测试规范
+
+- **测试位置**：所有测试代码必须位于 `internal/test/` 包下（或项目根目录的 `test/`，根据项目约定）。
+- **Token 生成**：测试时如需 Token，使用 `jwtx.GenTestToken()` 生成，禁止使用硬编码 Token。
+- **配置加载**：测试代码中涉及密钥或配置时，必须通过 `config.LoadConfig()` 加载，**禁止在代码中明文写死密钥**。
+
+## 安全规范
+
+- **密钥管理**：所有敏感信息（API Key、Secret Key、密码等）必须通过配置文件加载，**严禁在代码中硬编码**。
+- **鉴权**：业务接口默认开启 JWT 鉴权，`UserID` 必须从 Token 解析。
+
+## AI 模块开发规范
+
+- **文档参考**：AI 系统详细设计参考 `docs/ai-system-srs.md`。
+- **接口位置**：AI 相关接口统一放在 `/api/common/ai/` 路由组下。
+- **鉴权**：所有 AI 接口强制鉴权，`UserID` 从 Token 获取，`SessionID` 由前端生成并传递。
+- **配置**：AI 模型密钥（API Key）必须从 `config` 读取，禁止硬编码。
 
 ## 技术栈
 

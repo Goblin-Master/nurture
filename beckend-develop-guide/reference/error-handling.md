@@ -12,8 +12,8 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Handler 层                               │
-│  职责：透传错误给 response.Response()                            │
-│  不做额外处理                                                    │
+│  职责：透传错误给 response.Response()                              │
+│  一般不做额外处理，有需要定义：internal/handler/errors.go            │
 └─────────────────────────────────────────────────────────────────┘
                               ↑ 业务错误
 ┌─────────────────────────────────────────────────────────────────┐
@@ -283,36 +283,33 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
 
 ### 错误处理规则
 
-Handler 层**不做**额外的错误处理，直接将错误传递给 `response.Response()`：
+1. **统一返回**：使用 `response.Response(c, data, err)` 统一返回，`err` 会被自动解析并返回错误码和消息。
+2. **不做额外处理**：Handler 层一般不进行错误判断，除非需要处理 HTTP 层面的逻辑，提前返回错误等。
+3. **自定义错误返回**：如果需要提前中断并返回错误，应定义并使用自定义错误，而不是直接返回 HTTP 状态码。
+
+### 代码示例
 
 ```go
+// internal/handler/user.go
 func (uh *UserHandler) Login(c *gin.Context) {
     req := middleware.GetBind[dto.LoginReq](c)
-    global.Log.Info(req)
     
+    // 调用 Logic
     resp, err := uh.userLogic.Login(c.Request.Context(), req)
     
-    // 直接传递，不做额外处理
+    // 如果 Logic 返回错误，Response 会自动处理
     response.Response(c, resp, err)
 }
-```
 
-### 特殊情况处理
-
-只有在获取请求参数时需要处理错误（如文件上传）：
-
-```go
+// 提前返回示例
 func (h *CommonHandler) UploadFile(c *gin.Context) {
     file, header, err := c.Request.FormFile("file")
     if err != nil {
-        // 参数获取失败，使用预定义错误
-        response.Response(c, nil, logic.ErrFileRead)
+        // 使用自定义错误提前返回
+        response.Response(c, nil, ErrFileRead)
         return
     }
-    defer file.Close()
-
-    url, err := commonLogic.UploadFile(c, file, header)
-    response.Response(c, url, err)
+    // ...
 }
 ```
 
@@ -452,8 +449,7 @@ var (
 
 ### Don't（避免做法）
 
-1. ❌ 在 Handler 层额外处理错误
-2. ❌ 将数据库错误信息暴露给用户
-3. ❌ 在多层重复记录同一个错误
-4. ❌ 使用 `err.Error() == "xxx"` 进行错误判断
-5. ❌ 跨层使用错误变量（如 Handler 层直接使用 Repo 层错误）
+1. ❌ 将数据库错误信息暴露给用户
+2. ❌ 在多层重复记录同一个错误
+3. ❌ 使用 `err.Error() == "xxx"` 进行错误判断
+4. ❌ 跨层使用错误变量（如 Handler 层直接使用 Logic 层错误）
