@@ -14,6 +14,7 @@ import (
 	"nurture/internal/pkg/aix"
 	"nurture/internal/repo"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -94,8 +95,33 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 		history = []aix.ChatMessage{}
 	}
 
-	// 2. RAG 检索（暂略）
+	// 2. RAG 检索
 	var ragContext string
+	// 构建需要检索的知识库集合
+	collections := l.buildCollections(userID, req.KBConfig)
+
+	// 如果有选中的知识库，则进行检索
+	if len(collections) > 0 {
+		// 默认 topK 为 3，可配置，故意不暴露给前端的
+		topK := req.KBConfig.TopK
+		if topK <= 0 {
+			topK = config.Conf.AI.Retrieval.DefaultTopK
+		}
+
+		docs, e := l.aiRepo.SimilaritySearch(ctx, req.Message, collections, topK)
+		if e != nil {
+			// 检索失败记录日志，但不阻断对话，仅降级为普通对话
+			global.Log.Errorf("RAG SimilaritySearch failed: %v", err)
+		}
+		if len(docs) > 0 {
+			// 拼接检索结果
+			var sb strings.Builder
+			for i, doc := range docs {
+				sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, doc.PageContent))
+			}
+			ragContext = sb.String()
+		}
+	}
 
 	// 3. 构建消息
 	messages := global.AIX.BuildMessages(history, req.Message, req.Images, ragContext)
@@ -153,7 +179,7 @@ func (l *CommonLogic) UploadKnowledge(ctx context.Context, userID string, req dt
 	}
 
 	// 添加文档
-	err := l.aiRepo.AddDocuments(ctx, collectionName, req.Content)
+	err := l.aiRepo.AddDocument(ctx, collectionName, req.Content)
 	if err != nil {
 		global.Log.Error(err)
 		return ErrKnowledgeUpload

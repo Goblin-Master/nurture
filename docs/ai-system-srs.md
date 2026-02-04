@@ -606,8 +606,8 @@ import (
     "github.com/tmc/langchaingo/vectorstores/pgvector"
 )
 
-// AddDocuments 添加文档到知识库
-func (a *AIX) AddDocuments(ctx context.Context, collectionName string, content string) error {
+// AddDocument 添加文档到知识库
+func (a *AIX) AddDocument(ctx context.Context, collectionName string, content string) error {
     // 1. 文本分块
     splitter := textsplitter.NewRecursiveCharacter(
         textsplitter.WithChunkSize(a.config.Chunking.ChunkSize),

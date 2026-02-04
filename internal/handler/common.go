@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"nurture/internal/constant"
 	"nurture/internal/dto"
 	"nurture/internal/global"
 	"nurture/internal/logic"
@@ -70,6 +71,10 @@ func (h *CommonHandler) ChatStream(c *gin.Context) {
 // UploadKnowledge 上传知识库
 func (h *CommonHandler) UploadKnowledge(c *gin.Context) {
 	req := middleware.GetBind[dto.KnowledgeUploadReq](c)
+	if req.SpaceType == constant.SPACE_TYPE_PUBLIC && jwtx.GetRole(c) < jwtx.INTERNAL_USER {
+		response.Response(c, nil, ErrPermissionDenied)
+		return
+	}
 	userID := jwtx.GetUserID(c)
 	global.Log.Infof("%s: %v", userID, req)
 	err := h.commonLogic.UploadKnowledge(c.Request.Context(), userID, req)
