@@ -58,6 +58,14 @@ func GenToken(c Claims) (string, error) {
 	return token.SignedString([]byte(secret))
 }
 
+// GenTestToken 用于测试生成 Token，需要确保 config 已加载
+func GenTestToken(userID string, role Role) (string, error) {
+	return GenToken(Claims{
+		UserID: userID,
+		Role:   role,
+	})
+}
+
 func ParseToken(c *gin.Context) (string, Role, error) {
 	data := c.GetHeader("Authorization")
 	if data == "" {

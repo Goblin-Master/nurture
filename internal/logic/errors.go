@@ -13,6 +13,7 @@ var (
 	ErrFileRead     = errors.New("文件读取失败")
 	ErrFileUpload   = errors.New("文件上传失败")
 )
+
 var (
 	ErrLoginWithFailedWay = errors.New("暂不支持这种登录方式")
 	ErrAccountOrPassword  = errors.New("账号或密码错误")
@@ -22,4 +23,12 @@ var (
 	ErrEmailIsUsed        = errors.New("邮箱已经被使用")
 	ErrAccountIsUsed      = errors.New("账号已经被使用")
 	ErrUserNotExist       = errors.New("用户不存在")
+)
+
+var (
+	ErrKnowledgeUpload  = errors.New("知识库上传失败")
+	ErrChatStream       = errors.New("对话流失败")
+	ErrInvalidSpaceType = errors.New("无效的知识空间类型")
+	ErrLLMGenerate      = errors.New("LLM 生成失败")
+	ErrEmbedding        = errors.New("向量化失败")
 )

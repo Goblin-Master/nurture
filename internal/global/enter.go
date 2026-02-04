@@ -1,6 +1,8 @@
 package global
 
 import (
+	"nurture/internal/config"
+	"nurture/internal/pkg/aix"
 	"nurture/internal/pkg/miniox"
 	"nurture/internal/pkg/pgsqlx"
 	"nurture/internal/pkg/redisx"
@@ -17,6 +19,7 @@ var (
 	DB  *pgxpool.Pool
 	RDB redis.Cmdable
 	MIO *minio.Client
+	AIX *aix.AIX // AI 功能实例
 )
 
 func Init() {
@@ -24,4 +27,11 @@ func Init() {
 	DB = pgsqlx.InitPgsql()
 	RDB = redisx.InitRedis()
 	MIO = miniox.InitMinio()
+
+	// 初始化 AIX
+	var err error
+	AIX, err = aix.NewAIX(config.Conf.AI, RDB, config.Conf.DB.DSN())
+	if err != nil {
+		panic("AIX init failed: " + err.Error())
+	}
 }

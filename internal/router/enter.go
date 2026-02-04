@@ -46,6 +46,31 @@ func registerRoutes(routeManager *manager.RouteManager) {
 		})
 		commonHandler := handler.NewCommonHandler()
 		rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
+
+		// AI 相关接口
+		ai := rg.Group("/ai")
+		{
+			// 知识库上传
+			ai.POST("/knowledge/upload",
+				middleware.Authentication(jwtx.COMMON_USER),
+				middleware.BindJsonMiddleware[dto.KnowledgeUploadReq],
+				commonHandler.UploadKnowledge,
+			)
+
+			// 流式对话
+			ai.POST("/chat/stream",
+				middleware.Authentication(jwtx.COMMON_USER),
+				middleware.BindJsonMiddleware[dto.ChatStreamReq],
+				commonHandler.ChatStream,
+			)
+
+			// 获取对话历史
+			ai.GET("/chat/history",
+				middleware.Authentication(jwtx.COMMON_USER),
+				middleware.BindQueryMiddleware[dto.ChatHistoryReq],
+				commonHandler.GetChatHistory,
+			)
+		}
 	})
 
 	routeManager.RegisterUserRoutes(func(rg *gin.RouterGroup) {
