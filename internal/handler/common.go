@@ -71,11 +71,14 @@ func (h *CommonHandler) ChatStream(c *gin.Context) {
 // UploadKnowledge 上传知识库
 func (h *CommonHandler) UploadKnowledge(c *gin.Context) {
 	req := middleware.GetBind[dto.KnowledgeUploadReq](c)
-	if req.SpaceType == constant.SPACE_TYPE_PUBLIC && jwtx.GetRole(c) < jwtx.INTERNAL_USER {
+	userID, role := jwtx.GetUserID(c), jwtx.GetRole(c)
+
+	if req.SpaceType == constant.SPACE_TYPE_PUBLIC && role < jwtx.INTERNAL_USER {
+		global.Log.Infof("%s: %d", userID, role)
 		response.Response(c, nil, ErrPermissionDenied)
 		return
 	}
-	userID := jwtx.GetUserID(c)
+
 	global.Log.Infof("%s: %v", userID, req)
 	err := h.commonLogic.UploadKnowledge(c.Request.Context(), userID, req)
 	response.Response(c, nil, err)

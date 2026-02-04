@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS "user" (
   password  VARCHAR(20) NOT NULL,
   email     VARCHAR(20) UNIQUE NOT NULL,
   username  VARCHAR(20) NOT NULL,
-  avatar    VARCHAR(255) NOT NULL,
+  avatar    VARCHAR(255) NOT NULL DEFAULT '',
   role      SMALLINT NOT NULL DEFAULT 1
 );
 
@@ -26,3 +26,16 @@ COMMENT ON COLUMN "user".email IS '邮箱';
 COMMENT ON COLUMN "user".username IS '用户名';
 COMMENT ON COLUMN "user".avatar IS '头像';
 COMMENT ON COLUMN "user".role IS '角色';
+
+-- 3. 插入默认管理员账号
+INSERT INTO "user" (user_id, ctime, utime, account, password, email, username,  role)
+VALUES (
+  gen_random_uuid(),
+  EXTRACT(EPOCH FROM NOW()) * 1000,
+  EXTRACT(EPOCH FROM NOW()) * 1000,
+  'admin',
+  'admin',
+  'admin@nurture.com',
+  'Admin',
+  3
+) ON CONFLICT (account) DO NOTHING;
