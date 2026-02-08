@@ -12,11 +12,19 @@ import (
 )
 
 const createUser = `-- name: CreateUser :exec
-INSERT INTO "user" (
-  user_id, ctime, utime, account, password, email, username, avatar, role
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9
+WITH ins AS (
+  INSERT INTO "user_base" (
+    user_id, ctime, utime, account, password, email, username, gender, role
+  ) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, 1
+  )
+  RETURNING user_id, username, gender, ctime, utime
 )
+INSERT INTO "user_addition" (
+  user_id, username, gender, phone, occupation, birthday, avatar, province, city, ctime, utime
+) SELECT
+  user_id, username, gender, '', '', 0, '', '', '', ctime, utime
+FROM ins
 `
 
 type CreateUserParams struct {
@@ -27,8 +35,7 @@ type CreateUserParams struct {
 	Password string
 	Email    string
 	Username string
-	Avatar   string
-	Role     int16
+	Gender   string
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
@@ -40,15 +47,16 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Password,
 		arg.Email,
 		arg.Username,
-		arg.Avatar,
-		arg.Role,
+		arg.Gender,
 	)
 	return err
 }
 
 const getUserByAccountAndPassword = `-- name: GetUserByAccountAndPassword :one
-SELECT id, user_id, ctime, utime, account, password, email, username, avatar, role FROM "user"
-WHERE account = $1 AND password = $2 LIMIT 1
+SELECT id, user_id, account, password, email, username, gender, role, ctime, utime
+FROM "user_base"
+WHERE account = $1 AND password = $2
+LIMIT 1
 `
 
 type GetUserByAccountAndPasswordParams struct {
@@ -56,49 +64,51 @@ type GetUserByAccountAndPasswordParams struct {
 	Password string
 }
 
-func (q *Queries) GetUserByAccountAndPassword(ctx context.Context, arg GetUserByAccountAndPasswordParams) (User, error) {
+func (q *Queries) GetUserByAccountAndPassword(ctx context.Context, arg GetUserByAccountAndPasswordParams) (UserBase, error) {
 	row := q.db.QueryRow(ctx, getUserByAccountAndPassword, arg.Account, arg.Password)
-	var i User
+	var i UserBase
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.Ctime,
-		&i.Utime,
 		&i.Account,
 		&i.Password,
 		&i.Email,
 		&i.Username,
-		&i.Avatar,
+		&i.Gender,
 		&i.Role,
+		&i.Ctime,
+		&i.Utime,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, user_id, ctime, utime, account, password, email, username, avatar, role FROM "user"
-WHERE email = $1 LIMIT 1
+SELECT id, user_id, account, password, email, username, gender, role, ctime, utime
+FROM "user_base"
+WHERE email = $1
+LIMIT 1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (UserBase, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
-	var i User
+	var i UserBase
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.Ctime,
-		&i.Utime,
 		&i.Account,
 		&i.Password,
 		&i.Email,
 		&i.Username,
-		&i.Avatar,
+		&i.Gender,
 		&i.Role,
+		&i.Ctime,
+		&i.Utime,
 	)
 	return i, err
 }
 
 const updateAvatarByUserID = `-- name: UpdateAvatarByUserID :execrows
-UPDATE "user"
+UPDATE "user_addition"
 SET avatar = $2
 WHERE user_id = $1
 `
@@ -117,7 +127,7 @@ func (q *Queries) UpdateAvatarByUserID(ctx context.Context, arg UpdateAvatarByUs
 }
 
 const updatePasswordByEmail = `-- name: UpdatePasswordByEmail :execrows
-UPDATE "user"
+UPDATE "user_base"
 SET password = $2
 WHERE email = $1
 `

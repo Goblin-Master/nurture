@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS "user_base" (
   gender    VARCHAR(10) NOT NULL CHECK (gender IN ('male','female')),
   role      SMALLINT NOT NULL DEFAULT 1,
   ctime     BIGINT NOT NULL,
-  utime     BIGINT NOT NULL,
+  utime     BIGINT NOT NULL
 );
 
 COMMENT ON TABLE "user_base" IS '用户基础信息（注册必填）';
