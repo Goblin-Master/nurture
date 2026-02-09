@@ -13,9 +13,9 @@ import (
 )
 
 type IUserRepo interface {
-	LoginWithAccount(ctx context.Context, account string, password string) (user.User, error)
-	LoginWithEmail(ctx context.Context, email string) (user.User, error)
-	Register(ctx context.Context, userID, username, email, account, password string) error //这个结构默认都注册普通用户
+	LoginWithAccount(ctx context.Context, account string, password string) (user.UserBase, error)
+	LoginWithEmail(ctx context.Context, email string) (user.UserBase, error)
+	Register(ctx context.Context, userID, username, email, account, password, gender string) error //注册仅写user_base，同时创建user_addition
 	ResetPassword(ctx context.Context, email, newPassword string) error
 	UpdateAvatarByID(ctx context.Context, userID, url string) error
 }
@@ -31,34 +31,34 @@ func NewUserRepo() *UserRepo {
 
 var _ IUserRepo = (*UserRepo)(nil)
 
-func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, password string) (user.User, error) {
+func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, password string) (user.UserBase, error) {
 	u, err := ur.userDao.GetUserByAccountAndPassword(ctx, user.GetUserByAccountAndPasswordParams{
 		Account:  account,
 		Password: password,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return user.User{}, ErrUserNotExist
+			return user.UserBase{}, ErrUserNotExist
 		}
 		global.Log.Error(err)
-		return user.User{}, ErrDefault
+		return user.UserBase{}, ErrDefault
 	}
 	return u, nil
 }
 
-func (ur *UserRepo) LoginWithEmail(ctx context.Context, email string) (user.User, error) {
+func (ur *UserRepo) LoginWithEmail(ctx context.Context, email string) (user.UserBase, error) {
 	u, err := ur.userDao.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return user.User{}, ErrUserNotExist
+			return user.UserBase{}, ErrUserNotExist
 		}
 		global.Log.Error(err)
-		return user.User{}, ErrDefault
+		return user.UserBase{}, ErrDefault
 	}
 	return u, nil
 }
 
-func (ur *UserRepo) Register(ctx context.Context, userID, username, email, account, password string) error {
+func (ur *UserRepo) Register(ctx context.Context, userID, username, email, account, password, gender string) error {
 	var userUUID pgtype.UUID
 	if err := userUUID.Scan(userID); err != nil {
 		return err
@@ -72,17 +72,16 @@ func (ur *UserRepo) Register(ctx context.Context, userID, username, email, accou
 		Password: password,
 		Ctime:    time.Now().UnixMilli(),
 		Utime:    time.Now().UnixMilli(),
-		Avatar:   "", // 默认头像，如有需要可传入
-		Role:     1,  // 默认角色
+		Gender:   gender,
 	})
 
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
 			switch pgErr.ConstraintName {
-			case "user_account_key":
+			case "user_base_account_key":
 				return ErrAccountIsUsed
-			case "user_email_key":
+			case "user_base_email_key":
 				return ErrEmailIsUsed
 			}
 		}

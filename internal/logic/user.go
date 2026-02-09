@@ -52,8 +52,6 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 			global.Log.Error(err)
 			return resp, ErrDefault
 		}
-		resp.Username = data.Username
-		resp.Avatar = data.Avatar
 		resp.Token = token
 		return resp, nil
 	case constant.LOGIN_WITH_EMAIL:
@@ -77,8 +75,6 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 			global.Log.Error(err)
 			return resp, ErrDefault
 		}
-		resp.Username = data.Username
-		resp.Avatar = data.Avatar
 		resp.Token = token
 		return resp, nil
 	default:
@@ -97,7 +93,7 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
 	if !ok {
 		return resp, ErrCodeVerify
 	}
-	err = ul.userRepo.Register(ctx, uuid.NewString(), req.Username, req.Email, req.Account, req.Password)
+	err = ul.userRepo.Register(ctx, uuid.NewString(), req.Username, req.Email, req.Account, req.Password, req.Gender)
 	if err != nil {
 		if errors.Is(err, repo.ErrEmailIsUsed) {
 			return resp, ErrEmailIsUsed

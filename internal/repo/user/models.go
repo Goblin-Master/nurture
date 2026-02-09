@@ -8,16 +8,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// 用户表
-type User struct {
+// 用户扩展信息（冗余用户名、头像、地区）
+type UserAddition struct {
 	// 主键ID
 	ID int64
-	// 用户ID
+	// 用户ID(与基础信息一对一)
 	UserID pgtype.UUID
+	// 用户名（冗余）
+	Username string
+	// 性别（冗余）
+	Gender string
+	// 手机号
+	Phone string
+	// 职业
+	Occupation string
+	// 生日(毫秒时间戳,未知为0)
+	Birthday int64
+	// 头像URL
+	Avatar string
+	// 省
+	Province string
+	// 市
+	City string
 	// 创建时间
 	Ctime int64
 	// 更新时间
 	Utime int64
+}
+
+// 用户基础信息（注册必填）
+type UserBase struct {
+	// 主键ID
+	ID int64
+	// 用户ID
+	UserID pgtype.UUID
 	// 账号
 	Account string
 	// 密码
@@ -26,8 +50,26 @@ type User struct {
 	Email string
 	// 用户名
 	Username string
-	// 头像
-	Avatar string
+	// 性别:male/female
+	Gender string
 	// 角色
 	Role int16
+	// 创建时间
+	Ctime int64
+	// 更新时间
+	Utime int64
+}
+
+// 用户另一半关系表（父/母）
+type UserPartner struct {
+	// 主键ID
+	ID int64
+	// 父亲用户UUID
+	Father pgtype.UUID
+	// 母亲用户UUID
+	Mother pgtype.UUID
+	// 创建时间戳
+	Ctime int64
+	// 更新时间戳
+	Utime int64
 }

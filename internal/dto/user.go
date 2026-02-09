@@ -9,9 +9,7 @@ type (
 		LoginType string `json:"login_type"`
 	}
 	LoginResp struct {
-		Token    string `json:"token"`
-		Username string `json:"username"`
-		Avatar   string `json:"avatar"`
+		Token string `json:"token"`
 	}
 )
 
@@ -29,6 +27,7 @@ type (
 		Account  string `json:"account"`
 		Password string `json:"password"`
 		Username string `json:"username"`
+		Gender   string `json:"gender"`
 		Email    string `json:"email"`
 		Code     string `json:"code"`
 	}
