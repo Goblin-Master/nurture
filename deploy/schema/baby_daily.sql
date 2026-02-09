@@ -3,8 +3,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- 1. 喂养记录表 (PostgreSQL)
 CREATE TABLE IF NOT EXISTS "daily_feeding" (
   id            BIGSERIAL PRIMARY KEY,
-  feeding_id    BIGINT UNIQUE NOT NULL,
-  baby_id       BIGINT NOT NULL,
+  feeding_id    UUID UNIQUE NOT NULL,
+  baby_id       UUID NOT NULL,
   user_id       UUID NOT NULL,
   feed_time     BIGINT NOT NULL,
   feed_type     VARCHAR(20) NOT NULL CHECK (feed_type IN ('breast_milk','formula','solid')),
@@ -27,8 +27,8 @@ COMMENT ON COLUMN "daily_feeding".utime IS '更新时间戳';
 -- 2. 睡眠记录表 (PostgreSQL)
 CREATE TABLE IF NOT EXISTS "daily_sleep" (
   id           BIGSERIAL PRIMARY KEY,
-  sleep_id     BIGINT UNIQUE NOT NULL,
-  baby_id      BIGINT NOT NULL,
+  sleep_id     UUID UNIQUE NOT NULL,
+  baby_id      UUID NOT NULL,
   user_id      UUID NOT NULL,
   start_time   BIGINT NOT NULL,
   end_time     BIGINT,
@@ -63,8 +63,8 @@ COMMENT ON COLUMN "daily_sleep".utime IS '更新时间戳';
 -- 3. 换尿布记录表 (PostgreSQL)
 CREATE TABLE IF NOT EXISTS "daily_diaper" (
   id               BIGSERIAL PRIMARY KEY,
-  diaper_id        BIGINT UNIQUE NOT NULL,
-  baby_id          BIGINT NOT NULL,
+  diaper_id        UUID UNIQUE NOT NULL,
+  baby_id          UUID NOT NULL,
   user_id          UUID NOT NULL,
   change_time      BIGINT NOT NULL,
   diaper_type      VARCHAR(10) NOT NULL CHECK (diaper_type IN ('pee','poop','both','dry')),

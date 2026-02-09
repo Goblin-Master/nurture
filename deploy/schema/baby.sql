@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- 1. 宝宝表 (PostgreSQL)
 CREATE TABLE IF NOT EXISTS "baby" (
   id          BIGSERIAL PRIMARY KEY,
-  baby_id     BIGINT NOT NULL,
+  baby_id     UUID NOT NULL,
   user_id     UUID NOT NULL,
   name        VARCHAR(50) NOT NULL,
   gender      VARCHAR(10) NOT NULL CHECK (gender IN ('male','female')),
@@ -28,7 +28,7 @@ COMMENT ON COLUMN "baby".utime IS '更新时间戳';
 -- 2. 疫苗字典表
 CREATE TABLE IF NOT EXISTS "vaccine" (
   id                   BIGSERIAL PRIMARY KEY,
-  vaccine_id           BIGINT UNIQUE NOT NULL,
+  vaccine_id           UUID UNIQUE NOT NULL,
   name                 VARCHAR(100) UNIQUE NOT NULL,
   disease              VARCHAR(255) NOT NULL,
   recommend_age_days   INTEGER NOT NULL,
@@ -50,9 +50,9 @@ COMMENT ON COLUMN "vaccine".utime IS '更新时间戳';
 -- 3. 宝宝疫苗接种记录表 (PostgreSQL)
 CREATE TABLE IF NOT EXISTS "baby_vaccine_record" (
   id                   BIGSERIAL PRIMARY KEY,
-  record_id            BIGINT UNIQUE NOT NULL,
-  baby_id              BIGINT NOT NULL,
-  vaccine_id           BIGINT NOT NULL,
+  record_id            UUID UNIQUE NOT NULL,
+  baby_id              UUID NOT NULL,
+  vaccine_id           UUID NOT NULL,
   due_time             BIGINT NOT NULL,
   status               VARCHAR(20) NOT NULL CHECK (status IN ('given','not_given')),
   actual_time          BIGINT,
@@ -81,8 +81,8 @@ CREATE INDEX IF NOT EXISTS idx_bvr_baby_status ON "baby_vaccine_record"(baby_id,
 -- 4. 宝宝成长记录表 (PostgreSQL)
 CREATE TABLE IF NOT EXISTS "baby_growth_record" (
   id                  BIGSERIAL PRIMARY KEY,
-  record_id           BIGINT UNIQUE NOT NULL,
-  baby_id             BIGINT NOT NULL,
+  record_id           UUID UNIQUE NOT NULL,
+  baby_id             UUID NOT NULL,
   user_id             UUID NOT NULL,
   record_time         BIGINT NOT NULL,
   height              DOUBLE PRECISION,
@@ -110,8 +110,8 @@ CREATE INDEX IF NOT EXISTS idx_bgr_baby_time ON "baby_growth_record"(baby_id, re
 -- 5. 宝宝相册表 (PostgreSQL)
 CREATE TABLE IF NOT EXISTS "baby_photo" (
   id          BIGSERIAL PRIMARY KEY,
-  photo_id    BIGINT UNIQUE NOT NULL,
-  baby_id     BIGINT NOT NULL,
+  photo_id    UUID UNIQUE NOT NULL,
+  baby_id     UUID NOT NULL,
   link        VARCHAR(255) NOT NULL DEFAULT '',
   caption     TEXT,
   ctime       BIGINT NOT NULL,

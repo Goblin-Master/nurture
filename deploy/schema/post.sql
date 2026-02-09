@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- 1. 帖子表（PostgreSQL）
 CREATE TABLE IF NOT EXISTS "post" (
   id               BIGSERIAL PRIMARY KEY,
-  post_id          BIGINT UNIQUE NOT NULL,
+  post_id          UUID NOT NULL,
   author_id        UUID NOT NULL,
   title            VARCHAR(255) NOT NULL,
   content          TEXT NOT NULL,
@@ -35,7 +35,7 @@ COMMENT ON COLUMN "post".utime IS '更新时间戳';
 -- 2. 标签表
 CREATE TABLE IF NOT EXISTS "tag" (
   id           BIGSERIAL PRIMARY KEY,
-  tag_id       BIGINT UNIQUE NOT NULL,
+  tag_id       UUID NOT NULL,
   tag_name     VARCHAR(64) UNIQUE NOT NULL,
   description  TEXT,
   ctime        BIGINT NOT NULL,
@@ -53,8 +53,8 @@ COMMENT ON COLUMN "tag".utime IS '更新时间戳';
 -- 3. 帖子-标签关联表
 CREATE TABLE IF NOT EXISTS "post_tag" (
   id        BIGSERIAL PRIMARY KEY,
-  post_id   BIGINT NOT NULL,
-  tag_id    BIGINT NOT NULL,
+  post_id   UUID NOT NULL,
+  tag_id    UUID NOT NULL,
   CONSTRAINT uq_post_tag UNIQUE (post_id, tag_id)
 );
 
@@ -66,10 +66,10 @@ COMMENT ON COLUMN "post_tag".tag_id IS '标签ID';
 -- 4. 评论表（PostgreSQL）
 CREATE TABLE IF NOT EXISTS "comment" (
   id          BIGSERIAL PRIMARY KEY,
-  comment_id  BIGINT UNIQUE NOT NULL,
-  post_id     BIGINT NOT NULL,
+  comment_id  UUID UNIQUE NOT NULL,
+  post_id     UUID NOT NULL,
   user_id     UUID NOT NULL,
-  parent_id   BIGINT,
+  parent_id   UUID,
   content     TEXT,
   ctime       BIGINT NOT NULL,
   utime       BIGINT NOT NULL
@@ -88,8 +88,8 @@ COMMENT ON COLUMN "comment".utime IS '更新时间戳';
 -- 5. 评论闭包表
 CREATE TABLE IF NOT EXISTS "comment_closure" (
   id          BIGSERIAL PRIMARY KEY,
-  ancestor    BIGINT NOT NULL,
-  descendant  BIGINT NOT NULL,
+  ancestor    UUID NOT NULL,
+  descendant  UUID NOT NULL,
   depth       INTEGER NOT NULL CHECK (depth >= 0),
   CONSTRAINT uq_comment_closure UNIQUE (ancestor, descendant)
 );
@@ -104,7 +104,7 @@ COMMENT ON COLUMN "comment_closure".depth IS '祖先到后代的距离';
 CREATE TABLE IF NOT EXISTS "like_dislike" (
   id       BIGSERIAL PRIMARY KEY,
   user_id  UUID NOT NULL,
-  post_id  BIGINT NOT NULL,
+  post_id  UUID NOT NULL,
   type     VARCHAR(20) NOT NULL CHECK (type IN ('like','dislike')),
   ctime    BIGINT NOT NULL,
   utime    BIGINT NOT NULL,
@@ -122,9 +122,9 @@ COMMENT ON COLUMN "like_dislike".utime IS '更新时间戳';
 -- 7. 收藏表
 CREATE TABLE IF NOT EXISTS "collection" (
   id             BIGSERIAL PRIMARY KEY,
-  collection_id  BIGINT UNIQUE NOT NULL,
+  collection_id  UUID UNIQUE NOT NULL,
   user_id        UUID NOT NULL,
-  post_id        BIGINT NOT NULL,
+  post_id        UUID NOT NULL,
   ctime          BIGINT NOT NULL,
   utime          BIGINT NOT NULL,
   CONSTRAINT uq_collection UNIQUE (user_id, post_id)
