@@ -32,3 +32,10 @@ var (
 	ErrLLMGenerate      = errors.New("LLM 生成失败")
 	ErrEmbedding        = errors.New("向量化失败")
 )
+
+var (
+	ErrBabyNotExist          = errors.New("宝宝不存在")
+	ErrVaccineRecordNotExist = errors.New("接种记录不存在")
+	ErrInvalidVaccineStatus  = errors.New("疫苗状态非法")
+	ErrInvalidActualTime     = errors.New("接种时间非法")
+)

@@ -82,4 +82,39 @@ func registerRoutes(routeManager *manager.RouteManager) {
 		rg.POST("/code/reset", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetResetCode)
 		rg.POST("/resetPassword", middleware.BindJsonMiddleware[dto.ResetPasswordReq], userHandler.ResetPassword)
 	})
+
+	// 宝宝模块路由
+	routeManager.RegisterBabyRoutes(func(rg *gin.RouterGroup) {
+		babyHandler := handler.NewBabyHandler()
+		// 切换宝宝：列表
+		rg.GET("/changeBaby",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.ChangeBabyReq],
+			babyHandler.ChangeBaby,
+		)
+		// 新增宝宝
+		rg.POST("/newBaby",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindJsonMiddleware[dto.NewBabyReq],
+			babyHandler.NewBaby,
+		)
+		// 宝宝详细页
+		rg.GET("/profile",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.BabyProfileReq],
+			babyHandler.GetProfile,
+		)
+		// 疫苗列表
+		rg.GET("/vaccine/getVaccineList",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.GetVaccineListReq],
+			babyHandler.GetVaccineList,
+		)
+		// 更新接种状态
+		rg.PUT("/vaccine/changeStatus",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindJsonMiddleware[dto.ChangeVaccineStatusReq],
+			babyHandler.ChangeVaccineStatus,
+		)
+	})
 }

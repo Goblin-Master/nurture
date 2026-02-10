@@ -18,6 +18,7 @@ type Middleware func() gin.HandlerFunc
 type RouteManager struct {
 	CommonRoutes *gin.RouterGroup //通用功能相关的路由组
 	UserRoutes   *gin.RouterGroup //用户相关的路由组
+	BabyRoutes   *gin.RouterGroup //宝宝相关的路由组
 }
 
 // NewRouteManager 创建一个新的 RouteManager 实例，包含各业务功能的路由组
@@ -25,6 +26,7 @@ func NewRouteManager(router *gin.Engine) *RouteManager {
 	return &RouteManager{
 		CommonRoutes: router.Group("/api/common"), //通用功能相关的路由组
 		UserRoutes:   router.Group("/api/user"),   //用户相关的路由组
+		BabyRoutes:   router.Group("/api/baby"),   //宝宝相关的路由组
 	}
 }
 
@@ -38,6 +40,11 @@ func (rm *RouteManager) RegisterUserRoutes(handler PathHandler) {
 	handler(rm.UserRoutes)
 }
 
+// RegisterBabyRoutes 宝宝相关的路由组
+func (rm *RouteManager) RegisterBabyRoutes(handler PathHandler) {
+	handler(rm.BabyRoutes)
+}
+
 // RegisterMiddleware 根据组名为对应的路由组注册中间件
 func (rm *RouteManager) RegisterMiddleware(group string, middleware Middleware) {
 	switch group {
@@ -45,6 +52,8 @@ func (rm *RouteManager) RegisterMiddleware(group string, middleware Middleware) 
 		rm.CommonRoutes.Use(middleware())
 	case "user":
 		rm.UserRoutes.Use(middleware())
+	case "baby":
+		rm.BabyRoutes.Use(middleware())
 	}
 }
 
