@@ -82,8 +82,8 @@ type BabyVaccineRecord struct {
 	RecordID pgtype.UUID
 	// 宝宝ID(外键)
 	BabyID pgtype.UUID
-	// 疫苗ID(外键)
-	VaccineID pgtype.UUID
+	// 剂次ID(外键)
+	DoseID pgtype.UUID
 	// 应接种时间(毫秒)
 	DueTime int64
 	// 接种状态
@@ -106,8 +106,6 @@ type Vaccine struct {
 	Name string
 	// 预防疾病
 	Disease string
-	// 推荐接种年龄(天)
-	RecommendAgeDays int32
 	// 详情页面URL
 	Link string
 	// 创建时间戳

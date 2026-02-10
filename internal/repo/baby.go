@@ -19,8 +19,8 @@ type IBabyRepo interface {
 	GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (baby.Baby, error)
 	GetLatestGrowthByBabyIDAndUser(ctx context.Context, babyID, userID string) (baby.BabyGrowthRecord, error)
 	ListVaccineRecordsByBaby(ctx context.Context, babyID string) ([]baby.ListVaccineRecordsByBabyIDRow, error)
-	UpdateVaccineStatusGiven(ctx context.Context, babyID, vaccineID string, actualTime, utime int64) (int64, error)
-	UpdateVaccineStatusNotGiven(ctx context.Context, babyID, vaccineID string, utime int64) (int64, error)
+	UpdateVaccineStatusGiven(ctx context.Context, babyID, doseID string, actualTime, utime int64) (int64, error)
+	UpdateVaccineStatusNotGiven(ctx context.Context, babyID, doseID string, utime int64) (int64, error)
 }
 
 type BabyRepo struct {
@@ -102,16 +102,15 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, babyID, name,
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
-	// 创建疫苗记录
-	vaccines, err := qtx.ListAllVaccines(ctx)
+	// 创建疫苗记录（按剂次）
+	doses, err := qtx.ListAllDoses(ctx)
 	if err != nil {
 		global.Log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
-	for _, v := range vaccines {
-		// due_time = birthday + recommend_age_days * 24*3600*1000
-		due := birthday + int64(v.RecommendAgeDays)*24*3600*1000
+	for _, d := range doses {
+		due := birthday + int64(d.RecommendAgeDays)*24*3600*1000
 		var vrid pgtype.UUID
 		if err := vrid.Scan(uuid.NewString()); err != nil {
 			_ = tx.Rollback(ctx)
@@ -120,7 +119,7 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, babyID, name,
 		if err := qtx.CreateBabyVaccineRecord(ctx, baby.CreateBabyVaccineRecordParams{
 			RecordID:  vrid,
 			BabyID:    bid,
-			VaccineID: v.VaccineID,
+			DoseID:    d.DoseID,
 			DueTime:   due,
 			Ctime:     ctime,
 			Utime:     utime,
@@ -191,17 +190,17 @@ func (r *BabyRepo) ListVaccineRecordsByBaby(ctx context.Context, babyID string) 
 	return rows, nil
 }
 
-func (r *BabyRepo) UpdateVaccineStatusGiven(ctx context.Context, babyID, vaccineID string, actualTime, utime int64) (int64, error) {
-	var bid, vid pgtype.UUID
+func (r *BabyRepo) UpdateVaccineStatusGiven(ctx context.Context, babyID, doseID string, actualTime, utime int64) (int64, error) {
+	var bid, did pgtype.UUID
 	if err := bid.Scan(babyID); err != nil {
 		return 0, err
 	}
-	if err := vid.Scan(vaccineID); err != nil {
+	if err := did.Scan(doseID); err != nil {
 		return 0, err
 	}
 	n, err := r.babyDao.UpdateVaccineStatusGiven(ctx, baby.UpdateVaccineStatusGivenParams{
 		BabyID:     bid,
-		VaccineID:  vid,
+		DoseID:     did,
 		ActualTime: pgtype.Int8{Int64: actualTime, Valid: true},
 		Utime:      utime,
 	})
@@ -212,18 +211,18 @@ func (r *BabyRepo) UpdateVaccineStatusGiven(ctx context.Context, babyID, vaccine
 	return n, nil
 }
 
-func (r *BabyRepo) UpdateVaccineStatusNotGiven(ctx context.Context, babyID, vaccineID string, utime int64) (int64, error) {
-	var bid, vid pgtype.UUID
+func (r *BabyRepo) UpdateVaccineStatusNotGiven(ctx context.Context, babyID, doseID string, utime int64) (int64, error) {
+	var bid, did pgtype.UUID
 	if err := bid.Scan(babyID); err != nil {
 		return 0, err
 	}
-	if err := vid.Scan(vaccineID); err != nil {
+	if err := did.Scan(doseID); err != nil {
 		return 0, err
 	}
 	n, err := r.babyDao.UpdateVaccineStatusNotGiven(ctx, baby.UpdateVaccineStatusNotGivenParams{
-		BabyID:    bid,
-		VaccineID: vid,
-		Utime:     utime,
+		BabyID: bid,
+		DoseID: did,
+		Utime:  utime,
 	})
 	if err != nil {
 		global.Log.Error(err)

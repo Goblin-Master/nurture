@@ -49,11 +49,14 @@ type (
 type (
 	GetVaccineListReq struct {
 		BabyID string `json:"baby_id" form:"baby_id" binding:"required"`
+		Status string `json:"status" form:"status"`
 	}
 	VaccineItem struct {
+		DoseID     string `json:"dose_id"`
 		VaccineID  string `json:"vaccine_id"`
 		Name       string `json:"name"`
 		Disease    string `json:"disease"`
+		DoseNumber int32  `json:"dose_number"`
 		DueTime    int64  `json:"due_time"`
 		Status     string `json:"status"`
 		ActualTime int64  `json:"actual_time"`
@@ -66,7 +69,7 @@ type (
 type (
 	ChangeVaccineStatusReq struct {
 		BabyID     string `json:"baby_id" binding:"required"`
-		VaccineID  string `json:"vaccine_id" binding:"required"`
+		DoseID     string `json:"dose_id" binding:"required"`
 		Status     string `json:"status" binding:"required"`
 		ActualTime int64  `json:"actual_time"`
 	}

@@ -76,10 +76,11 @@ func (l *BabyLogic) GetProfile(ctx context.Context, userID string, req dto.BabyP
 	}
 	gr, err := l.babyRepo.GetLatestGrowthByBabyIDAndUser(ctx, req.BabyID, userID)
 	if err != nil {
-		if !errors.Is(err, repo.ErrBabyGrowthNotExist) {
-			global.Log.Error(err)
+		if errors.Is(err, repo.ErrBabyGrowthNotExist) {
+			return resp, ErrBabyGrowthNotExist
 		}
-		// 没有成长记录：返回基础信息，数值保持为 0
+		global.Log.Error(err)
+		return resp, ErrDefault
 	}
 	resp.BabyID = b.BabyID.String()
 	resp.Name = b.Name
@@ -116,10 +117,16 @@ func (l *BabyLogic) GetVaccineList(ctx context.Context, userID string, req dto.G
 	}
 	items := make([]dto.VaccineItem, 0, len(rows))
 	for _, v := range rows {
+		// 过滤状态：status为空或all表示不过滤
+		if req.Status != "" && req.Status != "all" && v.Status != req.Status {
+			continue
+		}
 		items = append(items, dto.VaccineItem{
+			DoseID:     v.DoseID,
 			VaccineID:  v.VaccineID,
 			Name:       v.Name,
 			Disease:    v.Disease,
+			DoseNumber: v.DoseNumber,
 			DueTime:    v.DueTime,
 			Status:     v.Status,
 			ActualTime: v.ActualTime,
@@ -145,7 +152,7 @@ func (l *BabyLogic) ChangeVaccineStatus(ctx context.Context, userID string, req 
 		if req.ActualTime <= 0 || req.ActualTime < b.Birthday || req.ActualTime > now {
 			return resp, ErrInvalidActualTime
 		}
-		n, err := l.babyRepo.UpdateVaccineStatusGiven(ctx, req.BabyID, req.VaccineID, req.ActualTime, now)
+		n, err := l.babyRepo.UpdateVaccineStatusGiven(ctx, req.BabyID, req.DoseID, req.ActualTime, now)
 		if err != nil {
 			if errors.Is(err, repo.ErrBabyVaccineNotExist) {
 				return resp, ErrVaccineRecordNotExist
@@ -160,7 +167,7 @@ func (l *BabyLogic) ChangeVaccineStatus(ctx context.Context, userID string, req 
 		if req.ActualTime != 0 {
 			return resp, ErrInvalidActualTime
 		}
-		n, err := l.babyRepo.UpdateVaccineStatusNotGiven(ctx, req.BabyID, req.VaccineID, now)
+		n, err := l.babyRepo.UpdateVaccineStatusNotGiven(ctx, req.BabyID, req.DoseID, now)
 		if err != nil {
 			if errors.Is(err, repo.ErrBabyVaccineNotExist) {
 				return resp, ErrVaccineRecordNotExist

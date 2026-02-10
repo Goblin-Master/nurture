@@ -76,14 +76,14 @@ func (q *Queries) CreateBabyGrowthRecord(ctx context.Context, arg CreateBabyGrow
 }
 
 const createBabyVaccineRecord = `-- name: CreateBabyVaccineRecord :exec
-INSERT INTO "baby_vaccine_record" (record_id, baby_id, vaccine_id, due_time, status, actual_time, ctime, utime)
+INSERT INTO "baby_vaccine_record" (record_id, baby_id, dose_id, due_time, status, actual_time, ctime, utime)
 VALUES ($1, $2, $3, $4, 'not_given', NULL, $5, $6)
 `
 
 type CreateBabyVaccineRecordParams struct {
 	RecordID  pgtype.UUID
 	BabyID    pgtype.UUID
-	VaccineID pgtype.UUID
+	DoseID    pgtype.UUID
 	DueTime   int64
 	Ctime     int64
 	Utime     int64
@@ -93,7 +93,7 @@ func (q *Queries) CreateBabyVaccineRecord(ctx context.Context, arg CreateBabyVac
 	_, err := q.db.Exec(ctx, createBabyVaccineRecord,
 		arg.RecordID,
 		arg.BabyID,
-		arg.VaccineID,
+		arg.DoseID,
 		arg.DueTime,
 		arg.Ctime,
 		arg.Utime,
@@ -158,13 +158,15 @@ func (q *Queries) GetLatestGrowthByBabyIDAndUser(ctx context.Context, arg GetLat
 	return i, err
 }
 
-const listAllVaccines = `-- name: ListAllVaccines :many
-SELECT vaccine_id, name, disease, recommend_age_days, link, ctime, utime
-FROM "vaccine"
-ORDER BY recommend_age_days ASC
+const listAllDoses = `-- name: ListAllDoses :many
+SELECT d.dose_id, d.vaccine_id, v.name, v.disease, d.recommend_age_days, v.link, v.ctime, v.utime, d.dose_number
+FROM "vaccine_dose" d
+JOIN "vaccine" v ON v.vaccine_id = d.vaccine_id
+ORDER BY v.name ASC, d.dose_number ASC
 `
 
-type ListAllVaccinesRow struct {
+type ListAllDosesRow struct {
+	DoseID           pgtype.UUID
 	VaccineID        pgtype.UUID
 	Name             string
 	Disease          string
@@ -172,18 +174,20 @@ type ListAllVaccinesRow struct {
 	Link             string
 	Ctime            int64
 	Utime            int64
+	DoseNumber       int32
 }
 
-func (q *Queries) ListAllVaccines(ctx context.Context) ([]ListAllVaccinesRow, error) {
-	rows, err := q.db.Query(ctx, listAllVaccines)
+func (q *Queries) ListAllDoses(ctx context.Context) ([]ListAllDosesRow, error) {
+	rows, err := q.db.Query(ctx, listAllDoses)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListAllVaccinesRow
+	var items []ListAllDosesRow
 	for rows.Next() {
-		var i ListAllVaccinesRow
+		var i ListAllDosesRow
 		if err := rows.Scan(
+			&i.DoseID,
 			&i.VaccineID,
 			&i.Name,
 			&i.Disease,
@@ -191,6 +195,7 @@ func (q *Queries) ListAllVaccines(ctx context.Context) ([]ListAllVaccinesRow, er
 			&i.Link,
 			&i.Ctime,
 			&i.Utime,
+			&i.DoseNumber,
 		); err != nil {
 			return nil, err
 		}
@@ -235,17 +240,20 @@ func (q *Queries) ListBabiesByUserID(ctx context.Context, userID pgtype.UUID) ([
 }
 
 const listVaccineRecordsByBabyID = `-- name: ListVaccineRecordsByBabyID :many
-SELECT v.vaccine_id::text AS vaccine_id, v.name, v.disease, bvr.due_time, bvr.status, COALESCE(bvr.actual_time, 0) AS actual_time
+SELECT d.dose_id::text AS dose_id, v.vaccine_id::text AS vaccine_id, v.name, v.disease, d.dose_number, bvr.due_time, bvr.status, COALESCE(bvr.actual_time, 0) AS actual_time
 FROM "baby_vaccine_record" bvr
-JOIN "vaccine" v ON v.vaccine_id = bvr.vaccine_id
+JOIN "vaccine_dose" d ON d.dose_id = bvr.dose_id
+JOIN "vaccine" v ON v.vaccine_id = d.vaccine_id
 WHERE bvr.baby_id = $1
-ORDER BY v.recommend_age_days ASC
+ORDER BY v.name ASC, d.dose_number ASC
 `
 
 type ListVaccineRecordsByBabyIDRow struct {
+	DoseID     string
 	VaccineID  string
 	Name       string
 	Disease    string
+	DoseNumber int32
 	DueTime    int64
 	Status     string
 	ActualTime int64
@@ -261,9 +269,11 @@ func (q *Queries) ListVaccineRecordsByBabyID(ctx context.Context, babyID pgtype.
 	for rows.Next() {
 		var i ListVaccineRecordsByBabyIDRow
 		if err := rows.Scan(
+			&i.DoseID,
 			&i.VaccineID,
 			&i.Name,
 			&i.Disease,
+			&i.DoseNumber,
 			&i.DueTime,
 			&i.Status,
 			&i.ActualTime,
@@ -281,12 +291,12 @@ func (q *Queries) ListVaccineRecordsByBabyID(ctx context.Context, babyID pgtype.
 const updateVaccineStatusGiven = `-- name: UpdateVaccineStatusGiven :execrows
 UPDATE "baby_vaccine_record"
 SET status = 'given', actual_time = $3, utime = $4
-WHERE baby_id = $1 AND vaccine_id = $2
+WHERE baby_id = $1 AND dose_id = $2
 `
 
 type UpdateVaccineStatusGivenParams struct {
 	BabyID     pgtype.UUID
-	VaccineID  pgtype.UUID
+	DoseID     pgtype.UUID
 	ActualTime pgtype.Int8
 	Utime      int64
 }
@@ -294,7 +304,7 @@ type UpdateVaccineStatusGivenParams struct {
 func (q *Queries) UpdateVaccineStatusGiven(ctx context.Context, arg UpdateVaccineStatusGivenParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateVaccineStatusGiven,
 		arg.BabyID,
-		arg.VaccineID,
+		arg.DoseID,
 		arg.ActualTime,
 		arg.Utime,
 	)
@@ -307,17 +317,17 @@ func (q *Queries) UpdateVaccineStatusGiven(ctx context.Context, arg UpdateVaccin
 const updateVaccineStatusNotGiven = `-- name: UpdateVaccineStatusNotGiven :execrows
 UPDATE "baby_vaccine_record"
 SET status = 'not_given', actual_time = NULL, utime = $3
-WHERE baby_id = $1 AND vaccine_id = $2
+WHERE baby_id = $1 AND dose_id = $2
 `
 
 type UpdateVaccineStatusNotGivenParams struct {
 	BabyID    pgtype.UUID
-	VaccineID pgtype.UUID
+	DoseID    pgtype.UUID
 	Utime     int64
 }
 
 func (q *Queries) UpdateVaccineStatusNotGiven(ctx context.Context, arg UpdateVaccineStatusNotGivenParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateVaccineStatusNotGiven, arg.BabyID, arg.VaccineID, arg.Utime)
+	result, err := q.db.Exec(ctx, updateVaccineStatusNotGiven, arg.BabyID, arg.DoseID, arg.Utime)
 	if err != nil {
 		return 0, err
 	}
