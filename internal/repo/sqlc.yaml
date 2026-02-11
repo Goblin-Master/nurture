@@ -16,3 +16,14 @@ sql:
         package: "baby"
         out: "baby"
         sql_package: "pgx/v5"
+  - engine: "postgresql"
+    queries: "sql/post.sql"
+    schema:
+      - "../../deploy/schema/post.sql"
+      - "../../deploy/schema/user.sql"
+      - "../../deploy/schema/baby.sql"
+    gen:
+      go:
+        package: "postdao"
+        out: "postdao"
+        sql_package: "pgx/v5"

@@ -19,4 +19,9 @@ var (
 	ErrBabyNotExist        = errors.New("宝宝不存在")
 	ErrBabyGrowthNotExist  = errors.New("宝宝成长记录不存在")
 	ErrBabyVaccineNotExist = errors.New("宝宝疫苗记录不存在")
+
+	// Post related errors
+	ErrPostNotExist      = errors.New("帖子不存在")
+	ErrInvalidPostStatus = errors.New("帖子状态非法")
+	ErrPostNotDraft        = errors.New("帖子不是草稿，无法发布")
 )

@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS "comment" (
   user_id     UUID NOT NULL,
   parent_id   UUID,
   content     TEXT,
+  like_count  INTEGER NOT NULL DEFAULT 0,
   ctime       BIGINT NOT NULL,
   utime       BIGINT NOT NULL
 );
@@ -82,6 +83,7 @@ COMMENT ON COLUMN "comment".post_id IS '帖子ID';
 COMMENT ON COLUMN "comment".user_id IS '评论者user_id(UUID)';
 COMMENT ON COLUMN "comment".parent_id IS '父评论ID(一级为NULL)';
 COMMENT ON COLUMN "comment".content IS '评论正文';
+COMMENT ON COLUMN "comment".like_count IS '点赞数';
 COMMENT ON COLUMN "comment".ctime IS '创建时间戳';
 COMMENT ON COLUMN "comment".utime IS '更新时间戳';
 

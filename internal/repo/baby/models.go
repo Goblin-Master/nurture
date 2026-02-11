@@ -113,3 +113,21 @@ type Vaccine struct {
 	// 更新时间戳
 	Utime int64
 }
+
+// 疫苗剂次表
+type VaccineDose struct {
+	// 主键ID
+	ID int64
+	// 剂次ID
+	DoseID pgtype.UUID
+	// 疫苗ID(外键)
+	VaccineID pgtype.UUID
+	// 第几剂(从1开始)
+	DoseNumber int32
+	// 推荐接种年龄(天)
+	RecommendAgeDays int32
+	// 创建时间戳
+	Ctime int64
+	// 更新时间戳
+	Utime int64
+}

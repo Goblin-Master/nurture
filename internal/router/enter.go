@@ -117,4 +117,31 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			babyHandler.ChangeVaccineStatus,
 		)
 	})
+
+	// 帖子模块路由
+	routeManager.RegisterPostRoutes(func(rg *gin.RouterGroup) {
+		postHandler := handler.NewPostHandler()
+		// 首页帖子列表（公开）
+		rg.GET("/list",
+			middleware.BindQueryMiddleware[dto.PostListReq],
+			postHandler.ListPosts,
+		)
+		// 帖子详情
+		rg.GET("/:post_id",
+			middleware.BindUriMiddleware[dto.PostDetailReq],
+			postHandler.GetDetail,
+		)
+		// 新增帖子/草稿
+		rg.POST("/newPost",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindJsonMiddleware[dto.CreatePostReq],
+			postHandler.NewPost,
+		)
+		// 发布草稿
+		rg.POST("/:post_id/publish",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.PublishPostReq],
+			postHandler.Publish,
+		)
+	})
 }
