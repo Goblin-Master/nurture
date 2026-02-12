@@ -53,10 +53,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 }
 
 const getUserByAccountAndPassword = `-- name: GetUserByAccountAndPassword :one
-SELECT id, user_id, account, password, email, username, gender, role, ctime, utime
-FROM "user_base"
-WHERE account = $1 AND password = $2
-LIMIT 1
+SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base"
+WHERE account = $1 AND password = $2 LIMIT 1
 `
 
 type GetUserByAccountAndPasswordParams struct {
@@ -83,10 +81,8 @@ func (q *Queries) GetUserByAccountAndPassword(ctx context.Context, arg GetUserBy
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, user_id, account, password, email, username, gender, role, ctime, utime
-FROM "user_base"
-WHERE email = $1
-LIMIT 1
+SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base"
+WHERE email = $1 LIMIT 1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (UserBase, error) {

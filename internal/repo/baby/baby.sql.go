@@ -81,12 +81,12 @@ VALUES ($1, $2, $3, $4, 'not_given', NULL, $5, $6)
 `
 
 type CreateBabyVaccineRecordParams struct {
-	RecordID  pgtype.UUID
-	BabyID    pgtype.UUID
-	DoseID    pgtype.UUID
-	DueTime   int64
-	Ctime     int64
-	Utime     int64
+	RecordID pgtype.UUID
+	BabyID   pgtype.UUID
+	DoseID   pgtype.UUID
+	DueTime  int64
+	Ctime    int64
+	Utime    int64
 }
 
 func (q *Queries) CreateBabyVaccineRecord(ctx context.Context, arg CreateBabyVaccineRecordParams) error {
@@ -177,6 +177,7 @@ type ListAllDosesRow struct {
 	DoseNumber       int32
 }
 
+// 列出所有剂次（用于初始化宝宝疫苗记录）
 func (q *Queries) ListAllDoses(ctx context.Context) ([]ListAllDosesRow, error) {
 	rows, err := q.db.Query(ctx, listAllDoses)
 	if err != nil {
@@ -240,7 +241,15 @@ func (q *Queries) ListBabiesByUserID(ctx context.Context, userID pgtype.UUID) ([
 }
 
 const listVaccineRecordsByBabyID = `-- name: ListVaccineRecordsByBabyID :many
-SELECT d.dose_id::text AS dose_id, v.vaccine_id::text AS vaccine_id, v.name, v.disease, d.dose_number, bvr.due_time, bvr.status, COALESCE(bvr.actual_time, 0) AS actual_time
+SELECT 
+  d.dose_id::text AS dose_id,
+  v.vaccine_id::text AS vaccine_id,
+  v.name,
+  v.disease,
+  d.dose_number,
+  bvr.due_time,
+  bvr.status,
+  COALESCE(bvr.actual_time, 0) AS actual_time
 FROM "baby_vaccine_record" bvr
 JOIN "vaccine_dose" d ON d.dose_id = bvr.dose_id
 JOIN "vaccine" v ON v.vaccine_id = d.vaccine_id
@@ -321,9 +330,9 @@ WHERE baby_id = $1 AND dose_id = $2
 `
 
 type UpdateVaccineStatusNotGivenParams struct {
-	BabyID    pgtype.UUID
-	DoseID    pgtype.UUID
-	Utime     int64
+	BabyID pgtype.UUID
+	DoseID pgtype.UUID
+	Utime  int64
 }
 
 func (q *Queries) UpdateVaccineStatusNotGiven(ctx context.Context, arg UpdateVaccineStatusNotGivenParams) (int64, error) {

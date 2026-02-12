@@ -117,4 +117,55 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			babyHandler.ChangeVaccineStatus,
 		)
 	})
+
+	// 帖子模块路由
+	routeManager.RegisterPostRoutes(func(rg *gin.RouterGroup) {
+		postHandler := handler.NewPostHandler()
+		// 首页帖子列表（公开）
+		// 首页（简化筛选）
+		rg.GET("",
+			middleware.BindQueryMiddleware[dto.PostHomeListReq],
+			postHandler.Home,
+		)
+		// 按标签列表
+		rg.GET("/tag/:tag_id",
+			middleware.BindUriMiddleware[dto.PostTagListReq],
+			middleware.BindQueryMiddleware[dto.PostTagListReq],
+			postHandler.ListByTag,
+		)
+		// 搜索列表
+		rg.GET("/search",
+			middleware.BindQueryMiddleware[dto.PostSearchListReq],
+			postHandler.Search,
+		)
+		// 帖子详情
+		rg.GET("/:post_id",
+			middleware.BindUriMiddleware[dto.PostDetailReq],
+			postHandler.GetDetail,
+		)
+		// 新增帖子/草稿
+		rg.POST("/newPost",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindJsonMiddleware[dto.CreatePostReq],
+			postHandler.NewPost,
+		)
+		// 我的发布列表
+		rg.GET("/mine",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.PostMyListReq],
+			postHandler.ListMyPosts,
+		)
+		// 我的草稿列表
+		rg.GET("/mine/drafts",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.PostMyListReq],
+			postHandler.ListMyDrafts,
+		)
+		// 发布草稿
+		rg.POST("/:post_id/publish",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.PublishPostReq],
+			postHandler.Publish,
+		)
+	})
 }
