@@ -15,7 +15,11 @@ import (
 )
 
 type IPostLogic interface {
-	List(ctx context.Context, req dto.PostListReq) (dto.PostListResp, error)
+	Home(ctx context.Context, req dto.PostHomeListReq) (dto.PostListResp, error)
+	ListByTag(ctx context.Context, req dto.PostTagListReq) (dto.PostListResp, error)
+	Search(ctx context.Context, req dto.PostSearchListReq) (dto.PostListResp, error)
+	ListMyPosts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
+	ListMyDrafts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
 	Detail(ctx context.Context, req dto.PostDetailReq) (dto.PostDetailResp, error)
 	NewPost(ctx context.Context, userID string, req dto.CreatePostReq) (dto.CreatePostResp, error)
 	Publish(ctx context.Context, userID string, req dto.PublishPostReq) (dto.PublishPostResp, error)
@@ -33,7 +37,7 @@ func NewPostLogic() *PostLogic {
 
 var _ IPostLogic = (*PostLogic)(nil)
 
-func (l *PostLogic) List(ctx context.Context, req dto.PostListReq) (dto.PostListResp, error) {
+func (l *PostLogic) Home(ctx context.Context, req dto.PostHomeListReq) (dto.PostListResp, error) {
 	var resp dto.PostListResp
 	if req.Page <= 0 {
 		req.Page = 1
@@ -41,28 +45,11 @@ func (l *PostLogic) List(ctx context.Context, req dto.PostListReq) (dto.PostList
 	if req.PageSize <= 0 || req.PageSize > 100 {
 		req.PageSize = 10
 	}
-	var excludes []string
-	if req.ExcludeIDs != "" {
-		for _, v := range strings.Split(req.ExcludeIDs, ",") {
-			s := strings.TrimSpace(v)
-			if s != "" {
-				excludes = append(excludes, s)
-			}
-		}
-	}
-	items, hasMore, err := l.postRepo.List(ctx, repo.PostListFilter{
-		Page:       req.Page,
-		PageSize:   req.PageSize,
-		Status:     req.Status,
-		TagID:      req.TagID,
-		AuthorID:   req.AuthorID,
-		OrderBy:    req.OrderBy,
-		Order:      req.Order,
-		Keyword:    req.Keyword,
-		Strategy:   req.Strategy,
-		ExcludeIDs: excludes,
-	})
+	items, hasMore, err := l.postRepo.ListHome(ctx, req.Page, req.PageSize, req.Strategy)
 	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
 		global.Log.Error(err)
 		return resp, ErrDefault
 	}
@@ -85,7 +72,6 @@ func (l *PostLogic) List(ctx context.Context, req dto.PostListReq) (dto.PostList
 			DislikeCount:   v.DislikeCount,
 			CollectCount:   v.CollectCount,
 			CommentCount:   v.CommentCount,
-			Cover:          v.Cover,
 			Ctime:          v.Ctime,
 			Utime:          v.Utime,
 			Tags:           v.Tags,
@@ -100,6 +86,201 @@ func (l *PostLogic) List(ctx context.Context, req dto.PostListReq) (dto.PostList
 	return resp, nil
 }
 
+func (l *PostLogic) ListByTag(ctx context.Context, req dto.PostTagListReq) (dto.PostListResp, error) {
+	var resp dto.PostListResp
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10
+	}
+	items, hasMore, err := l.postRepo.ListByTag(ctx, req.TagID, req.Page, req.PageSize, req.Strategy)
+	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Items = make([]dto.PostItem, 0, len(items))
+	for _, v := range items {
+		y, m, ageText := calcAge(v.Birthday, time.Now())
+		preview := makePreview(v.Content, 15)
+		resp.Items = append(resp.Items, dto.PostItem{
+			PostID:         v.PostID,
+			AuthorID:       v.AuthorID,
+			AuthorName:     v.AuthorName,
+			AuthorAvatar:   v.AuthorAvatar,
+			AuthorProvince: v.AuthorProvince,
+			AuthorCity:     v.AuthorCity,
+			Title:          v.Title,
+			Content:        v.Content,
+			ContentPreview: preview,
+			Status:         v.Status,
+			LikeCount:      v.LikeCount,
+			DislikeCount:   v.DislikeCount,
+			CollectCount:   v.CollectCount,
+			CommentCount:   v.CommentCount,
+			Ctime:          v.Ctime,
+			Utime:          v.Utime,
+			Tags:           v.Tags,
+			BabyAgeYear:    y,
+			BabyAgeMonth:   m,
+			BabyAgeText:    ageText,
+		})
+	}
+	resp.Page = req.Page
+	resp.PageSize = req.PageSize
+	resp.HasMore = hasMore
+	return resp, nil
+}
+
+func (l *PostLogic) Search(ctx context.Context, req dto.PostSearchListReq) (dto.PostListResp, error) {
+	var resp dto.PostListResp
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10
+	}
+	items, hasMore, err := l.postRepo.Search(ctx, req.Keyword, req.TagID, req.Strategy, req.Page, req.PageSize)
+	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Items = make([]dto.PostItem, 0, len(items))
+	for _, v := range items {
+		y, m, ageText := calcAge(v.Birthday, time.Now())
+		preview := makePreview(v.Content, 15)
+		resp.Items = append(resp.Items, dto.PostItem{
+			PostID:         v.PostID,
+			AuthorID:       v.AuthorID,
+			AuthorName:     v.AuthorName,
+			AuthorAvatar:   v.AuthorAvatar,
+			AuthorProvince: v.AuthorProvince,
+			AuthorCity:     v.AuthorCity,
+			Title:          v.Title,
+			Content:        v.Content,
+			ContentPreview: preview,
+			Status:         v.Status,
+			LikeCount:      v.LikeCount,
+			DislikeCount:   v.DislikeCount,
+			CollectCount:   v.CollectCount,
+			CommentCount:   v.CommentCount,
+			Ctime:          v.Ctime,
+			Utime:          v.Utime,
+			Tags:           v.Tags,
+			BabyAgeYear:    y,
+			BabyAgeMonth:   m,
+			BabyAgeText:    ageText,
+		})
+	}
+	resp.Page = req.Page
+	resp.PageSize = req.PageSize
+	resp.HasMore = hasMore
+	return resp, nil
+}
+
+func (l *PostLogic) ListMyPosts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error) {
+	var resp dto.PostListResp
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10
+	}
+	items, hasMore, err := l.postRepo.ListByAuthor(ctx, userID, req.Page, req.PageSize, req.Strategy)
+	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Items = make([]dto.PostItem, 0, len(items))
+	for _, v := range items {
+		y, m, ageText := calcAge(v.Birthday, time.Now())
+		preview := makePreview(v.Content, 15)
+		resp.Items = append(resp.Items, dto.PostItem{
+			PostID:         v.PostID,
+			AuthorID:       v.AuthorID,
+			AuthorName:     v.AuthorName,
+			AuthorAvatar:   v.AuthorAvatar,
+			AuthorProvince: v.AuthorProvince,
+			AuthorCity:     v.AuthorCity,
+			Title:          v.Title,
+			Content:        v.Content,
+			ContentPreview: preview,
+			Status:         v.Status,
+			LikeCount:      v.LikeCount,
+			DislikeCount:   v.DislikeCount,
+			CollectCount:   v.CollectCount,
+			CommentCount:   v.CommentCount,
+			Ctime:          v.Ctime,
+			Utime:          v.Utime,
+			Tags:           v.Tags,
+			BabyAgeYear:    y,
+			BabyAgeMonth:   m,
+			BabyAgeText:    ageText,
+		})
+	}
+	resp.Page = req.Page
+	resp.PageSize = req.PageSize
+	resp.HasMore = hasMore
+	return resp, nil
+}
+
+func (l *PostLogic) ListMyDrafts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error) {
+	var resp dto.PostListResp
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10
+	}
+	items, hasMore, err := l.postRepo.ListDraftsByAuthor(ctx, userID, req.Page, req.PageSize)
+	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Items = make([]dto.PostItem, 0, len(items))
+	for _, v := range items {
+		y, m, ageText := calcAge(v.Birthday, time.Now())
+		preview := makePreview(v.Content, 15)
+		resp.Items = append(resp.Items, dto.PostItem{
+			PostID:         v.PostID,
+			AuthorID:       v.AuthorID,
+			AuthorName:     v.AuthorName,
+			AuthorAvatar:   v.AuthorAvatar,
+			AuthorProvince: v.AuthorProvince,
+			AuthorCity:     v.AuthorCity,
+			Title:          v.Title,
+			Content:        v.Content,
+			ContentPreview: preview,
+			Status:         v.Status,
+			LikeCount:      v.LikeCount,
+			DislikeCount:   v.DislikeCount,
+			CollectCount:   v.CollectCount,
+			CommentCount:   v.CommentCount,
+			Ctime:          v.Ctime,
+			Utime:          v.Utime,
+			Tags:           v.Tags,
+			BabyAgeYear:    y,
+			BabyAgeMonth:   m,
+			BabyAgeText:    ageText,
+		})
+	}
+	resp.Page = req.Page
+	resp.PageSize = req.PageSize
+	resp.HasMore = hasMore
+	return resp, nil
+}
 func (l *PostLogic) Publish(ctx context.Context, userID string, req dto.PublishPostReq) (dto.PublishPostResp, error) {
 	var resp dto.PublishPostResp
 	if strings.TrimSpace(req.PostID) == "" {
@@ -124,8 +305,7 @@ func (l *PostLogic) Publish(ctx context.Context, userID string, req dto.PublishP
 func (l *PostLogic) NewPost(ctx context.Context, userID string, req dto.CreatePostReq) (dto.CreatePostResp, error) {
 	var resp dto.CreatePostResp
 	title := strings.TrimSpace(req.Title)
-	content := strings.TrimSpace(req.Content)
-	if title == "" || content == "" {
+	if title == "" || len(req.Content) == 0 {
 		return resp, ErrParamsType
 	}
 	status := strings.TrimSpace(req.Status)
@@ -134,7 +314,7 @@ func (l *PostLogic) NewPost(ctx context.Context, userID string, req dto.CreatePo
 	}
 	postID := uuid.NewString()
 	now := time.Now().UnixMilli()
-	err := l.postRepo.CreatePost(ctx, postID, userID, title, content, status, req.Cover, now, now, req.TagIDs)
+	err := l.postRepo.CreatePost(ctx, postID, userID, title, string(req.Content), status, now, now, req.TagIDs)
 	if err != nil {
 		if errors.Is(err, repo.ErrInvalidPostStatus) {
 			return resp, ErrInvalidPostStatus
@@ -176,7 +356,6 @@ func (l *PostLogic) Detail(ctx context.Context, req dto.PostDetailReq) (dto.Post
 		DislikeCount:   row.DislikeCount,
 		CollectCount:   row.CollectCount,
 		CommentCount:   row.CommentCount,
-		Cover:          row.Cover,
 		Ctime:          row.Ctime,
 		Utime:          row.Utime,
 		Tags:           row.Tags,

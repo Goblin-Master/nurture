@@ -3,7 +3,6 @@ package repo
 import (
 	"context"
 	"errors"
-	"fmt"
 	"nurture/internal/global"
 	"nurture/internal/repo/postdao"
 	"strings"
@@ -13,19 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type PostListFilter struct {
-	Page       int
-	PageSize   int
-	Status     string
-	TagID      string
-	AuthorID   string
-	OrderBy    string
-	Order      string
-	Keyword    string
-	Strategy   string
-	ExcludeIDs []string
-}
 
 type PostRow struct {
 	PostID         string
@@ -41,7 +27,6 @@ type PostRow struct {
 	DislikeCount   int32
 	CollectCount   int32
 	CommentCount   int32
-	Cover          string
 	Ctime          int64
 	Utime          int64
 	Birthday       int64
@@ -49,9 +34,13 @@ type PostRow struct {
 }
 
 type IPostRepo interface {
-	List(ctx context.Context, f PostListFilter) ([]PostRow, bool, error)
+	ListHome(ctx context.Context, page, pageSize int, strategy string) ([]PostRow, bool, error)
+	ListByTag(ctx context.Context, tagID string, page, pageSize int, strategy string) ([]PostRow, bool, error)
+	Search(ctx context.Context, keyword, tagID, strategy string, page, pageSize int) ([]PostRow, bool, error)
+	ListByAuthor(ctx context.Context, authorID string, page, pageSize int, strategy string) ([]PostRow, bool, error)
+	ListDraftsByAuthor(ctx context.Context, authorID string, page, pageSize int) ([]PostRow, bool, error)
 	GetDetail(ctx context.Context, postID string) (PostRow, error)
-	CreatePost(ctx context.Context, postID, authorID, title, content, status, cover string, ctime, utime int64, tagIDs []string) error
+	CreatePost(ctx context.Context, postID, authorID, title, content, status string, ctime, utime int64, tagIDs []string) error
 	Publish(ctx context.Context, postID, userID string) error
 }
 
@@ -67,142 +56,7 @@ func NewPostRepo() *PostRepo {
 
 var _ IPostRepo = (*PostRepo)(nil)
 
-func (r *PostRepo) List(ctx context.Context, f PostListFilter) ([]PostRow, bool, error) {
-	limit := f.PageSize + 1
-	offset := (f.Page - 1) * f.PageSize
-
-	sb := strings.Builder{}
-	sb.WriteString(`SELECT 
-    p.post_id::text AS post_id,
-    p.author_id::text AS author_id,
-    COALESCE(ua.username, '') AS author_name,
-    COALESCE(ua.avatar, '') AS author_avatar,
-    COALESCE(ua.province, '') AS author_province,
-    COALESCE(ua.city, '') AS author_city,
-    p.title, p.content, p.status,
-    p.like_count, p.dislike_count, p.collect_count, p.comment_count,
-    p.cover, p.ctime, p.utime,
-    COALESCE(b.birthday, 0) AS birthday,
-    COALESCE(array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL), '{}') AS tags
-  FROM "post" p
-  LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-  LEFT JOIN LATERAL (
-    SELECT birthday FROM "baby" 
-    WHERE user_id = p.author_id 
-    ORDER BY ctime DESC 
-    LIMIT 1
-  ) b ON true
-  LEFT JOIN "post_tag" pt ON pt.post_id = p.post_id
-  LEFT JOIN "tag" t ON t.tag_id = pt.tag_id`)
-
-	conds := make([]string, 0, 6)
-	args := make([]any, 0, 6)
-	argIdx := 1
-
-	// 标签过滤
-	if f.TagID != "" {
-		conds = append(conds, fmt.Sprintf("pt.tag_id = $%d", argIdx))
-		args = append(args, f.TagID)
-		argIdx++
-	}
-	// 状态过滤（默认 published）
-	status := f.Status
-	if status == "" {
-		status = "published"
-	}
-	conds = append(conds, fmt.Sprintf(`status = $%d`, argIdx))
-	args = append(args, status)
-	argIdx++
-
-	// 作者过滤
-	if f.AuthorID != "" {
-		conds = append(conds, fmt.Sprintf(`author_id = $%d`, argIdx))
-		args = append(args, f.AuthorID)
-		argIdx++
-	}
-
-	// 关键字（标题或正文 LIKE）
-	if f.Keyword != "" {
-		conds = append(conds, fmt.Sprintf(`(p.title ILIKE $%d OR COALESCE(ua.username,'') ILIKE $%d)`, argIdx, argIdx))
-		args = append(args, "%"+f.Keyword+"%")
-		argIdx++
-	}
-	// 排除已展示
-	if len(f.ExcludeIDs) > 0 {
-		conds = append(conds, fmt.Sprintf(`NOT (p.post_id::text = ANY($%d::text[]))`, argIdx))
-		args = append(args, f.ExcludeIDs)
-		argIdx++
-	}
-
-	if len(conds) > 0 {
-		sb.WriteString(` WHERE ` + strings.Join(conds, " AND "))
-	}
-	sb.WriteString(` GROUP BY 
-    p.post_id, p.author_id, ua.username, ua.avatar, ua.province, ua.city,
-    p.title, p.content, p.status, p.like_count, p.dislike_count, p.collect_count, p.comment_count,
-    p.cover, p.ctime, p.utime, b.birthday`)
-
-	// 排序
-	if f.Strategy == "hot" {
-		sb.WriteString(` ORDER BY (like_count*3 + comment_count*5 + collect_count*4) DESC, ctime DESC`)
-	} else {
-		orderBy := f.OrderBy
-		switch orderBy {
-		case "ctime", "like_count", "comment_count":
-		default:
-			orderBy = "ctime"
-		}
-		order := strings.ToUpper(f.Order)
-		if order != "ASC" {
-			order = "DESC"
-		}
-		sb.WriteString(fmt.Sprintf(` ORDER BY %s %s`, orderBy, order))
-	}
-	sb.WriteString(fmt.Sprintf(` LIMIT $%d OFFSET $%d`, argIdx, argIdx+1))
-	args = append(args, limit, offset)
-
-	rows, err := global.DB.Query(ctx, sb.String(), args...)
-	if err != nil {
-		global.Log.Error(err)
-		return nil, false, ErrDefault
-	}
-	defer rows.Close()
-
-	res := make([]PostRow, 0, f.PageSize)
-	var count int
-	for rows.Next() {
-		var rrow PostRow
-		if err := rows.Scan(
-			&rrow.PostID,
-			&rrow.AuthorID,
-			&rrow.AuthorName,
-			&rrow.AuthorAvatar,
-			&rrow.AuthorProvince,
-			&rrow.AuthorCity,
-			&rrow.Title,
-			&rrow.Content,
-			&rrow.Status,
-			&rrow.LikeCount,
-			&rrow.DislikeCount,
-			&rrow.CollectCount,
-			&rrow.CommentCount,
-			&rrow.Cover,
-			&rrow.Ctime,
-			&rrow.Utime,
-			&rrow.Birthday,
-			&rrow.Tags,
-		); err != nil {
-			global.Log.Error(err)
-			return nil, false, ErrDefault
-		}
-		count++
-		if count <= f.PageSize {
-			res = append(res, rrow)
-		}
-	}
-	hasMore := count > f.PageSize
-	return res, hasMore, nil
-}
+// 已删除旧的动态 List 方法
 
 func (r *PostRepo) GetDetail(ctx context.Context, postID string) (PostRow, error) {
 	var pid pgtype.UUID
@@ -224,6 +78,15 @@ func (r *PostRepo) GetDetail(ctx context.Context, postID string) (PostRow, error
 	default:
 		tags = []string{}
 	}
+	var birthday int64
+	switch v := row.Birthday.(type) {
+	case int64:
+		birthday = v
+	case int32:
+		birthday = int64(v)
+	default:
+		birthday = 0
+	}
 	return PostRow{
 		PostID:         row.PostID,
 		AuthorID:       row.AuthorID,
@@ -238,15 +101,340 @@ func (r *PostRepo) GetDetail(ctx context.Context, postID string) (PostRow, error
 		DislikeCount:   row.DislikeCount,
 		CollectCount:   row.CollectCount,
 		CommentCount:   row.CommentCount,
-		Cover:          row.Cover,
 		Ctime:          row.Ctime,
 		Utime:          row.Utime,
-		Birthday:       row.Birthday,
+		Birthday:       birthday,
 		Tags:           tags,
 	}, nil
 }
 
-func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, content, status, cover string, ctime, utime int64, tagIDs []string) error {
+func toPostRow(postID, authorID, authorName, authorAvatar, authorProvince, authorCity, title, content, status string,
+	likeCount, dislikeCount, collectCount, commentCount int32,
+	ctime, utime int64, birthday interface{}, tags interface{}) PostRow {
+	var tagList []string
+	switch v := tags.(type) {
+	case []string:
+		tagList = v
+	default:
+		tagList = []string{}
+	}
+	var bday int64
+	switch v := birthday.(type) {
+	case int64:
+		bday = v
+	case int32:
+		bday = int64(v)
+	default:
+		bday = 0
+	}
+	return PostRow{
+		PostID:         postID,
+		AuthorID:       authorID,
+		AuthorName:     authorName,
+		AuthorAvatar:   authorAvatar,
+		AuthorProvince: authorProvince,
+		AuthorCity:     authorCity,
+		Title:          title,
+		Content:        content,
+		Status:         status,
+		LikeCount:      likeCount,
+		DislikeCount:   dislikeCount,
+		CollectCount:   collectCount,
+		CommentCount:   commentCount,
+		Ctime:          ctime,
+		Utime:          utime,
+		Birthday:       bday,
+		Tags:           tagList,
+	}
+}
+
+func (r *PostRepo) ListHome(ctx context.Context, page, pageSize int, strategy string) ([]PostRow, bool, error) {
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	var (
+		rows []postdao.ListHomeByCtimeRow
+		err  error
+	)
+	switch strings.ToLower(strings.TrimSpace(strategy)) {
+	case "hot":
+		hotRows, e := r.dao.ListHomeByHot(ctx, postdao.ListHomeByHotParams{
+			Limit:  limit,
+			Offset: offset,
+		})
+		rows = make([]postdao.ListHomeByCtimeRow, len(hotRows))
+		for i := range hotRows {
+			rows[i] = postdao.ListHomeByCtimeRow(hotRows[i])
+		}
+		err = e
+	case "random":
+		seed := time.Now().Format("2006-01-02")
+		rndRows, e := r.dao.ListHomeByRandom(ctx, postdao.ListHomeByRandomParams{
+			Column1: seed,
+			Limit:   limit,
+			Offset:  offset,
+		})
+		rows = make([]postdao.ListHomeByCtimeRow, len(rndRows))
+		for i := range rndRows {
+			rows[i] = postdao.ListHomeByCtimeRow(rndRows[i])
+		}
+		err = e
+	default:
+		rows, err = r.dao.ListHomeByCtime(ctx, postdao.ListHomeByCtimeParams{
+			Limit:  limit,
+			Offset: offset,
+		})
+	}
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	res := make([]PostRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, toPostRow(
+			v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+			v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+			v.Ctime, v.Utime, v.Birthday, v.Tags,
+		))
+	}
+	hasMore := int32(len(rows)) >= limit
+	return res, hasMore, nil
+}
+
+func (r *PostRepo) ListByTag(ctx context.Context, tagID string, page, pageSize int, strategy string) ([]PostRow, bool, error) {
+	var tg pgtype.UUID
+	if err := tg.Scan(tagID); err != nil {
+		return nil, false, ErrParamsType
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	var (
+		rows []postdao.ListPostsByTagRow
+		err  error
+	)
+	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		hotRows, e := r.dao.ListPostsByTagHot(ctx, postdao.ListPostsByTagHotParams{
+			TagID:  tg,
+			Limit:  limit,
+			Offset: offset,
+		})
+		rows = make([]postdao.ListPostsByTagRow, len(hotRows))
+		for i := range hotRows {
+			rows[i] = postdao.ListPostsByTagRow(hotRows[i])
+		}
+		err = e
+	} else {
+		rows, err = r.dao.ListPostsByTag(ctx, postdao.ListPostsByTagParams{
+			TagID:  tg,
+			Status: "published",
+			Limit:  limit,
+			Offset: offset,
+		})
+	}
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	res := make([]PostRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, toPostRow(
+			v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+			v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+			v.Ctime, v.Utime, v.Birthday, v.Tags,
+		))
+	}
+	hasMore := int32(len(rows)) >= limit
+	return res, hasMore, nil
+}
+
+func (r *PostRepo) Search(ctx context.Context, keyword, tagID, strategy string, page, pageSize int) ([]PostRow, bool, error) {
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	kw := "%" + strings.TrimSpace(keyword) + "%"
+	var (
+		err     error
+		resRows []PostRow
+		hasMore bool
+	)
+	if strings.TrimSpace(tagID) != "" {
+		var tg pgtype.UUID
+		if err := tg.Scan(tagID); err != nil {
+			return nil, false, ErrParamsType
+		}
+		if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+			rows, e := r.dao.SearchPostsByTitleAndTagHot(ctx, postdao.SearchPostsByTitleAndTagHotParams{
+				Title:  kw,
+				TagID:  tg,
+				Limit:  limit,
+				Offset: offset,
+			})
+			err = e
+			resRows = make([]PostRow, 0, pageSize)
+			for i, v := range rows {
+				if int32(i) >= limit-1 {
+					break
+				}
+				resRows = append(resRows, toPostRow(
+					v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+					v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+					v.Ctime, v.Utime, v.Birthday, v.Tags,
+				))
+			}
+			hasMore = int32(len(rows)) >= limit
+		} else {
+			rows, e := r.dao.SearchPostsByTitleAndTagCtime(ctx, postdao.SearchPostsByTitleAndTagCtimeParams{
+				Title:  kw,
+				TagID:  tg,
+				Limit:  limit,
+				Offset: offset,
+			})
+			err = e
+			resRows = make([]PostRow, 0, pageSize)
+			for i, v := range rows {
+				if int32(i) >= limit-1 {
+					break
+				}
+				resRows = append(resRows, toPostRow(
+					v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+					v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+					v.Ctime, v.Utime, v.Birthday, v.Tags,
+				))
+			}
+			hasMore = int32(len(rows)) >= limit
+		}
+	} else {
+		if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+			rows, e := r.dao.SearchPostsByTitleHot(ctx, postdao.SearchPostsByTitleHotParams{
+				Title:  kw,
+				Limit:  limit,
+				Offset: offset,
+			})
+			err = e
+			resRows = make([]PostRow, 0, pageSize)
+			for i, v := range rows {
+				if int32(i) >= limit-1 {
+					break
+				}
+				resRows = append(resRows, toPostRow(
+					v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+					v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+					v.Ctime, v.Utime, v.Birthday, v.Tags,
+				))
+			}
+			hasMore = int32(len(rows)) >= limit
+		} else {
+			rows, e := r.dao.SearchPosts(ctx, postdao.SearchPostsParams{
+				Title:  kw,
+				Status: "published",
+				Limit:  limit,
+				Offset: offset,
+			})
+			err = e
+			resRows = make([]PostRow, 0, pageSize)
+			for i, v := range rows {
+				if int32(i) >= limit-1 {
+					break
+				}
+				resRows = append(resRows, toPostRow(
+					v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+					v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+					v.Ctime, v.Utime, v.Birthday, v.Tags,
+				))
+			}
+			hasMore = int32(len(rows)) >= limit
+		}
+	}
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	return resRows, hasMore, nil
+}
+
+func (r *PostRepo) ListByAuthor(ctx context.Context, authorID string, page, pageSize int, strategy string) ([]PostRow, bool, error) {
+	var aid pgtype.UUID
+	if err := aid.Scan(authorID); err != nil {
+		return nil, false, ErrParamsType
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	var (
+		err  error
+		rows []postdao.ListPostsByAuthorRow
+	)
+	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		hotRows, e := r.dao.ListPostsByAuthorHot(ctx, postdao.ListPostsByAuthorHotParams{
+			AuthorID: aid,
+			Limit:    limit,
+			Offset:   offset,
+		})
+		rows = make([]postdao.ListPostsByAuthorRow, len(hotRows))
+		for i := range hotRows {
+			rows[i] = postdao.ListPostsByAuthorRow(hotRows[i])
+		}
+		err = e
+	} else {
+		rows, err = r.dao.ListPostsByAuthor(ctx, postdao.ListPostsByAuthorParams{
+			AuthorID: aid,
+			Limit:    limit,
+			Offset:   offset,
+		})
+	}
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	res := make([]PostRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, toPostRow(
+			v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+			v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+			v.Ctime, v.Utime, v.Birthday, v.Tags,
+		))
+	}
+	hasMore := int32(len(rows)) >= limit
+	return res, hasMore, nil
+}
+
+func (r *PostRepo) ListDraftsByAuthor(ctx context.Context, authorID string, page, pageSize int) ([]PostRow, bool, error) {
+	var aid pgtype.UUID
+	if err := aid.Scan(authorID); err != nil {
+		return nil, false, ErrParamsType
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	rows, err := r.dao.ListDraftsByAuthor(ctx, postdao.ListDraftsByAuthorParams{
+		AuthorID: aid,
+		Limit:    limit,
+		Offset:   offset,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	res := make([]PostRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, toPostRow(
+			v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+			v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+			v.Ctime, v.Utime, v.Birthday, v.Tags,
+		))
+	}
+	hasMore := int32(len(rows)) >= limit
+	return res, hasMore, nil
+}
+func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, content, status string, ctime, utime int64, tagIDs []string) error {
 	var pid, aid pgtype.UUID
 	if err := pid.Scan(postID); err != nil {
 		return err
@@ -265,7 +453,7 @@ func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, cont
 		Title:    title,
 		Content:  content,
 		Status:   status,
-		Cover:    cover,
+		Cover:    "",
 		Ctime:    ctime,
 		Utime:    utime,
 	})
