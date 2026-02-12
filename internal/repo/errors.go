@@ -9,6 +9,7 @@ var (
 	ErrDocumentSearch  = errors.New("文档检索失败")
 	ErrHistoryGet      = errors.New("获取对话历史失败")
 	ErrHistorySave     = errors.New("保存对话历史失败")
+	ErrParamsType      = errors.New("参数格式错误")
 
 	// User related errors restored
 	ErrUserNotExist  = errors.New("用户不存在")
