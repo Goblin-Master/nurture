@@ -101,6 +101,24 @@ func (q *Queries) CreateBabyVaccineRecord(ctx context.Context, arg CreateBabyVac
 	return err
 }
 
+const deleteBabyPhotos = `-- name: DeleteBabyPhotos :execrows
+DELETE FROM "baby_photo"
+WHERE baby_id = $1 AND photo_id = ANY($2::uuid[])
+`
+
+type DeleteBabyPhotosParams struct {
+	BabyID  pgtype.UUID
+	Column2 []pgtype.UUID
+}
+
+func (q *Queries) DeleteBabyPhotos(ctx context.Context, arg DeleteBabyPhotosParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteBabyPhotos, arg.BabyID, arg.Column2)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getBabyByIDAndUser = `-- name: GetBabyByIDAndUser :one
 SELECT id, baby_id, user_id, name, gender, birthday, avatar, ctime, utime FROM "baby" WHERE baby_id = $1 AND user_id = $2 LIMIT 1
 `
@@ -240,12 +258,53 @@ func (q *Queries) ListBabiesByUserID(ctx context.Context, userID pgtype.UUID) ([
 	return items, nil
 }
 
+const listBabyPhotos = `-- name: ListBabyPhotos :many
+SELECT photo_id::text AS photo_id, link, ctime
+FROM "baby_photo"
+WHERE baby_id = $1
+ORDER BY ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListBabyPhotosParams struct {
+	BabyID pgtype.UUID
+	Limit  int32
+	Offset int32
+}
+
+type ListBabyPhotosRow struct {
+	PhotoID string
+	Link    string
+	Ctime   int64
+}
+
+func (q *Queries) ListBabyPhotos(ctx context.Context, arg ListBabyPhotosParams) ([]ListBabyPhotosRow, error) {
+	rows, err := q.db.Query(ctx, listBabyPhotos, arg.BabyID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBabyPhotosRow
+	for rows.Next() {
+		var i ListBabyPhotosRow
+		if err := rows.Scan(&i.PhotoID, &i.Link, &i.Ctime); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVaccineRecordsByBabyID = `-- name: ListVaccineRecordsByBabyID :many
 SELECT 
   d.dose_id::text AS dose_id,
   v.vaccine_id::text AS vaccine_id,
   v.name,
   v.disease,
+  v.link,
   d.dose_number,
   bvr.due_time,
   bvr.status,
@@ -262,6 +321,7 @@ type ListVaccineRecordsByBabyIDRow struct {
 	VaccineID  string
 	Name       string
 	Disease    string
+	Link       string
 	DoseNumber int32
 	DueTime    int64
 	Status     string
@@ -282,6 +342,7 @@ func (q *Queries) ListVaccineRecordsByBabyID(ctx context.Context, babyID pgtype.
 			&i.VaccineID,
 			&i.Name,
 			&i.Disease,
+			&i.Link,
 			&i.DoseNumber,
 			&i.DueTime,
 			&i.Status,
@@ -341,4 +402,43 @@ func (q *Queries) UpdateVaccineStatusNotGiven(ctx context.Context, arg UpdateVac
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const uploadBabyPhotos = `-- name: UploadBabyPhotos :many
+WITH lnk AS (SELECT unnest($2::text[]) AS link)
+INSERT INTO "baby_photo" (photo_id, baby_id, link, ctime, utime)
+SELECT gen_random_uuid(), $1, lnk.link, $3, $3 FROM lnk
+RETURNING photo_id::text AS photo_id, link, ctime
+`
+
+type UploadBabyPhotosParams struct {
+	BabyID  pgtype.UUID
+	Column2 []string
+	Ctime   int64
+}
+
+type UploadBabyPhotosRow struct {
+	PhotoID string
+	Link    string
+	Ctime   int64
+}
+
+func (q *Queries) UploadBabyPhotos(ctx context.Context, arg UploadBabyPhotosParams) ([]UploadBabyPhotosRow, error) {
+	rows, err := q.db.Query(ctx, uploadBabyPhotos, arg.BabyID, arg.Column2, arg.Ctime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UploadBabyPhotosRow
+	for rows.Next() {
+		var i UploadBabyPhotosRow
+		if err := rows.Scan(&i.PhotoID, &i.Link, &i.Ctime); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -65,3 +65,30 @@ func (h *BabyHandler) ChangeVaccineStatus(c *gin.Context) {
 	global.Log.Info(resp)
 	response.Response(c, resp, err)
 }
+
+func (h *BabyHandler) UploadBabyPhotos(c *gin.Context) {
+	cr := middleware.GetBind[dto.UploadBabyPhotosReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.babyLogic.UploadBabyPhotos(c.Request.Context(), userID, cr)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
+func (h *BabyHandler) DeleteBabyPhotos(c *gin.Context) {
+	cr := middleware.GetBind[dto.DeleteBabyPhotosReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.babyLogic.DeleteBabyPhotos(c.Request.Context(), userID, cr)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
+func (h *BabyHandler) ListBabyPhotos(c *gin.Context) {
+	cr := middleware.GetBind[dto.ListBabyPhotosReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.babyLogic.ListBabyPhotos(c.Request.Context(), userID, cr)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}

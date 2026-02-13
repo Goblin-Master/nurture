@@ -17,6 +17,9 @@ type IBabyLogic interface {
 	GetProfile(ctx context.Context, userID string, req dto.BabyProfileReq) (dto.BabyProfileResp, error)
 	GetVaccineList(ctx context.Context, userID string, req dto.GetVaccineListReq) (dto.GetVaccineListResp, error)
 	ChangeVaccineStatus(ctx context.Context, userID string, req dto.ChangeVaccineStatusReq) (dto.ChangeVaccineStatusResp, error)
+	UploadBabyPhotos(ctx context.Context, userID string, req dto.UploadBabyPhotosReq) (dto.UploadBabyPhotosResp, error)
+	DeleteBabyPhotos(ctx context.Context, userID string, req dto.DeleteBabyPhotosReq) (dto.DeleteBabyPhotosResp, error)
+	ListBabyPhotos(ctx context.Context, userID string, req dto.ListBabyPhotosReq) (dto.ListBabyPhotosResp, error)
 }
 
 type BabyLogic struct {
@@ -126,6 +129,7 @@ func (l *BabyLogic) GetVaccineList(ctx context.Context, userID string, req dto.G
 			VaccineID:  v.VaccineID,
 			Name:       v.Name,
 			Disease:    v.Disease,
+			Link:       v.Link,
 			DoseNumber: v.DoseNumber,
 			DueTime:    v.DueTime,
 			Status:     v.Status,
@@ -182,5 +186,94 @@ func (l *BabyLogic) ChangeVaccineStatus(ctx context.Context, userID string, req 
 		return resp, ErrInvalidVaccineStatus
 	}
 	resp.Message = "更新成功"
+	return resp, nil
+}
+
+func (l *BabyLogic) UploadBabyPhotos(ctx context.Context, userID string, req dto.UploadBabyPhotosReq) (dto.UploadBabyPhotosResp, error) {
+	var resp dto.UploadBabyPhotosResp
+	if len(req.Links) == 0 {
+		return resp, ErrParamsType
+	}
+	_, err := l.babyRepo.GetBabyByIDAndUser(ctx, req.BabyID, userID)
+	if err != nil {
+		if errors.Is(err, repo.ErrBabyNotExist) {
+			return resp, ErrBabyNotExist
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	now := time.Now().UnixMilli()
+	rows, err := l.babyRepo.UploadPhotos(ctx, req.BabyID, req.Links, now)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	items := make([]dto.PhotoItem, 0, len(rows))
+	for _, v := range rows {
+		items = append(items, dto.PhotoItem{
+			PhotoID: v.PhotoID,
+			Link:    v.Link,
+			Ctime:   v.Ctime,
+		})
+	}
+	resp.Items = items
+	return resp, nil
+}
+
+func (l *BabyLogic) DeleteBabyPhotos(ctx context.Context, userID string, req dto.DeleteBabyPhotosReq) (dto.DeleteBabyPhotosResp, error) {
+	var resp dto.DeleteBabyPhotosResp
+	if len(req.PhotoIDs) == 0 {
+		return resp, ErrParamsType
+	}
+	_, err := l.babyRepo.GetBabyByIDAndUser(ctx, req.BabyID, userID)
+	if err != nil {
+		if errors.Is(err, repo.ErrBabyNotExist) {
+			return resp, ErrBabyNotExist
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	n, err := l.babyRepo.DeletePhotos(ctx, req.BabyID, req.PhotoIDs)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Deleted = n
+	return resp, nil
+}
+
+func (l *BabyLogic) ListBabyPhotos(ctx context.Context, userID string, req dto.ListBabyPhotosReq) (dto.ListBabyPhotosResp, error) {
+	var resp dto.ListBabyPhotosResp
+	_, err := l.babyRepo.GetBabyByIDAndUser(ctx, req.BabyID, userID)
+	if err != nil {
+		if errors.Is(err, repo.ErrBabyNotExist) {
+			return resp, ErrBabyNotExist
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10
+	}
+	rows, hasMore, err := l.babyRepo.ListPhotos(ctx, req.BabyID, req.Page, req.PageSize)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	items := make([]dto.PhotoItem, 0, len(rows))
+	for _, v := range rows {
+		items = append(items, dto.PhotoItem{
+			PhotoID: v.PhotoID,
+			Link:    v.Link,
+			Ctime:   v.Ctime,
+		})
+	}
+	resp.Items = items
+	resp.Page = req.Page
+	resp.PageSize = req.PageSize
+	resp.HasMore = hasMore
 	return resp, nil
 }

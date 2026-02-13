@@ -116,6 +116,21 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.BindJsonMiddleware[dto.ChangeVaccineStatusReq],
 			babyHandler.ChangeVaccineStatus,
 		)
+		rg.POST("/photo/upload",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindJsonMiddleware[dto.UploadBabyPhotosReq],
+			babyHandler.UploadBabyPhotos,
+		)
+		rg.DELETE("/photo/delete",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindJsonMiddleware[dto.DeleteBabyPhotosReq],
+			babyHandler.DeleteBabyPhotos,
+		)
+		rg.GET("/photo/list",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.ListBabyPhotosReq],
+			babyHandler.ListBabyPhotos,
+		)
 	})
 
 	// 帖子模块路由

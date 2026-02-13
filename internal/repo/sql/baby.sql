@@ -37,6 +37,7 @@ SELECT
   v.vaccine_id::text AS vaccine_id,
   v.name,
   v.disease,
+  v.link,
   d.dose_number,
   bvr.due_time,
   bvr.status,
@@ -56,3 +57,20 @@ WHERE baby_id = $1 AND dose_id = $2;
 UPDATE "baby_vaccine_record"
 SET status = 'not_given', actual_time = NULL, utime = $3
 WHERE baby_id = $1 AND dose_id = $2;
+
+-- name: UploadBabyPhotos :many
+WITH lnk AS (SELECT unnest($2::text[]) AS link)
+INSERT INTO "baby_photo" (photo_id, baby_id, link, ctime, utime)
+SELECT gen_random_uuid(), $1, lnk.link, $3, $3 FROM lnk
+RETURNING photo_id::text AS photo_id, link, ctime;
+
+-- name: DeleteBabyPhotos :execrows
+DELETE FROM "baby_photo"
+WHERE baby_id = $1 AND photo_id = ANY($2::uuid[]);
+
+-- name: ListBabyPhotos :many
+SELECT photo_id::text AS photo_id, link, ctime
+FROM "baby_photo"
+WHERE baby_id = $1
+ORDER BY ctime DESC
+LIMIT $2 OFFSET $3;

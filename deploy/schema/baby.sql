@@ -134,7 +134,6 @@ CREATE TABLE IF NOT EXISTS "baby_photo" (
   photo_id    UUID UNIQUE NOT NULL,
   baby_id     UUID NOT NULL,
   link        VARCHAR(255) NOT NULL DEFAULT '',
-  caption     TEXT,
   ctime       BIGINT NOT NULL,
   utime       BIGINT NOT NULL
 );
@@ -144,7 +143,6 @@ COMMENT ON COLUMN "baby_photo".id IS '主键ID';
 COMMENT ON COLUMN "baby_photo".photo_id IS '相片ID';
 COMMENT ON COLUMN "baby_photo".baby_id IS '宝宝ID(外键)';
 COMMENT ON COLUMN "baby_photo".link IS '详情页面URL';
-COMMENT ON COLUMN "baby_photo".caption IS '描述';
 COMMENT ON COLUMN "baby_photo".ctime IS '创建时间戳';
 COMMENT ON COLUMN "baby_photo".utime IS '更新时间戳';
 
