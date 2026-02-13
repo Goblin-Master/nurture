@@ -7,11 +7,16 @@ import (
 )
 
 var (
-	ErrParamsType   = errors.New("参数格式错误")
-	ErrDefault      = errors.New("默认错误")
-	ErrFileOverSize = fmt.Errorf("文件大小不能超过%dMB", constant.FILE_MAX_SIZE/1024/1024)
-	ErrFileRead     = errors.New("文件读取失败")
-	ErrFileUpload   = errors.New("文件上传失败")
+	ErrParamsType            = errors.New("参数格式错误")
+	ErrDefault               = errors.New("默认错误")
+	ErrInvalidPhone          = errors.New("手机号格式错误")
+	ErrInvalidBirthdayFormat = errors.New("生日格式错误")
+	ErrInvalidGender         = errors.New("性别格式错误")
+	ErrPartnerGenderMismatch = errors.New("双方性别不匹配")
+	ErrProfileUpdateFailed   = errors.New("资料更新失败")
+	ErrFileOverSize          = fmt.Errorf("文件大小不能超过%dMB", constant.FILE_MAX_SIZE/1024/1024)
+	ErrFileRead              = errors.New("文件读取失败")
+	ErrFileUpload            = errors.New("文件上传失败")
 )
 
 var (

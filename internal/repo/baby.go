@@ -4,7 +4,6 @@ import (
 	"context"
 	"nurture/internal/global"
 	"nurture/internal/repo/baby"
-	"time"
 
 	"errors"
 
@@ -15,7 +14,7 @@ import (
 
 type IBabyRepo interface {
 	ListMyBabies(ctx context.Context, userID string) ([]baby.ListBabiesByUserIDRow, error)
-	CreateBabyWithInit(ctx context.Context, userID, babyID, name, gender string, birthday int64, avatar string, recordTime int64, height, weight, headCircumference float64, remark string) error
+	CreateBabyWithInit(ctx context.Context, userID, partnerID, babyID, name, gender string, birthday int64, avatar string, recordTime int64, height, weight, headCircumference float64, remark string) error
 	GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (baby.Baby, error)
 	GetLatestGrowthByBabyIDAndUser(ctx context.Context, babyID, userID string) (baby.BabyGrowthRecord, error)
 	ListVaccineRecordsByBaby(ctx context.Context, babyID string) ([]baby.ListVaccineRecordsByBabyIDRow, error)
@@ -51,17 +50,24 @@ func (r *BabyRepo) ListMyBabies(ctx context.Context, userID string) ([]baby.List
 	return rows, nil
 }
 
-func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, babyID, name, gender string, birthday int64, avatar string,
+func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, partnerID, babyID, name, gender string, birthday int64, avatar string,
 	recordTime int64, height, weight, headCircumference float64, remark string) error {
 	tx, err := global.DB.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	qtx := r.babyDao.WithTx(tx)
-	var uid, bid pgtype.UUID
+	var uid, pid, bid pgtype.UUID
 	if err := uid.Scan(userID); err != nil {
 		_ = tx.Rollback(ctx)
 		return err
+	}
+	hasPartner := partnerID != ""
+	if hasPartner {
+		if err := pid.Scan(partnerID); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
 	}
 	if err := bid.Scan(babyID); err != nil {
 		_ = tx.Rollback(ctx)
@@ -132,7 +138,43 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, babyID, name,
 			return ErrDefault
 		}
 	}
-	_ = time.Now() // ensure time imported if not used otherwise
+	if hasPartner {
+		if err := qtx.CreateBaby(ctx, baby.CreateBabyParams{
+			BabyID:   bid,
+			UserID:   pid,
+			Name:     name,
+			Gender:   gender,
+			Birthday: birthday,
+			Avatar:   avatar,
+			Ctime:    ctime,
+			Utime:    utime,
+		}); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+		var rid2 pgtype.UUID
+		if err := rid2.Scan(uuid.NewString()); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		if err := qtx.CreateBabyGrowthRecord(ctx, baby.CreateBabyGrowthRecordParams{
+			RecordID:          rid2,
+			BabyID:            bid,
+			UserID:            pid,
+			RecordTime:        recordTime,
+			Height:            pgtype.Float8{Float64: height, Valid: height != 0},
+			Weight:            pgtype.Float8{Float64: weight, Valid: weight != 0},
+			HeadCircumference: pgtype.Float8{Float64: headCircumference, Valid: headCircumference != 0},
+			Remark:            pgtype.Text{String: remark, Valid: remark != ""},
+			Ctime:             ctime,
+			Utime:             utime,
+		}); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
 	return tx.Commit(ctx)
 }
 

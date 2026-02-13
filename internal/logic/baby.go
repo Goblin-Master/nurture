@@ -24,11 +24,13 @@ type IBabyLogic interface {
 
 type BabyLogic struct {
 	babyRepo repo.IBabyRepo
+	userRepo *repo.UserRepo
 }
 
 func NewBabyLogic() *BabyLogic {
 	return &BabyLogic{
 		babyRepo: repo.NewBabyRepo(),
+		userRepo: repo.NewUserRepo(),
 	}
 }
 
@@ -56,7 +58,12 @@ func (l *BabyLogic) NewBaby(ctx context.Context, userID string, req dto.NewBabyR
 	var resp dto.NewBabyResp
 	babyID := uuid.NewString()
 	now := time.Now().UnixMilli()
-	err := l.babyRepo.CreateBabyWithInit(ctx, userID, babyID, req.Name, req.Gender, req.Birthday, req.Avatar,
+	partnerID, err := l.userRepo.GetPartnerByUserID(ctx, userID)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	err = l.babyRepo.CreateBabyWithInit(ctx, userID, partnerID, babyID, req.Name, req.Gender, req.Birthday, req.Avatar,
 		now, req.Height, req.Weight, req.HeadCircumference, req.Remark)
 	if err != nil {
 		global.Log.Error(err)
