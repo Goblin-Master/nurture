@@ -56,6 +56,7 @@ type (
 		VaccineID  string `json:"vaccine_id"`
 		Name       string `json:"name"`
 		Disease    string `json:"disease"`
+		Link       string `json:"link"`
 		DoseNumber int32  `json:"dose_number"`
 		DueTime    int64  `json:"due_time"`
 		Status     string `json:"status"`
@@ -75,5 +76,44 @@ type (
 	}
 	ChangeVaccineStatusResp struct {
 		Message string `json:"message"`
+	}
+)
+
+type (
+	UploadBabyPhotosReq struct {
+		BabyID string   `json:"baby_id" binding:"required"`
+		Links  []string `json:"links" binding:"required"`
+	}
+
+	PhotoItem struct {
+		PhotoID string `json:"photo_id"`
+		Link    string `json:"link"`
+		Ctime   int64  `json:"ctime"`
+	}
+
+	UploadBabyPhotosResp struct {
+		Items []PhotoItem `json:"items"`
+	}
+
+	DeleteBabyPhotosReq struct {
+		BabyID   string   `json:"baby_id" binding:"required"`
+		PhotoIDs []string `json:"photo_ids" binding:"required"`
+	}
+
+	DeleteBabyPhotosResp struct {
+		Deleted int64 `json:"deleted"`
+	}
+
+	ListBabyPhotosReq struct {
+		BabyID   string `form:"baby_id" binding:"required"`
+		Page     int    `form:"page"`
+		PageSize int    `form:"page_size"`
+	}
+
+	ListBabyPhotosResp struct {
+		Items    []PhotoItem `json:"items"`
+		Page     int         `json:"page"`
+		PageSize int         `json:"page_size"`
+		HasMore  bool        `json:"has_more"`
 	}
 )

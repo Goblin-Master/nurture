@@ -66,8 +66,6 @@ type BabyPhoto struct {
 	BabyID pgtype.UUID
 	// 详情页面URL
 	Link string
-	// 描述
-	Caption pgtype.Text
 	// 创建时间戳
 	Ctime int64
 	// 更新时间戳
