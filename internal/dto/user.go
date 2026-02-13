@@ -46,3 +46,39 @@ type (
 		Message string `json:"message"`
 	}
 )
+
+type (
+	UpdateUserAdditionReq struct {
+		Phone      *string `json:"phone"`
+		Occupation *string `json:"occupation"`
+		Gender     *string `json:"gender"`
+		Province   *string `json:"province"`
+		City       *string `json:"city"`
+		Birthday   *string `json:"birthday"`
+	}
+	UpdateUserAdditionResp struct {
+		Message string `json:"message"`
+	}
+)
+
+type (
+	UpdateAvatarReq struct {
+		Avatar string `json:"avatar"`
+	}
+	UpdateAvatarResp struct {
+		Message string `json:"message"`
+	}
+)
+
+type (
+	PartnerBindReq struct {
+		Account  string `json:"account"`
+		Password string `json:"password"`
+	}
+	PartnerBindResp struct {
+		PartnerID string `json:"partner_id"`
+	}
+	PartnerGetResp struct {
+		PartnerID string `json:"partner_id"`
+	}
+)

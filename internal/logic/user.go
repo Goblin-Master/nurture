@@ -10,6 +10,7 @@ import (
 	"nurture/internal/pkg/emailx"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/repo"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -21,6 +22,10 @@ type IUserLogic interface {
 	GetRegisterCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error)
 	GetResetCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error)
 	ResetPassword(ctx context.Context, req dto.ResetPasswordReq) (dto.ResetPasswordResp, error)
+	UpdateProfile(ctx context.Context, userID string, req dto.UpdateUserAdditionReq) (dto.UpdateUserAdditionResp, error)
+	UpdateAvatar(ctx context.Context, userID string, req dto.UpdateAvatarReq) (dto.UpdateAvatarResp, error)
+	BindPartner(ctx context.Context, userID string, req dto.PartnerBindReq) (dto.PartnerBindResp, error)
+	GetPartner(ctx context.Context, userID string) (dto.PartnerGetResp, error)
 }
 type UserLogic struct {
 	userRepo *repo.UserRepo
@@ -163,5 +168,136 @@ func (ul *UserLogic) GetResetCode(ctx context.Context, req dto.GetCodeReq) (dto.
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
+	return resp, nil
+}
+
+func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.UpdateUserAdditionReq) (dto.UpdateUserAdditionResp, error) {
+	var resp dto.UpdateUserAdditionResp
+	if req.Gender != nil && *req.Gender != "" {
+		if *req.Gender != "male" && *req.Gender != "female" {
+			return resp, ErrInvalidGender
+		}
+		// 事务统一更新性别，保证两表一致
+		if err := ul.userRepo.UpdateGender(ctx, userID, *req.Gender); err != nil {
+			if errors.Is(err, repo.ErrUserNotExist) {
+				return resp, ErrUserNotExist
+			}
+			if errors.Is(err, repo.ErrUserUpdateFailed) {
+				return resp, ErrProfileUpdateFailed
+			}
+			global.Log.Error(err)
+			return resp, ErrDefault
+		}
+	}
+	if req.Phone != nil && *req.Phone != "" {
+		// 简单手机号正则：可选+，6-20位数字
+		phone := *req.Phone
+		valid := false
+		for i := 0; i < len(phone); i++ {
+			c := phone[i]
+			if i == 0 && c == '+' {
+				continue
+			}
+			if c < '0' || c > '9' {
+				valid = false
+				break
+			}
+			valid = true
+		}
+		if !valid || len(phone) < 6 || len(phone) > 20 {
+			return resp, ErrInvalidPhone
+		}
+	}
+	var birthday *int64
+	if req.Birthday != nil && *req.Birthday != "" {
+		t, err := time.Parse("20060102", *req.Birthday)
+		if err != nil {
+			return resp, ErrInvalidBirthdayFormat
+		}
+		ms := t.UnixMilli()
+		birthday = &ms
+	}
+	err := ul.userRepo.UpdateAdditionByID(ctx, userID, req.Occupation, req.Phone, req.Province, req.City, nil, birthday)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		if errors.Is(err, repo.ErrUserUpdateFailed) {
+			return resp, ErrProfileUpdateFailed
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Message = "OK"
+	return resp, nil
+}
+
+func (ul *UserLogic) UpdateAvatar(ctx context.Context, userID string, req dto.UpdateAvatarReq) (dto.UpdateAvatarResp, error) {
+	var resp dto.UpdateAvatarResp
+	avatar := req.Avatar
+	if len(avatar) == 0 {
+		return resp, ErrParamsType
+	}
+	err := ul.userRepo.UpdateAvatarByID(ctx, userID, avatar)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		if errors.Is(err, repo.ErrUserUpdateFailed) {
+			return resp, ErrProfileUpdateFailed
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Message = "OK"
+	return resp, nil
+}
+
+func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.PartnerBindReq) (dto.PartnerBindResp, error) {
+	var resp dto.PartnerBindResp
+	ub, err := ul.userRepo.LoginWithAccount(ctx, req.Account, req.Password)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		global.Log.Error(err)
+		return resp, ErrAccountOrPassword
+	}
+	if ub.UserID.String() == userID {
+		return resp, ErrParamsType
+	}
+	// 性别校验与父母角色确定
+	self, err := ul.userRepo.GetUserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	if self.Gender == ub.Gender {
+		return resp, ErrPartnerGenderMismatch
+	}
+	fatherID, motherID := userID, ub.UserID.String()
+	if self.Gender != "male" { // self female
+		fatherID, motherID = ub.UserID.String(), userID
+	}
+	err = ul.userRepo.BindPartnerAndSyncBabies(ctx, fatherID, motherID)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.PartnerID = ub.UserID.String()
+	return resp, nil
+}
+
+func (ul *UserLogic) GetPartner(ctx context.Context, userID string) (dto.PartnerGetResp, error) {
+	var resp dto.PartnerGetResp
+	pid, err := ul.userRepo.GetPartnerByUserID(ctx, userID)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.PartnerID = pid
 	return resp, nil
 }

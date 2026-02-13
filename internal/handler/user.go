@@ -5,6 +5,7 @@ import (
 	"nurture/internal/global"
 	"nurture/internal/logic"
 	"nurture/internal/middleware"
+	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
@@ -59,5 +60,35 @@ func (uh *UserHandler) GetResetCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetCodeReq](c)
 	global.Log.Info(cr)
 	resp, err := uh.userLogic.GetResetCode(c.Request.Context(), cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) UpdateProfile(c *gin.Context) {
+	cr := middleware.GetBind[dto.UpdateUserAdditionReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.UpdateProfile(c.Request.Context(), userID, cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) UpdateAvatar(c *gin.Context) {
+	cr := middleware.GetBind[dto.UpdateAvatarReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.UpdateAvatar(c.Request.Context(), userID, cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) BindPartner(c *gin.Context) {
+	cr := middleware.GetBind[dto.PartnerBindReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.BindPartner(c.Request.Context(), userID, cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) GetPartner(c *gin.Context) {
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.GetPartner(c.Request.Context(), userID)
 	response.Response(c, resp, err)
 }

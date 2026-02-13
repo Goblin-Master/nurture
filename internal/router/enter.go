@@ -81,6 +81,11 @@ func registerRoutes(routeManager *manager.RouteManager) {
 		rg.POST("/code/register", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetRegisterCode)
 		rg.POST("/code/reset", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetResetCode)
 		rg.POST("/resetPassword", middleware.BindJsonMiddleware[dto.ResetPasswordReq], userHandler.ResetPassword)
+		rg.PUT("/profile", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateUserAdditionReq], userHandler.UpdateProfile)
+		rg.PUT("/avatar", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateAvatarReq], userHandler.UpdateAvatar)
+		// 另一半关系
+		rg.POST("/partner/bind", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.PartnerBindReq], userHandler.BindPartner)
+		rg.GET("/partner", middleware.Authentication(jwtx.COMMON_USER), userHandler.GetPartner)
 	})
 
 	// 宝宝模块路由
@@ -116,16 +121,19 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.BindJsonMiddleware[dto.ChangeVaccineStatusReq],
 			babyHandler.ChangeVaccineStatus,
 		)
+		// 上传宝宝照片
 		rg.POST("/photo/upload",
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindJsonMiddleware[dto.UploadBabyPhotosReq],
 			babyHandler.UploadBabyPhotos,
 		)
+		// 删除宝宝照片
 		rg.DELETE("/photo/delete",
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindJsonMiddleware[dto.DeleteBabyPhotosReq],
 			babyHandler.DeleteBabyPhotos,
 		)
+		// 获取宝宝照片
 		rg.GET("/photo/list",
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindQueryMiddleware[dto.ListBabyPhotosReq],
