@@ -6,6 +6,7 @@ import (
 	"nurture/internal/pkg/miniox"
 	"nurture/internal/pkg/pgsqlx"
 	"nurture/internal/pkg/redisx"
+	"nurture/internal/pkg/wsx"
 	"nurture/internal/pkg/zapx"
 
 	"github.com/go-redis/redis/v8"
@@ -20,6 +21,7 @@ var (
 	RDB redis.Cmdable
 	MIO *minio.Client
 	AIX *aix.AIX // AI 功能实例
+	WS  *wsx.Hub // WebSocket Hub
 )
 
 func Init() {
@@ -27,6 +29,11 @@ func Init() {
 	DB = pgsqlx.InitPgsql()
 	RDB = redisx.InitRedis()
 	MIO = miniox.InitMinio()
+
+	// 初始化 WebSocket Hub
+	wsx.Log = Log // 注入 Logger
+	WS = wsx.NewHub()
+	go WS.Run()
 
 	// 初始化 AIX
 	var err error

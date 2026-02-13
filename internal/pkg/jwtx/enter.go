@@ -72,6 +72,14 @@ func ParseToken(c *gin.Context) (string, Role, error) {
 		return "", 0, ErrTokenEmpty
 	}
 	token := strings.TrimPrefix(data, "Bearer ")
+	claims, err := ParseTokenString(token)
+	if err != nil {
+		return "", 0, err
+	}
+	return claims.UserID, claims.Role, nil
+}
+
+func ParseTokenString(token string) (*MyClaims, error) {
 	// 解析token
 	var claims MyClaims
 	t, err := jwt.ParseWithClaims(token, &claims, func(token *jwt.Token) (interface{}, error) {
@@ -79,21 +87,21 @@ func ParseToken(c *gin.Context) (string, Role, error) {
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "token is expired") {
-			return "", 0, ErrTokenExpired
+			return nil, ErrTokenExpired
 		}
 		if strings.Contains(err.Error(), "signature is invalid") {
-			return "", 0, ErrTokenInvalid
+			return nil, ErrTokenInvalid
 		}
 		if strings.Contains(err.Error(), "token contains an invalid") {
-			return "", 0, ErrTokenInvalid
+			return nil, ErrTokenInvalid
 		}
 		fmt.Println(err)
-		return "", 0, ErrDefault
+		return nil, ErrDefault
 	}
 	if claims, ok := t.Claims.(*MyClaims); ok && t.Valid {
-		return claims.UserID, claims.Role, nil
+		return claims, nil
 	}
-	return "", 0, ErrDefault
+	return nil, ErrDefault
 }
 
 // 必须使用了鉴权中间件才能用

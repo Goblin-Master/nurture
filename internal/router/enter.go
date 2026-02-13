@@ -191,4 +191,10 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			postHandler.Publish,
 		)
 	})
+
+	// WebSocket 路由
+	routeManager.RegisterWSRoutes(func(rg *gin.RouterGroup) {
+		wsHandler := handler.NewWebSocketHandler()
+		rg.GET("/chat", wsHandler.Connect)
+	})
 }
