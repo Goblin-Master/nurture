@@ -58,6 +58,67 @@ type (
 )
 
 type (
+	CreateCommentReq struct {
+		ParentID string          `json:"parent_id"`
+		Content  json.RawMessage `json:"content" binding:"required"`
+	}
+	CreateCommentResp struct {
+		CommentID string `json:"comment_id"`
+		Message   string `json:"message"`
+	}
+)
+
+type (
+	CommentListReq struct {
+		Page     int    `form:"page"`
+		PageSize int    `form:"page_size"`
+		Strategy string `form:"strategy"`
+	}
+	CommentItem struct {
+		CommentID  string `json:"comment_id"`
+		UserID     string `json:"user_id"`
+		Username   string `json:"username"`
+		Avatar     string `json:"avatar"`
+		Content    string `json:"content"`
+		LikeCount  int32  `json:"like_count"`
+		ReplyCount int32  `json:"reply_count"`
+		Ctime      int64  `json:"ctime"`
+		Utime      int64  `json:"utime"`
+		HasLiked   bool   `json:"has_liked"`
+	}
+	CommentListResp struct {
+		Items    []CommentItem `json:"items"`
+		Page     int           `json:"page"`
+		PageSize int           `json:"page_size"`
+		HasMore  bool          `json:"has_more"`
+	}
+)
+
+type (
+	CommentRepliesReq struct {
+		PostID    string `uri:"post_id" binding:"required"`
+		CommentID string `uri:"comment_id" binding:"required"`
+	}
+	CommentDeleteReq struct {
+		CommentID string `uri:"comment_id" binding:"required"`
+	}
+	CommentUpdateReq struct {
+		CommentID string `uri:"comment_id" binding:"required"`
+	}
+)
+
+type (
+	UpdateCommentReq struct {
+		Content json.RawMessage `json:"content" binding:"required"`
+	}
+)
+
+type (
+	CommentLikeReq struct {
+		CommentID string `uri:"comment_id" binding:"required"`
+	}
+)
+type (
 	// 首页列表
 	PostHomeListReq struct {
 		Page     int    `form:"page"`

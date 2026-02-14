@@ -71,7 +71,9 @@ CREATE TABLE IF NOT EXISTS "comment" (
   user_id     UUID NOT NULL,
   parent_id   UUID,
   content     TEXT,
+  status      VARCHAR(20) NOT NULL DEFAULT 'visible' CHECK (status IN ('visible','deleted','hidden')),
   like_count  INTEGER NOT NULL DEFAULT 0,
+  reply_count INTEGER NOT NULL DEFAULT 0,
   ctime       BIGINT NOT NULL,
   utime       BIGINT NOT NULL
 );
@@ -83,9 +85,28 @@ COMMENT ON COLUMN "comment".post_id IS '帖子ID';
 COMMENT ON COLUMN "comment".user_id IS '评论者user_id(UUID)';
 COMMENT ON COLUMN "comment".parent_id IS '父评论ID(一级为NULL)';
 COMMENT ON COLUMN "comment".content IS '评论正文';
+COMMENT ON COLUMN "comment".status IS '状态(visible/deleted/hidden)';
 COMMENT ON COLUMN "comment".like_count IS '点赞数';
+COMMENT ON COLUMN "comment".reply_count IS '回复数(仅统计可见回复)';
 COMMENT ON COLUMN "comment".ctime IS '创建时间戳';
 COMMENT ON COLUMN "comment".utime IS '更新时间戳';
+
+-- 6. 评论点赞表
+CREATE TABLE IF NOT EXISTS "comment_like" (
+  id          BIGSERIAL PRIMARY KEY,
+  user_id     UUID NOT NULL,
+  comment_id  UUID NOT NULL,
+  ctime       BIGINT NOT NULL,
+  utime       BIGINT NOT NULL,
+  CONSTRAINT uq_comment_like UNIQUE (user_id, comment_id)
+);
+
+COMMENT ON TABLE "comment_like" IS '评论点赞表';
+COMMENT ON COLUMN "comment_like".id IS '主键ID';
+COMMENT ON COLUMN "comment_like".user_id IS '用户user_id(UUID)';
+COMMENT ON COLUMN "comment_like".comment_id IS '评论ID';
+COMMENT ON COLUMN "comment_like".ctime IS '创建时间戳';
+COMMENT ON COLUMN "comment_like".utime IS '更新时间戳';
 
 -- 5. 评论闭包表
 CREATE TABLE IF NOT EXISTS "comment_closure" (

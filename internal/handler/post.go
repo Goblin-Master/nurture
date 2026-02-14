@@ -71,6 +71,16 @@ func (h *PostHandler) Publish(c *gin.Context) {
 	response.Response(c, resp, err)
 }
 
+func (h *PostHandler) CreateComment(c *gin.Context) {
+	uri := middleware.GetBind[dto.PublishPostReq](c)
+	body := middleware.GetBind[dto.CreateCommentReq](c)
+	global.Log.Info(uri, body)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.CreateComment(c.Request.Context(), userID, uri.PostID, body)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
 func (h *PostHandler) ListMyPosts(c *gin.Context) {
 	cr := middleware.GetBind[dto.PostMyListReq](c)
 	global.Log.Info(cr)
@@ -80,6 +90,58 @@ func (h *PostHandler) ListMyPosts(c *gin.Context) {
 	response.Response(c, resp, err)
 }
 
+func (h *PostHandler) ListComments(c *gin.Context) {
+	uri := middleware.GetBind[dto.PostDetailReq](c)
+	query := middleware.GetBind[dto.CommentListReq](c)
+	global.Log.Info(uri, query)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.ListComments(c.Request.Context(), userID, uri.PostID, query)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
+func (h *PostHandler) ListReplies(c *gin.Context) {
+	uri := middleware.GetBind[dto.CommentRepliesReq](c)
+	query := middleware.GetBind[dto.CommentListReq](c)
+	global.Log.Info(uri, query)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.ListReplies(c.Request.Context(), userID, uri, query)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
+func (h *PostHandler) DeleteComment(c *gin.Context) {
+	uri := middleware.GetBind[dto.CommentDeleteReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	err := h.postLogic.DeleteComment(c.Request.Context(), userID, uri)
+	response.Response(c, nil, err)
+}
+
+func (h *PostHandler) UpdateComment(c *gin.Context) {
+	uri := middleware.GetBind[dto.CommentUpdateReq](c)
+	body := middleware.GetBind[dto.UpdateCommentReq](c)
+	global.Log.Info(uri, body)
+	userID := jwtx.GetUserID(c)
+	err := h.postLogic.UpdateComment(c.Request.Context(), userID, uri, body)
+	response.Response(c, nil, err)
+}
+
+func (h *PostHandler) LikeComment(c *gin.Context) {
+	uri := middleware.GetBind[dto.CommentLikeReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	err := h.postLogic.LikeComment(c.Request.Context(), userID, uri)
+	response.Response(c, nil, err)
+}
+
+func (h *PostHandler) UnlikeComment(c *gin.Context) {
+	uri := middleware.GetBind[dto.CommentLikeReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	err := h.postLogic.UnlikeComment(c.Request.Context(), userID, uri)
+	response.Response(c, nil, err)
+}
 func (h *PostHandler) ListMyDrafts(c *gin.Context) {
 	cr := middleware.GetBind[dto.PostMyListReq](c)
 	global.Log.Info(cr)

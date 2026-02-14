@@ -42,6 +42,15 @@ type IPostRepo interface {
 	GetDetail(ctx context.Context, postID string) (PostRow, error)
 	CreatePost(ctx context.Context, postID, authorID, title, content, status string, ctime, utime int64, tagIDs []string) error
 	Publish(ctx context.Context, postID, userID string) error
+	CreateComment(ctx context.Context, commentID, postID, userID string, parentID *string, content string, now int64) error
+	GetPostStatus(ctx context.Context, postID string) (string, error)
+	GetCommentParentInfo(ctx context.Context, commentID string) (string, string, error)
+	ListCommentsByPost(ctx context.Context, postID string, userID string, page, pageSize int, strategy string) ([]CommentRow, bool, error)
+	ListRepliesByComment(ctx context.Context, commentID string, userID string, page, pageSize int, strategy string) ([]CommentRow, bool, error)
+	DeleteComment(ctx context.Context, commentID, userID string) error
+	UpdateComment(ctx context.Context, commentID, userID, content string) error
+	LikeComment(ctx context.Context, commentID, userID string) error
+	UnlikeComment(ctx context.Context, commentID, userID string) error
 }
 
 type PostRepo struct {
@@ -198,6 +207,239 @@ func (r *PostRepo) ListHome(ctx context.Context, page, pageSize int, strategy st
 			v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
 			v.Ctime, v.Utime, v.Birthday, v.Tags,
 		))
+	}
+	hasMore := int32(len(rows)) >= limit
+	return res, hasMore, nil
+}
+
+func (r *PostRepo) DeleteComment(ctx context.Context, commentID, userID string) error {
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	var cid pgtype.UUID
+	if err := cid.Scan(commentID); err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
+	meta, err := qtx.GetCommentMetaByID(ctx, cid)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if meta.Status != "visible" {
+		_ = tx.Rollback(ctx)
+		return ErrInvalidPostStatus
+	}
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
+	aff, err := qtx.DeleteCommentVisibleByOwner(ctx, post.DeleteCommentVisibleByOwnerParams{
+		CommentID: cid,
+		Utime:     time.Now().UnixMilli(),
+		UserID:    uid,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if aff == 0 {
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	// adjust counters
+	if meta.ParentID.Valid {
+		if _, err := qtx.DecCommentReplyCount(ctx, meta.ParentID); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	} else {
+		var pid pgtype.UUID
+		if err := pid.Scan(meta.PostID); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		if _, err := qtx.DecPostCommentCount(ctx, pid); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostRepo) UpdateComment(ctx context.Context, commentID, userID, content string) error {
+	var cid, uid pgtype.UUID
+	if err := cid.Scan(commentID); err != nil {
+		return err
+	}
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	aff, err := r.dao.UpdateCommentContentByOwner(ctx, post.UpdateCommentContentByOwnerParams{
+		CommentID: cid,
+		Content:   pgtype.Text{String: content, Valid: true},
+		Utime:     time.Now().UnixMilli(),
+		UserID:    uid,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	if aff == 0 {
+		return ErrInvalidPostStatus
+	}
+	return nil
+}
+
+func (r *PostRepo) LikeComment(ctx context.Context, commentID, userID string) error {
+	var cid, uid pgtype.UUID
+	if err := cid.Scan(commentID); err != nil {
+		return err
+	}
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	// check status visible
+	meta, err := r.dao.GetCommentMetaByID(ctx, cid)
+	if err != nil {
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	if meta.Status != "visible" {
+		return ErrInvalidPostStatus
+	}
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	now := time.Now().UnixMilli()
+	aff, err := qtx.CreateCommentLike(ctx, post.CreateCommentLikeParams{
+		UserID:    uid,
+		CommentID: cid,
+		Ctime:     now,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if aff > 0 {
+		if _, err := qtx.IncCommentLikeCount(ctx, cid); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostRepo) UnlikeComment(ctx context.Context, commentID, userID string) error {
+	var cid, uid pgtype.UUID
+	if err := cid.Scan(commentID); err != nil {
+		return err
+	}
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	aff, err := qtx.DeleteCommentLike(ctx, post.DeleteCommentLikeParams{
+		UserID:    uid,
+		CommentID: cid,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if aff > 0 {
+		if _, err := qtx.DecCommentLikeCount(ctx, cid); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
+	return tx.Commit(ctx)
+}
+func (r *PostRepo) ListRepliesByComment(ctx context.Context, commentID string, userID string, page, pageSize int, strategy string) ([]CommentRow, bool, error) {
+	var cid pgtype.UUID
+	if err := cid.Scan(commentID); err != nil {
+		return nil, false, ErrParamsType
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		rows, err := r.dao.ListCommentRepliesByHot(ctx, post.ListCommentRepliesByHotParams{
+			ParentID: cid,
+			Limit:    limit,
+			Offset:   offset,
+			Column4:  userID,
+		})
+		if err != nil {
+			global.Log.Error(err)
+			return nil, false, ErrDefault
+		}
+		res := make([]CommentRow, 0, pageSize)
+		for i, v := range rows {
+			if int32(i) >= limit-1 {
+				break
+			}
+			res = append(res, CommentRow{
+				CommentID:  v.CommentID,
+				UserID:     v.UserID,
+				Username:   v.Username,
+				Avatar:     v.Avatar,
+				Content:    v.Content.String,
+				LikeCount:  v.LikeCount,
+				ReplyCount: int32(v.ReplyCount),
+				Ctime:      v.Ctime,
+				Utime:      v.Utime,
+			})
+		}
+		hasMore := int32(len(rows)) >= limit
+		return res, hasMore, nil
+	}
+	rows, err := r.dao.ListCommentRepliesByCtime(ctx, post.ListCommentRepliesByCtimeParams{
+		ParentID: cid,
+		Limit:    limit,
+		Offset:   offset,
+		Column4:  userID,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	res := make([]CommentRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, CommentRow{
+			CommentID:  v.CommentID,
+			UserID:     v.UserID,
+			Username:   v.Username,
+			Avatar:     v.Avatar,
+			Content:    v.Content.String,
+			LikeCount:  v.LikeCount,
+			ReplyCount: int32(v.ReplyCount),
+			Ctime:      v.Ctime,
+			Utime:      v.Utime,
+		})
 	}
 	hasMore := int32(len(rows)) >= limit
 	return res, hasMore, nil
@@ -512,4 +754,180 @@ func (r *PostRepo) Publish(ctx context.Context, postID, userID string) error {
 		return ErrPostNotDraft
 	}
 	return nil
+}
+
+func (r *PostRepo) GetPostStatus(ctx context.Context, postID string) (string, error) {
+	var pid pgtype.UUID
+	if err := pid.Scan(postID); err != nil {
+		return "", err
+	}
+	status, err := r.dao.GetPostStatusByID(ctx, pid)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrPostNotExist
+		}
+		global.Log.Error(err)
+		return "", ErrDefault
+	}
+	return status, nil
+}
+
+func (r *PostRepo) GetCommentParentInfo(ctx context.Context, commentID string) (string, string, error) {
+	var cid pgtype.UUID
+	if err := cid.Scan(commentID); err != nil {
+		return "", "", err
+	}
+	row, err := r.dao.GetCommentMinimal(ctx, cid)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", ErrPostNotExist
+		}
+		global.Log.Error(err)
+		return "", "", ErrDefault
+	}
+	// row has post_id and status
+	return row.PostID, row.Status, nil
+}
+
+func (r *PostRepo) CreateComment(ctx context.Context, commentID, postID, userID string, parentID *string, content string, now int64) error {
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	var (
+		cid, pid, uid pgtype.UUID
+		pgid          pgtype.UUID
+	)
+	if err := cid.Scan(commentID); err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
+	if err := pid.Scan(postID); err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
+	if err := uid.Scan(userID); err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
+	var parent pgtype.UUID
+	if parentID != nil && strings.TrimSpace(*parentID) != "" {
+		if err := pgid.Scan(*parentID); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		parent = pgid
+	}
+	if err := qtx.CreateComment(ctx, post.CreateCommentParams{
+		CommentID: cid,
+		PostID:    pid,
+		UserID:    uid,
+		ParentID:  parent,
+		Content:   pgtype.Text{String: content, Valid: true},
+		Ctime:     now,
+		Utime:     now,
+	}); err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if _, err := qtx.IncPostCommentCount(ctx, pid); err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	// if has parent, inc reply_count
+	if parentID != nil && strings.TrimSpace(*parentID) != "" {
+		if _, err := qtx.IncCommentReplyCount(ctx, pgid); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+type CommentRow struct {
+	CommentID  string
+	UserID     string
+	Username   string
+	Avatar     string
+	Content    string
+	LikeCount  int32
+	ReplyCount int32
+	Ctime      int64
+	Utime      int64
+	HasLiked   bool
+}
+
+func (r *PostRepo) ListCommentsByPost(ctx context.Context, postID string, userID string, page, pageSize int, strategy string) ([]CommentRow, bool, error) {
+	var pid pgtype.UUID
+	if err := pid.Scan(postID); err != nil {
+		return nil, false, ErrParamsType
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		rows, err := r.dao.ListPostCommentsByHot(ctx, post.ListPostCommentsByHotParams{
+			PostID:  pid,
+			Limit:   limit,
+			Offset:  offset,
+			Column4: userID,
+		})
+		if err != nil {
+			global.Log.Error(err)
+			return nil, false, ErrDefault
+		}
+		res := make([]CommentRow, 0, pageSize)
+		for i, v := range rows {
+			if int32(i) >= limit-1 {
+				break
+			}
+			res = append(res, CommentRow{
+				CommentID:  v.CommentID,
+				UserID:     v.UserID,
+				Username:   v.Username,
+				Avatar:     v.Avatar,
+				Content:    v.Content.String,
+				LikeCount:  v.LikeCount,
+				ReplyCount: v.ReplyCount,
+				Ctime:      v.Ctime,
+				Utime:      v.Utime,
+				HasLiked:   v.HasLiked,
+			})
+		}
+		hasMore := int32(len(rows)) >= limit
+		return res, hasMore, nil
+	}
+	rows, err := r.dao.ListPostCommentsByCtime(ctx, post.ListPostCommentsByCtimeParams{
+		PostID:  pid,
+		Limit:   limit,
+		Offset:  offset,
+		Column4: userID,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	res := make([]CommentRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, CommentRow{
+			CommentID:  v.CommentID,
+			UserID:     v.UserID,
+			Username:   v.Username,
+			Avatar:     v.Avatar,
+			Content:    v.Content.String,
+			LikeCount:  v.LikeCount,
+			ReplyCount: v.ReplyCount,
+			Ctime:      v.Ctime,
+			Utime:      v.Utime,
+			HasLiked:   v.HasLiked,
+		})
+	}
+	hasMore := int32(len(rows)) >= limit
+	return res, hasMore, nil
 }

@@ -27,6 +27,57 @@ func (q *Queries) AddPostTag(ctx context.Context, arg AddPostTagParams) error {
 	return err
 }
 
+const createComment = `-- name: CreateComment :exec
+INSERT INTO "comment" (
+  comment_id, post_id, user_id, parent_id, content, status, like_count, reply_count, ctime, utime
+) VALUES (
+  $1, $2, $3, $4, $5, 'visible', 0, 0, $6, $7
+)
+`
+
+type CreateCommentParams struct {
+	CommentID pgtype.UUID
+	PostID    pgtype.UUID
+	UserID    pgtype.UUID
+	ParentID  pgtype.UUID
+	Content   pgtype.Text
+	Ctime     int64
+	Utime     int64
+}
+
+func (q *Queries) CreateComment(ctx context.Context, arg CreateCommentParams) error {
+	_, err := q.db.Exec(ctx, createComment,
+		arg.CommentID,
+		arg.PostID,
+		arg.UserID,
+		arg.ParentID,
+		arg.Content,
+		arg.Ctime,
+		arg.Utime,
+	)
+	return err
+}
+
+const createCommentLike = `-- name: CreateCommentLike :execrows
+INSERT INTO "comment_like" (user_id, comment_id, ctime, utime)
+VALUES ($1, $2, $3, $3)
+ON CONFLICT (user_id, comment_id) DO NOTHING
+`
+
+type CreateCommentLikeParams struct {
+	UserID    pgtype.UUID
+	CommentID pgtype.UUID
+	Ctime     int64
+}
+
+func (q *Queries) CreateCommentLike(ctx context.Context, arg CreateCommentLikeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createCommentLike, arg.UserID, arg.CommentID, arg.Ctime)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createPost = `-- name: CreatePost :exec
 INSERT INTO "post" (
   post_id, author_id, title, content, status,
@@ -62,6 +113,133 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) error {
 		arg.Utime,
 	)
 	return err
+}
+
+const decCommentLikeCount = `-- name: DecCommentLikeCount :execrows
+UPDATE "comment"
+SET like_count = GREATEST(like_count - 1, 0)
+WHERE comment_id = $1
+`
+
+func (q *Queries) DecCommentLikeCount(ctx context.Context, commentID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, decCommentLikeCount, commentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const decCommentReplyCount = `-- name: DecCommentReplyCount :execrows
+UPDATE "comment"
+SET reply_count = GREATEST(reply_count - 1, 0)
+WHERE comment_id = $1
+`
+
+func (q *Queries) DecCommentReplyCount(ctx context.Context, commentID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, decCommentReplyCount, commentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const decPostCommentCount = `-- name: DecPostCommentCount :execrows
+UPDATE "post"
+SET comment_count = GREATEST(comment_count - 1, 0)
+WHERE post_id = $1
+`
+
+func (q *Queries) DecPostCommentCount(ctx context.Context, postID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, decPostCommentCount, postID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteCommentLike = `-- name: DeleteCommentLike :execrows
+DELETE FROM "comment_like"
+WHERE user_id = $1 AND comment_id = $2
+`
+
+type DeleteCommentLikeParams struct {
+	UserID    pgtype.UUID
+	CommentID pgtype.UUID
+}
+
+func (q *Queries) DeleteCommentLike(ctx context.Context, arg DeleteCommentLikeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCommentLike, arg.UserID, arg.CommentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteCommentVisibleByOwner = `-- name: DeleteCommentVisibleByOwner :execrows
+UPDATE "comment"
+SET status = 'deleted', utime = $2
+WHERE comment_id = $1 AND user_id = $3 AND status = 'visible'
+`
+
+type DeleteCommentVisibleByOwnerParams struct {
+	CommentID pgtype.UUID
+	Utime     int64
+	UserID    pgtype.UUID
+}
+
+func (q *Queries) DeleteCommentVisibleByOwner(ctx context.Context, arg DeleteCommentVisibleByOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCommentVisibleByOwner, arg.CommentID, arg.Utime, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getCommentMetaByID = `-- name: GetCommentMetaByID :one
+SELECT
+  post_id::text AS post_id,
+  parent_id,
+  status,
+  user_id::text AS user_id
+FROM "comment"
+WHERE comment_id = $1
+`
+
+type GetCommentMetaByIDRow struct {
+	PostID   string
+	ParentID pgtype.UUID
+	Status   string
+	UserID   string
+}
+
+func (q *Queries) GetCommentMetaByID(ctx context.Context, commentID pgtype.UUID) (GetCommentMetaByIDRow, error) {
+	row := q.db.QueryRow(ctx, getCommentMetaByID, commentID)
+	var i GetCommentMetaByIDRow
+	err := row.Scan(
+		&i.PostID,
+		&i.ParentID,
+		&i.Status,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const getCommentMinimal = `-- name: GetCommentMinimal :one
+SELECT post_id::text AS post_id, status
+FROM "comment"
+WHERE comment_id = $1
+`
+
+type GetCommentMinimalRow struct {
+	PostID string
+	Status string
+}
+
+func (q *Queries) GetCommentMinimal(ctx context.Context, commentID pgtype.UUID) (GetCommentMinimalRow, error) {
+	row := q.db.QueryRow(ctx, getCommentMinimal, commentID)
+	var i GetCommentMinimalRow
+	err := row.Scan(&i.PostID, &i.Status)
+	return i, err
 }
 
 const getPostDetail = `-- name: GetPostDetail :one
@@ -138,6 +316,215 @@ func (q *Queries) GetPostDetail(ctx context.Context, postID pgtype.UUID) (GetPos
 		&i.Tags,
 	)
 	return i, err
+}
+
+const getPostStatusByID = `-- name: GetPostStatusByID :one
+SELECT status FROM "post" WHERE post_id = $1
+`
+
+func (q *Queries) GetPostStatusByID(ctx context.Context, postID pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getPostStatusByID, postID)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
+const incCommentLikeCount = `-- name: IncCommentLikeCount :execrows
+UPDATE "comment"
+SET like_count = like_count + 1
+WHERE comment_id = $1 AND status = 'visible'
+`
+
+func (q *Queries) IncCommentLikeCount(ctx context.Context, commentID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, incCommentLikeCount, commentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const incCommentReplyCount = `-- name: IncCommentReplyCount :execrows
+UPDATE "comment"
+SET reply_count = reply_count + 1
+WHERE comment_id = $1
+`
+
+func (q *Queries) IncCommentReplyCount(ctx context.Context, commentID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, incCommentReplyCount, commentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const incPostCommentCount = `-- name: IncPostCommentCount :execrows
+UPDATE "post"
+SET comment_count = comment_count + 1
+WHERE post_id = $1
+`
+
+func (q *Queries) IncPostCommentCount(ctx context.Context, postID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, incPostCommentCount, postID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listCommentRepliesByCtime = `-- name: ListCommentRepliesByCtime :many
+SELECT
+  c.comment_id::text AS comment_id,
+  c.user_id::text AS user_id,
+  COALESCE(ua.username, '') AS username,
+  COALESCE(ua.avatar, '') AS avatar,
+  c.content,
+  c.like_count,
+  (SELECT COUNT(1) FROM "comment" ch WHERE ch.parent_id = c.comment_id AND ch.status = 'visible') AS reply_count,
+  c.ctime,
+  c.utime,
+  EXISTS(
+    SELECT 1 FROM "comment_like" cl
+    WHERE cl.comment_id = c.comment_id AND cl.user_id = NULLIF($4, '')::uuid
+  ) AS has_liked
+FROM "comment" c
+LEFT JOIN "user_addition" ua ON ua.user_id = c.user_id
+WHERE c.parent_id = $1 AND c.status = 'visible'
+ORDER BY c.ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListCommentRepliesByCtimeParams struct {
+	ParentID pgtype.UUID
+	Limit    int32
+	Offset   int32
+	Column4  interface{}
+}
+
+type ListCommentRepliesByCtimeRow struct {
+	CommentID  string
+	UserID     string
+	Username   string
+	Avatar     string
+	Content    pgtype.Text
+	LikeCount  int32
+	ReplyCount int64
+	Ctime      int64
+	Utime      int64
+	HasLiked   bool
+}
+
+func (q *Queries) ListCommentRepliesByCtime(ctx context.Context, arg ListCommentRepliesByCtimeParams) ([]ListCommentRepliesByCtimeRow, error) {
+	rows, err := q.db.Query(ctx, listCommentRepliesByCtime,
+		arg.ParentID,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCommentRepliesByCtimeRow
+	for rows.Next() {
+		var i ListCommentRepliesByCtimeRow
+		if err := rows.Scan(
+			&i.CommentID,
+			&i.UserID,
+			&i.Username,
+			&i.Avatar,
+			&i.Content,
+			&i.LikeCount,
+			&i.ReplyCount,
+			&i.Ctime,
+			&i.Utime,
+			&i.HasLiked,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCommentRepliesByHot = `-- name: ListCommentRepliesByHot :many
+SELECT
+  c.comment_id::text AS comment_id,
+  c.user_id::text AS user_id,
+  COALESCE(ua.username, '') AS username,
+  COALESCE(ua.avatar, '') AS avatar,
+  c.content,
+  c.like_count,
+  (SELECT COUNT(1) FROM "comment" ch WHERE ch.parent_id = c.comment_id AND ch.status = 'visible') AS reply_count,
+  c.ctime,
+  c.utime,
+  EXISTS(
+    SELECT 1 FROM "comment_like" cl
+    WHERE cl.comment_id = c.comment_id AND cl.user_id = NULLIF($4, '')::uuid
+  ) AS has_liked
+FROM "comment" c
+LEFT JOIN "user_addition" ua ON ua.user_id = c.user_id
+WHERE c.parent_id = $1 AND c.status = 'visible'
+ORDER BY c.like_count DESC, c.ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListCommentRepliesByHotParams struct {
+	ParentID pgtype.UUID
+	Limit    int32
+	Offset   int32
+	Column4  interface{}
+}
+
+type ListCommentRepliesByHotRow struct {
+	CommentID  string
+	UserID     string
+	Username   string
+	Avatar     string
+	Content    pgtype.Text
+	LikeCount  int32
+	ReplyCount int64
+	Ctime      int64
+	Utime      int64
+	HasLiked   bool
+}
+
+func (q *Queries) ListCommentRepliesByHot(ctx context.Context, arg ListCommentRepliesByHotParams) ([]ListCommentRepliesByHotRow, error) {
+	rows, err := q.db.Query(ctx, listCommentRepliesByHot,
+		arg.ParentID,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCommentRepliesByHotRow
+	for rows.Next() {
+		var i ListCommentRepliesByHotRow
+		if err := rows.Scan(
+			&i.CommentID,
+			&i.UserID,
+			&i.Username,
+			&i.Avatar,
+			&i.Content,
+			&i.LikeCount,
+			&i.ReplyCount,
+			&i.Ctime,
+			&i.Utime,
+			&i.HasLiked,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDraftsByAuthor = `-- name: ListDraftsByAuthor :many
@@ -620,6 +1007,162 @@ func (q *Queries) ListHomePosts(ctx context.Context, arg ListHomePostsParams) ([
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPostCommentsByCtime = `-- name: ListPostCommentsByCtime :many
+SELECT
+  c.comment_id::text AS comment_id,
+  c.user_id::text AS user_id,
+  COALESCE(ua.username, '') AS username,
+  COALESCE(ua.avatar, '') AS avatar,
+  c.content,
+  c.like_count,
+  c.reply_count,
+  c.ctime,
+  c.utime,
+  EXISTS(
+    SELECT 1 FROM "comment_like" cl
+    WHERE cl.comment_id = c.comment_id AND cl.user_id = NULLIF($4, '')::uuid
+  ) AS has_liked
+FROM "comment" c
+LEFT JOIN "user_addition" ua ON ua.user_id = c.user_id
+WHERE c.post_id = $1 AND c.parent_id IS NULL AND c.status = 'visible'
+ORDER BY c.ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListPostCommentsByCtimeParams struct {
+	PostID  pgtype.UUID
+	Limit   int32
+	Offset  int32
+	Column4 interface{}
+}
+
+type ListPostCommentsByCtimeRow struct {
+	CommentID  string
+	UserID     string
+	Username   string
+	Avatar     string
+	Content    pgtype.Text
+	LikeCount  int32
+	ReplyCount int32
+	Ctime      int64
+	Utime      int64
+	HasLiked   bool
+}
+
+func (q *Queries) ListPostCommentsByCtime(ctx context.Context, arg ListPostCommentsByCtimeParams) ([]ListPostCommentsByCtimeRow, error) {
+	rows, err := q.db.Query(ctx, listPostCommentsByCtime,
+		arg.PostID,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPostCommentsByCtimeRow
+	for rows.Next() {
+		var i ListPostCommentsByCtimeRow
+		if err := rows.Scan(
+			&i.CommentID,
+			&i.UserID,
+			&i.Username,
+			&i.Avatar,
+			&i.Content,
+			&i.LikeCount,
+			&i.ReplyCount,
+			&i.Ctime,
+			&i.Utime,
+			&i.HasLiked,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPostCommentsByHot = `-- name: ListPostCommentsByHot :many
+SELECT
+  c.comment_id::text AS comment_id,
+  c.user_id::text AS user_id,
+  COALESCE(ua.username, '') AS username,
+  COALESCE(ua.avatar, '') AS avatar,
+  c.content,
+  c.like_count,
+  c.reply_count,
+  c.ctime,
+  c.utime,
+  EXISTS(
+    SELECT 1 FROM "comment_like" cl
+    WHERE cl.comment_id = c.comment_id AND cl.user_id = NULLIF($4, '')::uuid
+  ) AS has_liked
+FROM "comment" c
+LEFT JOIN "user_addition" ua ON ua.user_id = c.user_id
+WHERE c.post_id = $1 AND c.parent_id IS NULL AND c.status = 'visible'
+ORDER BY (c.like_count*3 + c.reply_count*5) DESC, c.ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListPostCommentsByHotParams struct {
+	PostID  pgtype.UUID
+	Limit   int32
+	Offset  int32
+	Column4 interface{}
+}
+
+type ListPostCommentsByHotRow struct {
+	CommentID  string
+	UserID     string
+	Username   string
+	Avatar     string
+	Content    pgtype.Text
+	LikeCount  int32
+	ReplyCount int32
+	Ctime      int64
+	Utime      int64
+	HasLiked   bool
+}
+
+func (q *Queries) ListPostCommentsByHot(ctx context.Context, arg ListPostCommentsByHotParams) ([]ListPostCommentsByHotRow, error) {
+	rows, err := q.db.Query(ctx, listPostCommentsByHot,
+		arg.PostID,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPostCommentsByHotRow
+	for rows.Next() {
+		var i ListPostCommentsByHotRow
+		if err := rows.Scan(
+			&i.CommentID,
+			&i.UserID,
+			&i.Username,
+			&i.Avatar,
+			&i.Content,
+			&i.LikeCount,
+			&i.ReplyCount,
+			&i.Ctime,
+			&i.Utime,
+			&i.HasLiked,
 		); err != nil {
 			return nil, err
 		}
@@ -1453,4 +1996,30 @@ func (q *Queries) SearchPostsByTitleHot(ctx context.Context, arg SearchPostsByTi
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCommentContentByOwner = `-- name: UpdateCommentContentByOwner :execrows
+UPDATE "comment"
+SET content = $2, utime = $3
+WHERE comment_id = $1 AND user_id = $4 AND status = 'visible'
+`
+
+type UpdateCommentContentByOwnerParams struct {
+	CommentID pgtype.UUID
+	Content   pgtype.Text
+	Utime     int64
+	UserID    pgtype.UUID
+}
+
+func (q *Queries) UpdateCommentContentByOwner(ctx context.Context, arg UpdateCommentContentByOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateCommentContentByOwner,
+		arg.CommentID,
+		arg.Content,
+		arg.Utime,
+		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

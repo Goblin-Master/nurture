@@ -124,8 +124,12 @@ type Comment struct {
 	ParentID pgtype.UUID
 	// 评论正文
 	Content pgtype.Text
+	// 状态(visible/deleted/hidden)
+	Status string
 	// 点赞数
 	LikeCount int32
+	// 回复数(仅统计可见回复)
+	ReplyCount int32
 	// 创建时间戳
 	Ctime int64
 	// 更新时间戳
@@ -142,6 +146,20 @@ type CommentClosure struct {
 	Descendant pgtype.UUID
 	// 祖先到后代的距离
 	Depth int32
+}
+
+// 评论点赞表
+type CommentLike struct {
+	// 主键ID
+	ID int64
+	// 用户user_id(UUID)
+	UserID pgtype.UUID
+	// 评论ID
+	CommentID pgtype.UUID
+	// 创建时间戳
+	Ctime int64
+	// 更新时间戳
+	Utime int64
 }
 
 // 点赞/不喜欢表
