@@ -153,7 +153,11 @@ func (ur *UserRepo) UpdateGender(ctx context.Context, userID, gender string) err
 
 // GetPartnerByUserID 查询另一半（返回对方ID；没有则返回空字符串）
 func (ur *UserRepo) GetPartnerByUserID(ctx context.Context, userID string) (string, error) {
-	row, err := ur.userDao.GetPartnerByUserID(ctx, userID)
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return "", err
+	}
+	row, err := ur.userDao.GetPartnerByUserID(ctx, uid)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil

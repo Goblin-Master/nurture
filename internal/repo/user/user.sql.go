@@ -11,6 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createPartner = `-- name: CreatePartner :exec
+INSERT INTO "user_partner"(father, mother, ctime, utime)
+VALUES ($1, $2, $3, $3)
+ON CONFLICT (father, mother) DO NOTHING
+`
+
+type CreatePartnerParams struct {
+	Father pgtype.UUID
+	Mother pgtype.UUID
+	Ctime  int64
+}
+
+func (q *Queries) CreatePartner(ctx context.Context, arg CreatePartnerParams) error {
+	_, err := q.db.Exec(ctx, createPartner, arg.Father, arg.Mother, arg.Ctime)
+	return err
+}
+
 const createUser = `-- name: CreateUser :exec
 WITH ins AS (
   INSERT INTO "user_base" (
@@ -50,6 +67,25 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Gender,
 	)
 	return err
+}
+
+const getPartnerByUserID = `-- name: GetPartnerByUserID :one
+SELECT father::text AS father, mother::text AS mother
+FROM "user_partner"
+WHERE father = $1 OR mother = $1
+LIMIT 1
+`
+
+type GetPartnerByUserIDRow struct {
+	Father string
+	Mother string
+}
+
+func (q *Queries) GetPartnerByUserID(ctx context.Context, father pgtype.UUID) (GetPartnerByUserIDRow, error) {
+	row := q.db.QueryRow(ctx, getPartnerByUserID, father)
+	var i GetPartnerByUserIDRow
+	err := row.Scan(&i.Father, &i.Mother)
+	return i, err
 }
 
 const getUserByAccountAndPassword = `-- name: GetUserByAccountAndPassword :one
@@ -103,61 +139,6 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (UserBase, e
 	return i, err
 }
 
-const updateAvatarByUserID = `-- name: UpdateAvatarByUserID :execrows
-UPDATE "user_addition"
-SET avatar = $2
-WHERE user_id = $1
-`
-
-type UpdateAvatarByUserIDParams struct {
-	UserID pgtype.UUID
-	Avatar string
-}
-
-func (q *Queries) UpdateAvatarByUserID(ctx context.Context, arg UpdateAvatarByUserIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateAvatarByUserID, arg.UserID, arg.Avatar)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const createPartner = `-- name: CreatePartner :exec
-INSERT INTO "user_partner"(father, mother, ctime, utime)
-VALUES ($1, $2, $3, $3)
-ON CONFLICT (father, mother) DO NOTHING
-`
-
-type CreatePartnerParams struct {
-	Father pgtype.UUID
-	Mother pgtype.UUID
-	Ctime  int64
-}
-
-func (q *Queries) CreatePartner(ctx context.Context, arg CreatePartnerParams) error {
-	_, err := q.db.Exec(ctx, createPartner, arg.Father, arg.Mother, arg.Ctime)
-	return err
-}
-
-const getPartnerByUserID = `-- name: GetPartnerByUserID :one
-SELECT father::text AS father, mother::text AS mother
-FROM "user_partner"
-WHERE father = $1 OR mother = $1
-LIMIT 1
-`
-
-type GetPartnerByUserIDRow struct {
-	Father string
-	Mother string
-}
-
-func (q *Queries) GetPartnerByUserID(ctx context.Context, userID string) (GetPartnerByUserIDRow, error) {
-	row := q.db.QueryRow(ctx, getPartnerByUserID, userID)
-	var i GetPartnerByUserIDRow
-	err := row.Scan(&i.Father, &i.Mother)
-	return i, err
-}
-
 const getUserByID = `-- name: GetUserByID :one
 SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base" WHERE user_id = $1 LIMIT 1
 `
@@ -178,6 +159,65 @@ func (q *Queries) GetUserByID(ctx context.Context, userID pgtype.UUID) (UserBase
 		&i.Utime,
 	)
 	return i, err
+}
+
+const updateAvatarByUserID = `-- name: UpdateAvatarByUserID :execrows
+UPDATE "user_addition"
+SET avatar = $2
+WHERE user_id = $1
+`
+
+type UpdateAvatarByUserIDParams struct {
+	UserID pgtype.UUID
+	Avatar string
+}
+
+func (q *Queries) UpdateAvatarByUserID(ctx context.Context, arg UpdateAvatarByUserIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateAvatarByUserID, arg.UserID, arg.Avatar)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateBaseGenderByUserID = `-- name: UpdateBaseGenderByUserID :execrows
+UPDATE "user_base"
+SET gender = $2, utime = $3
+WHERE user_id = $1
+`
+
+type UpdateBaseGenderByUserIDParams struct {
+	UserID pgtype.UUID
+	Gender string
+	Utime  int64
+}
+
+func (q *Queries) UpdateBaseGenderByUserID(ctx context.Context, arg UpdateBaseGenderByUserIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateBaseGenderByUserID, arg.UserID, arg.Gender, arg.Utime)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateGenderByUserID = `-- name: UpdateGenderByUserID :execrows
+UPDATE "user_addition"
+SET gender = $2, utime = $3
+WHERE user_id = $1
+`
+
+type UpdateGenderByUserIDParams struct {
+	UserID pgtype.UUID
+	Gender string
+	Utime  int64
+}
+
+func (q *Queries) UpdateGenderByUserID(ctx context.Context, arg UpdateGenderByUserIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateGenderByUserID, arg.UserID, arg.Gender, arg.Utime)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updatePasswordByEmail = `-- name: UpdatePasswordByEmail :execrows
@@ -234,46 +274,6 @@ func (q *Queries) UpdateUserAdditionByUserID(ctx context.Context, arg UpdateUser
 		arg.Column7,
 		arg.Utime,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const updateGenderByUserID = `-- name: UpdateGenderByUserID :execrows
-UPDATE "user_addition"
-SET gender = $2, utime = $3
-WHERE user_id = $1
-`
-
-type UpdateGenderByUserIDParams struct {
-	UserID pgtype.UUID
-	Gender string
-	Utime  int64
-}
-
-func (q *Queries) UpdateGenderByUserID(ctx context.Context, arg UpdateGenderByUserIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateGenderByUserID, arg.UserID, arg.Gender, arg.Utime)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const updateBaseGenderByUserID = `-- name: UpdateBaseGenderByUserID :execrows
-UPDATE "user_base"
-SET gender = $2, utime = $3
-WHERE user_id = $1
-`
-
-type UpdateBaseGenderByUserIDParams struct {
-	UserID pgtype.UUID
-	Gender string
-	Utime  int64
-}
-
-func (q *Queries) UpdateBaseGenderByUserID(ctx context.Context, arg UpdateBaseGenderByUserIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateBaseGenderByUserID, arg.UserID, arg.Gender, arg.Utime)
 	if err != nil {
 		return 0, err
 	}
