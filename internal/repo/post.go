@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"nurture/internal/global"
-	"nurture/internal/repo/postdao"
+	"nurture/internal/repo/post"
 	"strings"
 	"time"
 
@@ -45,12 +45,12 @@ type IPostRepo interface {
 }
 
 type PostRepo struct {
-	dao *postdao.Queries
+	dao *post.Queries
 }
 
 func NewPostRepo() *PostRepo {
 	return &PostRepo{
-		dao: postdao.New(global.DB),
+		dao: post.New(global.DB),
 	}
 }
 
@@ -152,34 +152,34 @@ func (r *PostRepo) ListHome(ctx context.Context, page, pageSize int, strategy st
 	limit := int32(pageSize + 1)
 	offset := int32((page - 1) * pageSize)
 	var (
-		rows []postdao.ListHomeByCtimeRow
+		rows []post.ListHomeByCtimeRow
 		err  error
 	)
 	switch strings.ToLower(strings.TrimSpace(strategy)) {
 	case "hot":
-		hotRows, e := r.dao.ListHomeByHot(ctx, postdao.ListHomeByHotParams{
+		hotRows, e := r.dao.ListHomeByHot(ctx, post.ListHomeByHotParams{
 			Limit:  limit,
 			Offset: offset,
 		})
-		rows = make([]postdao.ListHomeByCtimeRow, len(hotRows))
+		rows = make([]post.ListHomeByCtimeRow, len(hotRows))
 		for i := range hotRows {
-			rows[i] = postdao.ListHomeByCtimeRow(hotRows[i])
+			rows[i] = post.ListHomeByCtimeRow(hotRows[i])
 		}
 		err = e
 	case "random":
 		seed := time.Now().Format("2006-01-02")
-		rndRows, e := r.dao.ListHomeByRandom(ctx, postdao.ListHomeByRandomParams{
+		rndRows, e := r.dao.ListHomeByRandom(ctx, post.ListHomeByRandomParams{
 			Column1: seed,
 			Limit:   limit,
 			Offset:  offset,
 		})
-		rows = make([]postdao.ListHomeByCtimeRow, len(rndRows))
+		rows = make([]post.ListHomeByCtimeRow, len(rndRows))
 		for i := range rndRows {
-			rows[i] = postdao.ListHomeByCtimeRow(rndRows[i])
+			rows[i] = post.ListHomeByCtimeRow(rndRows[i])
 		}
 		err = e
 	default:
-		rows, err = r.dao.ListHomeByCtime(ctx, postdao.ListHomeByCtimeParams{
+		rows, err = r.dao.ListHomeByCtime(ctx, post.ListHomeByCtimeParams{
 			Limit:  limit,
 			Offset: offset,
 		})
@@ -211,22 +211,22 @@ func (r *PostRepo) ListByTag(ctx context.Context, tagID string, page, pageSize i
 	limit := int32(pageSize + 1)
 	offset := int32((page - 1) * pageSize)
 	var (
-		rows []postdao.ListPostsByTagRow
+		rows []post.ListPostsByTagRow
 		err  error
 	)
 	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
-		hotRows, e := r.dao.ListPostsByTagHot(ctx, postdao.ListPostsByTagHotParams{
+		hotRows, e := r.dao.ListPostsByTagHot(ctx, post.ListPostsByTagHotParams{
 			TagID:  tg,
 			Limit:  limit,
 			Offset: offset,
 		})
-		rows = make([]postdao.ListPostsByTagRow, len(hotRows))
+		rows = make([]post.ListPostsByTagRow, len(hotRows))
 		for i := range hotRows {
-			rows[i] = postdao.ListPostsByTagRow(hotRows[i])
+			rows[i] = post.ListPostsByTagRow(hotRows[i])
 		}
 		err = e
 	} else {
-		rows, err = r.dao.ListPostsByTag(ctx, postdao.ListPostsByTagParams{
+		rows, err = r.dao.ListPostsByTag(ctx, post.ListPostsByTagParams{
 			TagID:  tg,
 			Status: "published",
 			Limit:  limit,
@@ -267,7 +267,7 @@ func (r *PostRepo) Search(ctx context.Context, keyword, tagID, strategy string, 
 			return nil, false, ErrParamsType
 		}
 		if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
-			rows, e := r.dao.SearchPostsByTitleAndTagHot(ctx, postdao.SearchPostsByTitleAndTagHotParams{
+			rows, e := r.dao.SearchPostsByTitleAndTagHot(ctx, post.SearchPostsByTitleAndTagHotParams{
 				Title:  kw,
 				TagID:  tg,
 				Limit:  limit,
@@ -287,7 +287,7 @@ func (r *PostRepo) Search(ctx context.Context, keyword, tagID, strategy string, 
 			}
 			hasMore = int32(len(rows)) >= limit
 		} else {
-			rows, e := r.dao.SearchPostsByTitleAndTagCtime(ctx, postdao.SearchPostsByTitleAndTagCtimeParams{
+			rows, e := r.dao.SearchPostsByTitleAndTagCtime(ctx, post.SearchPostsByTitleAndTagCtimeParams{
 				Title:  kw,
 				TagID:  tg,
 				Limit:  limit,
@@ -309,7 +309,7 @@ func (r *PostRepo) Search(ctx context.Context, keyword, tagID, strategy string, 
 		}
 	} else {
 		if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
-			rows, e := r.dao.SearchPostsByTitleHot(ctx, postdao.SearchPostsByTitleHotParams{
+			rows, e := r.dao.SearchPostsByTitleHot(ctx, post.SearchPostsByTitleHotParams{
 				Title:  kw,
 				Limit:  limit,
 				Offset: offset,
@@ -328,7 +328,7 @@ func (r *PostRepo) Search(ctx context.Context, keyword, tagID, strategy string, 
 			}
 			hasMore = int32(len(rows)) >= limit
 		} else {
-			rows, e := r.dao.SearchPosts(ctx, postdao.SearchPostsParams{
+			rows, e := r.dao.SearchPosts(ctx, post.SearchPostsParams{
 				Title:  kw,
 				Status: "published",
 				Limit:  limit,
@@ -365,21 +365,21 @@ func (r *PostRepo) ListByAuthor(ctx context.Context, authorID string, page, page
 	offset := int32((page - 1) * pageSize)
 	var (
 		err  error
-		rows []postdao.ListPostsByAuthorRow
+		rows []post.ListPostsByAuthorRow
 	)
 	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
-		hotRows, e := r.dao.ListPostsByAuthorHot(ctx, postdao.ListPostsByAuthorHotParams{
+		hotRows, e := r.dao.ListPostsByAuthorHot(ctx, post.ListPostsByAuthorHotParams{
 			AuthorID: aid,
 			Limit:    limit,
 			Offset:   offset,
 		})
-		rows = make([]postdao.ListPostsByAuthorRow, len(hotRows))
+		rows = make([]post.ListPostsByAuthorRow, len(hotRows))
 		for i := range hotRows {
-			rows[i] = postdao.ListPostsByAuthorRow(hotRows[i])
+			rows[i] = post.ListPostsByAuthorRow(hotRows[i])
 		}
 		err = e
 	} else {
-		rows, err = r.dao.ListPostsByAuthor(ctx, postdao.ListPostsByAuthorParams{
+		rows, err = r.dao.ListPostsByAuthor(ctx, post.ListPostsByAuthorParams{
 			AuthorID: aid,
 			Limit:    limit,
 			Offset:   offset,
@@ -411,7 +411,7 @@ func (r *PostRepo) ListDraftsByAuthor(ctx context.Context, authorID string, page
 	}
 	limit := int32(pageSize + 1)
 	offset := int32((page - 1) * pageSize)
-	rows, err := r.dao.ListDraftsByAuthor(ctx, postdao.ListDraftsByAuthorParams{
+	rows, err := r.dao.ListDraftsByAuthor(ctx, post.ListDraftsByAuthorParams{
 		AuthorID: aid,
 		Limit:    limit,
 		Offset:   offset,
@@ -447,7 +447,7 @@ func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, cont
 		return err
 	}
 	qtx := r.dao.WithTx(tx)
-	err = qtx.CreatePost(ctx, postdao.CreatePostParams{
+	err = qtx.CreatePost(ctx, post.CreatePostParams{
 		PostID:   pid,
 		AuthorID: aid,
 		Title:    title,
@@ -479,7 +479,7 @@ func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, cont
 		if err := tg.Scan(tid); err != nil {
 			continue
 		}
-		if err := qtx.AddPostTag(ctx, postdao.AddPostTagParams{
+		if err := qtx.AddPostTag(ctx, post.AddPostTagParams{
 			PostID: pid,
 			TagID:  tg,
 		}); err != nil {
@@ -499,16 +499,16 @@ func (r *PostRepo) Publish(ctx context.Context, postID, userID string) error {
 	if err := uid.Scan(userID); err != nil {
 		return err
 	}
-	cmd, err := global.DB.Exec(ctx, `
-		UPDATE "post"
-		SET status = 'published', utime = $3
-		WHERE post_id = $1 AND author_id = $2 AND status = 'draft'
-	`, pid, uid, time.Now().UnixMilli())
+	count, err := r.dao.PublishPost(ctx, post.PublishPostParams{
+		PostID:   pid,
+		AuthorID: uid,
+		Utime:    time.Now().UnixMilli(),
+	})
 	if err != nil {
 		global.Log.Error(err)
 		return ErrDefault
 	}
-	if cmd.RowsAffected() == 0 {
+	if count == 0 {
 		return ErrPostNotDraft
 	}
 	return nil

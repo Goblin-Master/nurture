@@ -24,6 +24,6 @@ sql:
       - "../../deploy/schema/baby.sql"
     gen:
       go:
-        package: "postdao"
-        out: "postdao"
+        package: "post"
+        out: "post"
         sql_package: "pgx/v5"
