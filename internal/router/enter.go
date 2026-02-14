@@ -190,6 +190,50 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.BindUriMiddleware[dto.PublishPostReq],
 			postHandler.Publish,
 		)
+		// 创建评论
+		rg.POST("/:post_id/comments",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.PublishPostReq],
+			middleware.BindJsonMiddleware[dto.CreateCommentReq],
+			postHandler.CreateComment,
+		)
+		// 一级评论列表
+		rg.GET("/:post_id/comments",
+			middleware.BindUriMiddleware[dto.PostDetailReq],
+			middleware.BindQueryMiddleware[dto.CommentListReq],
+			postHandler.ListComments,
+		)
+		// 子评论列表
+		rg.GET("/:post_id/comments/:comment_id/replies",
+			middleware.BindUriMiddleware[dto.CommentRepliesReq],
+			middleware.BindQueryMiddleware[dto.CommentListReq],
+			postHandler.ListReplies,
+		)
+		// 删除评论（软删除，仅作者）
+		rg.DELETE("/comments/:comment_id",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.CommentDeleteReq],
+			postHandler.DeleteComment,
+		)
+		// 修改评论（仅作者）
+		rg.PUT("/comments/:comment_id",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.CommentUpdateReq],
+			middleware.BindJsonMiddleware[dto.UpdateCommentReq],
+			postHandler.UpdateComment,
+		)
+		// 点赞评论
+		rg.POST("/comments/:comment_id/like",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.CommentLikeReq],
+			postHandler.LikeComment,
+		)
+		// 取消点赞评论
+		rg.DELETE("/comments/:comment_id/like",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.CommentLikeReq],
+			postHandler.UnlikeComment,
+		)
 	})
 
 	// WebSocket 路由
