@@ -3,7 +3,7 @@
 //   sqlc v1.30.0
 // source: post.sql
 
-package postdao
+package post
 
 import (
 	"context"
@@ -1025,6 +1025,26 @@ func (q *Queries) ListPostsByTagHot(ctx context.Context, arg ListPostsByTagHotPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const publishPost = `-- name: PublishPost :execrows
+UPDATE "post"
+SET status = 'published', utime = $3
+WHERE post_id = $1 AND author_id = $2 AND status = 'draft'
+`
+
+type PublishPostParams struct {
+	PostID   pgtype.UUID
+	AuthorID pgtype.UUID
+	Utime    int64
+}
+
+func (q *Queries) PublishPost(ctx context.Context, arg PublishPostParams) (int64, error) {
+	result, err := q.db.Exec(ctx, publishPost, arg.PostID, arg.AuthorID, arg.Utime)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const searchPosts = `-- name: SearchPosts :many

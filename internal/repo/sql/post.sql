@@ -435,3 +435,8 @@ LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.title ILIKE $1 AND pt2.tag_id = $2 AND p.status = 'published'
 ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $3 OFFSET $4;
+
+-- name: PublishPost :execrows
+UPDATE "post"
+SET status = 'published', utime = $3
+WHERE post_id = $1 AND author_id = $2 AND status = 'draft';

@@ -23,7 +23,7 @@ type IBabyLogic interface {
 }
 
 type BabyLogic struct {
-	babyRepo repo.IBabyRepo
+	babyRepo *repo.BabyRepo
 	userRepo *repo.UserRepo
 }
 

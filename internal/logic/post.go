@@ -26,7 +26,7 @@ type IPostLogic interface {
 }
 
 type PostLogic struct {
-	postRepo repo.IPostRepo
+	postRepo *repo.PostRepo
 }
 
 func NewPostLogic() *PostLogic {
