@@ -112,6 +112,13 @@ func GetUserID(c *gin.Context) string {
 			return user_id
 		}
 	}
+	auth := c.GetHeader("Authorization")
+	if auth != "" {
+		token := strings.TrimPrefix(auth, "Bearer ")
+		if claims, err := ParseTokenString(token); err == nil {
+			return claims.UserID
+		}
+	}
 	return ""
 }
 

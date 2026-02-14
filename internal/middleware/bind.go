@@ -2,9 +2,15 @@ package middleware
 
 import (
 	"nurture/internal/pkg/response"
+	"reflect"
 
 	"github.com/gin-gonic/gin"
 )
+
+func typeKey[T any]() string {
+	var v T
+	return "request:" + reflect.TypeOf(v).String()
+}
 
 func BindJsonMiddleware[T any](c *gin.Context) {
 	var cr T
@@ -15,6 +21,7 @@ func BindJsonMiddleware[T any](c *gin.Context) {
 		return
 	}
 	c.Set("request", cr)
+	c.Set(typeKey[T](), cr)
 }
 func BindQueryMiddleware[T any](c *gin.Context) {
 	var cr T
@@ -25,6 +32,7 @@ func BindQueryMiddleware[T any](c *gin.Context) {
 		return
 	}
 	c.Set("request", cr)
+	c.Set(typeKey[T](), cr)
 }
 func BindUriMiddleware[T any](c *gin.Context) {
 	var cr T
@@ -35,7 +43,11 @@ func BindUriMiddleware[T any](c *gin.Context) {
 		return
 	}
 	c.Set("request", cr)
+	c.Set(typeKey[T](), cr)
 }
 func GetBind[T any](c *gin.Context) T {
+	if v, ok := c.Get(typeKey[T]()); ok {
+		return v.(T)
+	}
 	return c.MustGet("request").(T)
 }
