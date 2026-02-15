@@ -21,9 +21,14 @@ type IUserRepo interface {
 	ResetPassword(ctx context.Context, email, newPassword string) error
 	UpdateAvatarByID(ctx context.Context, userID, url string) error
 	UpdateAdditionByID(ctx context.Context, userID string, occupation, phone, province, city, avatar *string, birthday *int64) error
+	GetMyProfile(ctx context.Context, userID string) (user.GetMyProfileRow, error)
 	GetPartnerByUserID(ctx context.Context, userID string) (string, error)
 	BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, motherUserID string) error
 	UpdateGender(ctx context.Context, userID, gender string) error
+	FollowUser(ctx context.Context, followerID, followeeID string) error
+	UnfollowUser(ctx context.Context, followerID, followeeID string) error
+	ListFollowing(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowingByUserIDRow, bool, error)
+	ListFollowers(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowersByUserIDRow, bool, error)
 }
 type UserRepo struct {
 	userDao *user.Queries
@@ -50,6 +55,112 @@ func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, passwo
 		return user.UserBase{}, ErrDefault
 	}
 	return u, nil
+}
+
+func (ur *UserRepo) GetMyProfile(ctx context.Context, userID string) (user.GetMyProfileRow, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return user.GetMyProfileRow{}, err
+	}
+	p, err := ur.userDao.GetMyProfile(ctx, uid)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return user.GetMyProfileRow{}, ErrUserNotExist
+		}
+		global.Log.Error(err)
+		return user.GetMyProfileRow{}, ErrDefault
+	}
+	return p, nil
+}
+
+func (ur *UserRepo) FollowUser(ctx context.Context, followerID, followeeID string) error {
+	var fUID, eUID pgtype.UUID
+	if err := fUID.Scan(followerID); err != nil {
+		return err
+	}
+	if err := eUID.Scan(followeeID); err != nil {
+		return err
+	}
+	err := ur.userDao.CreateFollow(ctx, user.CreateFollowParams{
+		Follower: fUID,
+		Followee: eUID,
+		Ctime:    time.Now().UnixMilli(),
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	return nil
+}
+
+func (ur *UserRepo) UnfollowUser(ctx context.Context, followerID, followeeID string) error {
+	var fUID, eUID pgtype.UUID
+	if err := fUID.Scan(followerID); err != nil {
+		return err
+	}
+	if err := eUID.Scan(followeeID); err != nil {
+		return err
+	}
+	n, err := ur.userDao.DeleteFollow(ctx, user.DeleteFollowParams{
+		Follower: fUID,
+		Followee: eUID,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	if n == 0 {
+		return nil
+	}
+	return nil
+}
+
+func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowingByUserIDRow, bool, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return nil, false, err
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	rows, err := ur.userDao.ListFollowingByUserID(ctx, user.ListFollowingByUserIDParams{
+		Follower: uid,
+		Limit:    limit,
+		Offset:   offset,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	hasMore := false
+	if len(rows) > pageSize {
+		hasMore = true
+		rows = rows[:pageSize]
+	}
+	return rows, hasMore, nil
+}
+
+func (ur *UserRepo) ListFollowers(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowersByUserIDRow, bool, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return nil, false, err
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	rows, err := ur.userDao.ListFollowersByUserID(ctx, user.ListFollowersByUserIDParams{
+		Followee: uid,
+		Limit:    limit,
+		Offset:   offset,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	hasMore := false
+	if len(rows) > pageSize {
+		hasMore = true
+		rows = rows[:pageSize]
+	}
+	return rows, hasMore, nil
 }
 
 func (ur *UserRepo) LoginWithEmail(ctx context.Context, email string) (user.UserBase, error) {

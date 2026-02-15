@@ -92,3 +92,41 @@ func (uh *UserHandler) GetPartner(c *gin.Context) {
 	resp, err := uh.userLogic.GetPartner(c.Request.Context(), userID)
 	response.Response(c, resp, err)
 }
+
+func (uh *UserHandler) MyProfile(c *gin.Context) {
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.MyProfile(c.Request.Context(), userID)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) Follow(c *gin.Context) {
+	uri := middleware.GetBind[dto.FollowReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.Follow(c.Request.Context(), userID, uri)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) Unfollow(c *gin.Context) {
+	uri := middleware.GetBind[dto.FollowReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.Unfollow(c.Request.Context(), userID, uri)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) ListFollowing(c *gin.Context) {
+	q := middleware.GetBind[dto.FollowingListReq](c)
+	global.Log.Info(q)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.ListFollowing(c.Request.Context(), userID, q)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) ListFollowers(c *gin.Context) {
+	q := middleware.GetBind[dto.FollowersListReq](c)
+	global.Log.Info(q)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.ListFollowers(c.Request.Context(), userID, q)
+	response.Response(c, resp, err)
+}

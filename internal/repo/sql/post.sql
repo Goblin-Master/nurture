@@ -314,6 +314,36 @@ WHERE p.author_id = $1 AND p.status = 'draft'
 ORDER BY p.ctime DESC
 LIMIT $2 OFFSET $3;
 
+-- name: ListMilestonesByAuthor :many
+SELECT
+  p.post_id::text AS post_id,
+  p.author_id::text AS author_id,
+  COALESCE(ua.username, '') AS author_name,
+  COALESCE(ua.avatar, '') AS author_avatar,
+  COALESCE(ua.province, '') AS author_province,
+  COALESCE(ua.city, '') AS author_city,
+  p.title, p.content, p.status,
+  p.like_count, p.dislike_count, p.collect_count, p.comment_count,
+  p.cover, p.ctime, p.utime,
+  COALESCE((
+    SELECT b.birthday
+    FROM "baby" b
+    WHERE b.user_id = p.author_id
+    ORDER BY b.ctime DESC
+    LIMIT 1
+  ), 0) AS birthday,
+  COALESCE((
+    SELECT array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL)
+    FROM "post_tag" pt2
+    JOIN "tag" t ON t.tag_id = pt2.tag_id
+    WHERE pt2.post_id = p.post_id
+  ), '{}') AS tags
+FROM "post" p
+LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
+WHERE p.author_id = $1 AND p.status = 'milestone'
+ORDER BY p.ctime DESC
+LIMIT $2 OFFSET $3;
+
 -- name: SearchPosts :many
 SELECT
   p.post_id::text AS post_id,

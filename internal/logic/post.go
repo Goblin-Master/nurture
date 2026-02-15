@@ -20,6 +20,7 @@ type IPostLogic interface {
 	Search(ctx context.Context, req dto.PostSearchListReq) (dto.PostListResp, error)
 	ListMyPosts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
 	ListMyDrafts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
+	ListMyMilestones(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
 	Detail(ctx context.Context, req dto.PostDetailReq) (dto.PostDetailResp, error)
 	NewPost(ctx context.Context, userID string, req dto.CreatePostReq) (dto.CreatePostResp, error)
 	Publish(ctx context.Context, userID string, req dto.PublishPostReq) (dto.PublishPostResp, error)
@@ -362,6 +363,55 @@ func (l *PostLogic) ListMyDrafts(ctx context.Context, userID string, req dto.Pos
 		req.PageSize = 10
 	}
 	items, hasMore, err := l.postRepo.ListDraftsByAuthor(ctx, userID, req.Page, req.PageSize)
+	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Items = make([]dto.PostItem, 0, len(items))
+	for _, v := range items {
+		y, m, ageText := calcAge(v.Birthday, time.Now())
+		preview := makePreview(v.Content, 15)
+		resp.Items = append(resp.Items, dto.PostItem{
+			PostID:         v.PostID,
+			AuthorID:       v.AuthorID,
+			AuthorName:     v.AuthorName,
+			AuthorAvatar:   v.AuthorAvatar,
+			AuthorProvince: v.AuthorProvince,
+			AuthorCity:     v.AuthorCity,
+			Title:          v.Title,
+			Content:        v.Content,
+			ContentPreview: preview,
+			Status:         v.Status,
+			LikeCount:      v.LikeCount,
+			DislikeCount:   v.DislikeCount,
+			CollectCount:   v.CollectCount,
+			CommentCount:   v.CommentCount,
+			Ctime:          v.Ctime,
+			Utime:          v.Utime,
+			Tags:           v.Tags,
+			BabyAgeYear:    y,
+			BabyAgeMonth:   m,
+			BabyAgeText:    ageText,
+		})
+	}
+	resp.Page = req.Page
+	resp.PageSize = req.PageSize
+	resp.HasMore = hasMore
+	return resp, nil
+}
+
+func (l *PostLogic) ListMyMilestones(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error) {
+	var resp dto.PostListResp
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10
+	}
+	items, hasMore, err := l.postRepo.ListMilestonesByAuthor(ctx, userID, req.Page, req.PageSize)
 	if err != nil {
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType

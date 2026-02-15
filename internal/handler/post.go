@@ -150,3 +150,12 @@ func (h *PostHandler) ListMyDrafts(c *gin.Context) {
 	global.Log.Info(resp)
 	response.Response(c, resp, err)
 }
+
+func (h *PostHandler) ListMyMilestones(c *gin.Context) {
+	cr := middleware.GetBind[dto.PostMyListReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.ListMyMilestones(c.Request.Context(), userID, cr)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}

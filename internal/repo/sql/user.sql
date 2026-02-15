@@ -31,6 +31,61 @@ UPDATE "user_addition"
 SET avatar = $2
 WHERE user_id = $1;
 
+-- name: GetMyProfile :one
+SELECT 
+  ub.user_id::text AS user_id,
+  ub.account,
+  ub.email,
+  ub.username,
+  ub.gender,
+  ua.avatar,
+  ua.phone,
+  ua.occupation,
+  ua.birthday,
+  ua.province,
+  ua.city,
+  ub.ctime,
+  ub.utime
+FROM "user_base" ub
+JOIN "user_addition" ua ON ua.user_id = ub.user_id
+WHERE ub.user_id = $1
+LIMIT 1;
+
+-- name: CreateFollow :exec
+INSERT INTO "user_follow"(follower, followee, ctime, utime)
+VALUES ($1, $2, $3, $3)
+ON CONFLICT (follower, followee) DO NOTHING;
+
+-- name: DeleteFollow :execrows
+DELETE FROM "user_follow"
+WHERE follower = $1 AND followee = $2;
+
+-- name: ListFollowingByUserID :many
+SELECT 
+  ub.user_id::text AS user_id,
+  ub.username,
+  ua.avatar,
+  uf.ctime AS follow_time
+FROM "user_follow" uf
+JOIN "user_base" ub ON ub.user_id = uf.followee
+JOIN "user_addition" ua ON ua.user_id = uf.followee
+WHERE uf.follower = $1
+ORDER BY uf.ctime DESC
+LIMIT $2 OFFSET $3;
+
+-- name: ListFollowersByUserID :many
+SELECT 
+  ub.user_id::text AS user_id,
+  ub.username,
+  ua.avatar,
+  uf.ctime AS follow_time
+FROM "user_follow" uf
+JOIN "user_base" ub ON ub.user_id = uf.follower
+JOIN "user_addition" ua ON ua.user_id = uf.follower
+WHERE uf.followee = $1
+ORDER BY uf.ctime DESC
+LIMIT $2 OFFSET $3;
+
 -- name: UpdateGenderByUserID :execrows
 UPDATE "user_addition"
 SET gender = $2, utime = $3

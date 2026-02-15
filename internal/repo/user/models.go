@@ -60,6 +60,20 @@ type UserBase struct {
 	Utime int64
 }
 
+// 用户关注关系表
+type UserFollow struct {
+	// 主键ID
+	ID int64
+	// 关注者用户UUID
+	Follower pgtype.UUID
+	// 被关注者用户UUID
+	Followee pgtype.UUID
+	// 关注时间戳
+	Ctime int64
+	// 更新时间戳
+	Utime int64
+}
+
 // 用户另一半关系表（父/母）
 type UserPartner struct {
 	// 主键ID
