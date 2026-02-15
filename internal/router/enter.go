@@ -83,9 +83,31 @@ func registerRoutes(routeManager *manager.RouteManager) {
 		rg.POST("/resetPassword", middleware.BindJsonMiddleware[dto.ResetPasswordReq], userHandler.ResetPassword)
 		rg.PUT("/profile", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateUserAdditionReq], userHandler.UpdateProfile)
 		rg.PUT("/avatar", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateAvatarReq], userHandler.UpdateAvatar)
+		rg.GET("/me", middleware.Authentication(jwtx.COMMON_USER), userHandler.MyProfile)
 		// 另一半关系
 		rg.POST("/partner/bind", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.PartnerBindReq], userHandler.BindPartner)
 		rg.GET("/partner", middleware.Authentication(jwtx.COMMON_USER), userHandler.GetPartner)
+		// 关注关系
+		rg.POST("/follow/:target_user_id",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.FollowReq],
+			userHandler.Follow,
+		)
+		rg.DELETE("/follow/:target_user_id",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.FollowReq],
+			userHandler.Unfollow,
+		)
+		rg.GET("/following",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.FollowingListReq],
+			userHandler.ListFollowing,
+		)
+		rg.GET("/followers",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.FollowersListReq],
+			userHandler.ListFollowers,
+		)
 	})
 
 	// 宝宝模块路由
@@ -183,6 +205,12 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindQueryMiddleware[dto.PostMyListReq],
 			postHandler.ListMyDrafts,
+		)
+		// 我的里程碑列表（大事记）
+		rg.GET("/mine/milestone",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.PostMyListReq],
+			postHandler.ListMyMilestones,
 		)
 		// 发布草稿
 		rg.POST("/:post_id/publish",

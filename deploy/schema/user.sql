@@ -75,6 +75,24 @@ COMMENT ON COLUMN "user_partner".mother IS '母亲用户UUID';
 COMMENT ON COLUMN "user_partner".ctime IS '创建时间戳';
 COMMENT ON COLUMN "user_partner".utime IS '更新时间戳';
 
+-- 6. 用户关注关系表
+CREATE TABLE IF NOT EXISTS "user_follow" (
+  id        BIGSERIAL PRIMARY KEY,
+  follower  UUID NOT NULL,
+  followee  UUID NOT NULL,
+  ctime     BIGINT NOT NULL,
+  utime     BIGINT NOT NULL,
+  CONSTRAINT ck_follow_users CHECK (follower <> followee),
+  CONSTRAINT uq_follow UNIQUE (follower, followee)
+);
+
+COMMENT ON TABLE "user_follow" IS '用户关注关系表';
+COMMENT ON COLUMN "user_follow".id IS '主键ID';
+COMMENT ON COLUMN "user_follow".follower IS '关注者用户UUID';
+COMMENT ON COLUMN "user_follow".followee IS '被关注者用户UUID';
+COMMENT ON COLUMN "user_follow".ctime IS '关注时间戳';
+COMMENT ON COLUMN "user_follow".utime IS '更新时间戳';
+
 -- 5. 插入默认管理员账号（同时写入基础与扩展）
 WITH u AS (
   INSERT INTO "user_base" (user_id, ctime, utime, account, password, email, username, gender, role)

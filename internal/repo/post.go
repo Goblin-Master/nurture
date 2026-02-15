@@ -39,6 +39,7 @@ type IPostRepo interface {
 	Search(ctx context.Context, keyword, tagID, strategy string, page, pageSize int) ([]PostRow, bool, error)
 	ListByAuthor(ctx context.Context, authorID string, page, pageSize int, strategy string) ([]PostRow, bool, error)
 	ListDraftsByAuthor(ctx context.Context, authorID string, page, pageSize int) ([]PostRow, bool, error)
+	ListMilestonesByAuthor(ctx context.Context, authorID string, page, pageSize int) ([]PostRow, bool, error)
 	GetDetail(ctx context.Context, postID string) (PostRow, error)
 	CreatePost(ctx context.Context, postID, authorID, title, content, status string, ctime, utime int64, tagIDs []string) error
 	Publish(ctx context.Context, postID, userID string) error
@@ -654,6 +655,37 @@ func (r *PostRepo) ListDraftsByAuthor(ctx context.Context, authorID string, page
 	limit := int32(pageSize + 1)
 	offset := int32((page - 1) * pageSize)
 	rows, err := r.dao.ListDraftsByAuthor(ctx, post.ListDraftsByAuthorParams{
+		AuthorID: aid,
+		Limit:    limit,
+		Offset:   offset,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	res := make([]PostRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, toPostRow(
+			v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+			v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+			v.Ctime, v.Utime, v.Birthday, v.Tags,
+		))
+	}
+	hasMore := int32(len(rows)) >= limit
+	return res, hasMore, nil
+}
+
+func (r *PostRepo) ListMilestonesByAuthor(ctx context.Context, authorID string, page, pageSize int) ([]PostRow, bool, error) {
+	var aid pgtype.UUID
+	if err := aid.Scan(authorID); err != nil {
+		return nil, false, ErrParamsType
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	rows, err := r.dao.ListMilestonesByAuthor(ctx, post.ListMilestonesByAuthorParams{
 		AuthorID: aid,
 		Limit:    limit,
 		Offset:   offset,

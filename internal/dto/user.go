@@ -81,4 +81,56 @@ type (
 	PartnerGetResp struct {
 		PartnerID string `json:"partner_id"`
 	}
+	MyProfileResp struct {
+		UserID     string `json:"user_id"`
+		Account    string `json:"account"`
+		Email      string `json:"email"`
+		Username   string `json:"username"`
+		Gender     string `json:"gender"`
+		Avatar     string `json:"avatar"`
+		Phone      string `json:"phone"`
+		Occupation string `json:"occupation"`
+		Birthday   int64  `json:"birthday"`
+		Province   string `json:"province"`
+		City       string `json:"city"`
+		Ctime      int64  `json:"ctime"`
+		Utime      int64  `json:"utime"`
+		PartnerID  string `json:"partner_id"`
+	}
+)
+
+type (
+	FollowReq struct {
+		TargetUserID string `uri:"target_user_id"`
+	}
+	FollowResp struct {
+		Message string `json:"message"`
+	}
+	FollowingListReq struct {
+		UserID   string `form:"user_id"`
+		Page     int    `form:"page"`
+		PageSize int    `form:"page_size"`
+	}
+	FollowingUserItem struct {
+		UserID     string `json:"user_id"`
+		Username   string `json:"username"`
+		Avatar     string `json:"avatar"`
+		FollowTime int64  `json:"follow_time"`
+	}
+	FollowingListResp struct {
+		List    []FollowingUserItem `json:"list"`
+		HasMore bool                `json:"has_more"`
+	}
+)
+
+type (
+	FollowersListReq struct {
+		UserID   string `form:"user_id"`
+		Page     int    `form:"page"`
+		PageSize int    `form:"page_size"`
+	}
+	FollowersListResp struct {
+		List    []FollowingUserItem `json:"list"`
+		HasMore bool                `json:"has_more"`
+	}
 )

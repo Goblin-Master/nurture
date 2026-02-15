@@ -11,6 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createFollow = `-- name: CreateFollow :exec
+INSERT INTO "user_follow"(follower, followee, ctime, utime)
+VALUES ($1, $2, $3, $3)
+ON CONFLICT (follower, followee) DO NOTHING
+`
+
+type CreateFollowParams struct {
+	Follower pgtype.UUID
+	Followee pgtype.UUID
+	Ctime    int64
+}
+
+func (q *Queries) CreateFollow(ctx context.Context, arg CreateFollowParams) error {
+	_, err := q.db.Exec(ctx, createFollow, arg.Follower, arg.Followee, arg.Ctime)
+	return err
+}
+
 const createPartner = `-- name: CreatePartner :exec
 INSERT INTO "user_partner"(father, mother, ctime, utime)
 VALUES ($1, $2, $3, $3)
@@ -67,6 +84,82 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Gender,
 	)
 	return err
+}
+
+const deleteFollow = `-- name: DeleteFollow :execrows
+DELETE FROM "user_follow"
+WHERE follower = $1 AND followee = $2
+`
+
+type DeleteFollowParams struct {
+	Follower pgtype.UUID
+	Followee pgtype.UUID
+}
+
+func (q *Queries) DeleteFollow(ctx context.Context, arg DeleteFollowParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteFollow, arg.Follower, arg.Followee)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getMyProfile = `-- name: GetMyProfile :one
+SELECT 
+  ub.user_id::text AS user_id,
+  ub.account,
+  ub.email,
+  ub.username,
+  ub.gender,
+  ua.avatar,
+  ua.phone,
+  ua.occupation,
+  ua.birthday,
+  ua.province,
+  ua.city,
+  ub.ctime,
+  ub.utime
+FROM "user_base" ub
+JOIN "user_addition" ua ON ua.user_id = ub.user_id
+WHERE ub.user_id = $1
+LIMIT 1
+`
+
+type GetMyProfileRow struct {
+	UserID     string
+	Account    string
+	Email      string
+	Username   string
+	Gender     string
+	Avatar     string
+	Phone      string
+	Occupation string
+	Birthday   int64
+	Province   string
+	City       string
+	Ctime      int64
+	Utime      int64
+}
+
+func (q *Queries) GetMyProfile(ctx context.Context, userID pgtype.UUID) (GetMyProfileRow, error) {
+	row := q.db.QueryRow(ctx, getMyProfile, userID)
+	var i GetMyProfileRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Account,
+		&i.Email,
+		&i.Username,
+		&i.Gender,
+		&i.Avatar,
+		&i.Phone,
+		&i.Occupation,
+		&i.Birthday,
+		&i.Province,
+		&i.City,
+		&i.Ctime,
+		&i.Utime,
+	)
+	return i, err
 }
 
 const getPartnerByUserID = `-- name: GetPartnerByUserID :one
@@ -159,6 +252,110 @@ func (q *Queries) GetUserByID(ctx context.Context, userID pgtype.UUID) (UserBase
 		&i.Utime,
 	)
 	return i, err
+}
+
+const listFollowersByUserID = `-- name: ListFollowersByUserID :many
+SELECT 
+  ub.user_id::text AS user_id,
+  ub.username,
+  ua.avatar,
+  uf.ctime AS follow_time
+FROM "user_follow" uf
+JOIN "user_base" ub ON ub.user_id = uf.follower
+JOIN "user_addition" ua ON ua.user_id = uf.follower
+WHERE uf.followee = $1
+ORDER BY uf.ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListFollowersByUserIDParams struct {
+	Followee pgtype.UUID
+	Limit    int32
+	Offset   int32
+}
+
+type ListFollowersByUserIDRow struct {
+	UserID     string
+	Username   string
+	Avatar     string
+	FollowTime int64
+}
+
+func (q *Queries) ListFollowersByUserID(ctx context.Context, arg ListFollowersByUserIDParams) ([]ListFollowersByUserIDRow, error) {
+	rows, err := q.db.Query(ctx, listFollowersByUserID, arg.Followee, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFollowersByUserIDRow
+	for rows.Next() {
+		var i ListFollowersByUserIDRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.Avatar,
+			&i.FollowTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFollowingByUserID = `-- name: ListFollowingByUserID :many
+SELECT 
+  ub.user_id::text AS user_id,
+  ub.username,
+  ua.avatar,
+  uf.ctime AS follow_time
+FROM "user_follow" uf
+JOIN "user_base" ub ON ub.user_id = uf.followee
+JOIN "user_addition" ua ON ua.user_id = uf.followee
+WHERE uf.follower = $1
+ORDER BY uf.ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListFollowingByUserIDParams struct {
+	Follower pgtype.UUID
+	Limit    int32
+	Offset   int32
+}
+
+type ListFollowingByUserIDRow struct {
+	UserID     string
+	Username   string
+	Avatar     string
+	FollowTime int64
+}
+
+func (q *Queries) ListFollowingByUserID(ctx context.Context, arg ListFollowingByUserIDParams) ([]ListFollowingByUserIDRow, error) {
+	rows, err := q.db.Query(ctx, listFollowingByUserID, arg.Follower, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFollowingByUserIDRow
+	for rows.Next() {
+		var i ListFollowingByUserIDRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.Avatar,
+			&i.FollowTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateAvatarByUserID = `-- name: UpdateAvatarByUserID :execrows

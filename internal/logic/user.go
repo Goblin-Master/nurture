@@ -26,6 +26,11 @@ type IUserLogic interface {
 	UpdateAvatar(ctx context.Context, userID string, req dto.UpdateAvatarReq) (dto.UpdateAvatarResp, error)
 	BindPartner(ctx context.Context, userID string, req dto.PartnerBindReq) (dto.PartnerBindResp, error)
 	GetPartner(ctx context.Context, userID string) (dto.PartnerGetResp, error)
+	MyProfile(ctx context.Context, userID string) (dto.MyProfileResp, error)
+	Follow(ctx context.Context, userID string, uri dto.FollowReq) (dto.FollowResp, error)
+	Unfollow(ctx context.Context, userID string, uri dto.FollowReq) (dto.FollowResp, error)
+	ListFollowing(ctx context.Context, userID string, req dto.FollowingListReq) (dto.FollowingListResp, error)
+	ListFollowers(ctx context.Context, userID string, req dto.FollowersListReq) (dto.FollowersListResp, error)
 }
 type UserLogic struct {
 	userRepo *repo.UserRepo
@@ -299,5 +304,141 @@ func (ul *UserLogic) GetPartner(ctx context.Context, userID string) (dto.Partner
 		return resp, ErrDefault
 	}
 	resp.PartnerID = pid
+	return resp, nil
+}
+
+func (ul *UserLogic) MyProfile(ctx context.Context, userID string) (dto.MyProfileResp, error) {
+	var resp dto.MyProfileResp
+	row, err := ul.userRepo.GetMyProfile(ctx, userID)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.UserID = row.UserID
+	resp.Account = row.Account
+	resp.Email = row.Email
+	resp.Username = row.Username
+	resp.Gender = row.Gender
+	resp.Avatar = row.Avatar
+	resp.Phone = row.Phone
+	resp.Occupation = row.Occupation
+	resp.Birthday = row.Birthday
+	resp.Province = row.Province
+	resp.City = row.City
+	resp.Ctime = row.Ctime
+	resp.Utime = row.Utime
+	pid, err := ul.userRepo.GetPartnerByUserID(ctx, userID)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.PartnerID = pid
+	return resp, nil
+}
+
+func (ul *UserLogic) Follow(ctx context.Context, userID string, uri dto.FollowReq) (dto.FollowResp, error) {
+	var resp dto.FollowResp
+	target := uri.TargetUserID
+	if target == "" || target == userID {
+		return resp, ErrParamsType
+	}
+	_, err := ul.userRepo.GetUserByID(ctx, target)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	if err := ul.userRepo.FollowUser(ctx, userID, target); err != nil {
+		if errors.Is(err, repo.ErrDefault) {
+			global.Log.Error(err)
+			return resp, ErrDefault
+		}
+	}
+	resp.Message = "OK"
+	return resp, nil
+}
+
+func (ul *UserLogic) Unfollow(ctx context.Context, userID string, uri dto.FollowReq) (dto.FollowResp, error) {
+	var resp dto.FollowResp
+	target := uri.TargetUserID
+	if target == "" || target == userID {
+		return resp, ErrParamsType
+	}
+	if err := ul.userRepo.UnfollowUser(ctx, userID, target); err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Message = "OK"
+	return resp, nil
+}
+
+func (ul *UserLogic) ListFollowing(ctx context.Context, userID string, req dto.FollowingListReq) (dto.FollowingListResp, error) {
+	var resp dto.FollowingListResp
+	viewID := userID
+	if req.UserID != "" {
+		viewID = req.UserID
+	}
+	page := req.Page
+	pageSize := req.PageSize
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > 50 {
+		pageSize = 10
+	}
+	rows, hasMore, err := ul.userRepo.ListFollowing(ctx, viewID, page, pageSize)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	items := make([]dto.FollowingUserItem, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, dto.FollowingUserItem{
+			UserID:     r.UserID,
+			Username:   r.Username,
+			Avatar:     r.Avatar,
+			FollowTime: r.FollowTime,
+		})
+	}
+	resp.List = items
+	resp.HasMore = hasMore
+	return resp, nil
+}
+
+func (ul *UserLogic) ListFollowers(ctx context.Context, userID string, req dto.FollowersListReq) (dto.FollowersListResp, error) {
+	var resp dto.FollowersListResp
+	viewID := userID
+	if req.UserID != "" {
+		viewID = req.UserID
+	}
+	page := req.Page
+	pageSize := req.PageSize
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > 50 {
+		pageSize = 10
+	}
+	rows, hasMore, err := ul.userRepo.ListFollowers(ctx, viewID, page, pageSize)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	items := make([]dto.FollowingUserItem, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, dto.FollowingUserItem{
+			UserID:     r.UserID,
+			Username:   r.Username,
+			Avatar:     r.Avatar,
+			FollowTime: r.FollowTime,
+		})
+	}
+	resp.List = items
+	resp.HasMore = hasMore
 	return resp, nil
 }
