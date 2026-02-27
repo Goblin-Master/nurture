@@ -75,34 +75,49 @@ func registerRoutes(routeManager *manager.RouteManager) {
 
 	routeManager.RegisterUserRoutes(func(rg *gin.RouterGroup) {
 		userHandler := handler.NewUserHandler()
+		// 登录
 		rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
+		// 注册
 		rg.POST("/register", middleware.BindJsonMiddleware[dto.RegisterReq], userHandler.Register)
+		// 登录验证码
 		rg.POST("/code/login", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetLoginCode)
+		// 注册验证码
 		rg.POST("/code/register", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetRegisterCode)
+		// 重置密码验证码
 		rg.POST("/code/reset", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetResetCode)
+		// 重置密码
 		rg.POST("/resetPassword", middleware.BindJsonMiddleware[dto.ResetPasswordReq], userHandler.ResetPassword)
+		// 更新个人资料
 		rg.PUT("/profile", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateUserAdditionReq], userHandler.UpdateProfile)
+		// 更新头像
 		rg.PUT("/avatar", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateAvatarReq], userHandler.UpdateAvatar)
+		// 我的资料
 		rg.GET("/me", middleware.Authentication(jwtx.COMMON_USER), userHandler.MyProfile)
 		// 另一半关系
+		// 绑定另一半
 		rg.POST("/partner/bind", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.PartnerBindReq], userHandler.BindPartner)
+		// 获取另一半
 		rg.GET("/partner", middleware.Authentication(jwtx.COMMON_USER), userHandler.GetPartner)
 		// 关注关系
+		// 关注用户
 		rg.POST("/follow/:target_user_id",
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindUriMiddleware[dto.FollowReq],
 			userHandler.Follow,
 		)
+		// 取消关注
 		rg.DELETE("/follow/:target_user_id",
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindUriMiddleware[dto.FollowReq],
 			userHandler.Unfollow,
 		)
+		// 我的关注列表
 		rg.GET("/following",
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindQueryMiddleware[dto.FollowingListReq],
 			userHandler.ListFollowing,
 		)
+		// 我的粉丝列表
 		rg.GET("/followers",
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindQueryMiddleware[dto.FollowersListReq],
@@ -124,6 +139,105 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindJsonMiddleware[dto.NewBabyReq],
 			babyHandler.NewBaby,
+		)
+		// 新增成长记录
+		rg.POST("/growthRecords",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindJsonMiddleware[dto.CreateGrowthReq],
+			babyHandler.CreateGrowth,
+		)
+		// 指定日期成长记录
+		rg.GET("/growthRecord",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.GrowthAtReq],
+			babyHandler.GetGrowthAt,
+		)
+		// 成长曲线
+		rg.GET("/growthCurve",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.GrowthCurveReq],
+			babyHandler.GrowthCurve,
+		)
+		// 睡眠计时：开始
+		rg.POST("/:baby_id/daily/sleep/start",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.SleepStartUri],
+			babyHandler.SleepStart,
+		)
+		// 睡眠计时：结束
+		rg.POST("/:baby_id/daily/sleep/stop",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.SleepStopUri],
+			middleware.BindJsonMiddleware[dto.SleepStopReq],
+			babyHandler.SleepStop,
+		)
+		// 睡眠计时：当前活动
+		rg.GET("/:baby_id/daily/sleep/active",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.SleepActiveUri],
+			babyHandler.SleepActive,
+		)
+		// 睡眠计时：按日期查询
+		rg.GET("/:baby_id/daily/sleep/byDate",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.SleepListAtUri],
+			middleware.BindQueryMiddleware[dto.SleepListAtReq],
+			babyHandler.ListSleepAt,
+		)
+		// 喂养记录：创建
+		rg.POST("/:baby_id/daily/feeding",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.FeedingCreateUri],
+			middleware.BindJsonMiddleware[dto.FeedingCreateReq],
+			babyHandler.CreateFeeding,
+		)
+		// 喂养记录：更新
+		rg.PUT("/:baby_id/daily/feeding/:feeding_id",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.FeedingUpdateUri],
+			middleware.BindJsonMiddleware[dto.FeedingUpdateReq],
+			babyHandler.UpdateFeeding,
+		)
+		// 喂养记录：按日期查询
+		rg.GET("/:baby_id/daily/feeding/byDate",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.FeedingListAtUri],
+			middleware.BindQueryMiddleware[dto.FeedingListAtReq],
+			babyHandler.ListFeedingAt,
+		)
+		// 换尿布记录：创建/更新
+		rg.POST("/:baby_id/daily/diaper",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.DiaperCreateUri],
+			middleware.BindJsonMiddleware[dto.DiaperCreateReq],
+			babyHandler.CreateDiaper,
+		)
+		rg.PUT("/:baby_id/daily/diaper/:diaper_id",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.DiaperUpdateUri],
+			middleware.BindJsonMiddleware[dto.DiaperUpdateReq],
+			babyHandler.UpdateDiaper,
+		)
+		// 换尿布记录：按日期查询（仅当日一条）
+		rg.GET("/:baby_id/daily/diaper/byDate",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.DiaperGetAtUri],
+			middleware.BindQueryMiddleware[dto.DiaperGetAtReq],
+			babyHandler.GetDiaperAt,
+		)
+		// 换尿布记录：按日期查询（列表，升序）
+		rg.GET("/:baby_id/daily/diaper/byDate/list",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.DiaperListAtUri],
+			middleware.BindQueryMiddleware[dto.DiaperListAtReq],
+			babyHandler.ListDiaperAt,
+		)
+		// 日统计：按日期查询
+		rg.GET("/:baby_id/daily/stats/byDate",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.DailyStatsUri],
+			middleware.BindQueryMiddleware[dto.DailyStatsReq],
+			babyHandler.DailyStats,
 		)
 		// 宝宝详细页
 		rg.GET("/profile",
@@ -200,6 +314,12 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.BindQueryMiddleware[dto.PostMyListReq],
 			postHandler.ListMyPosts,
 		)
+		// 关注用户的帖子列表
+		rg.GET("/following",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.PostMyListReq],
+			postHandler.Following,
+		)
 		// 我的草稿列表
 		rg.GET("/mine/drafts",
 			middleware.Authentication(jwtx.COMMON_USER),
@@ -217,6 +337,13 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindUriMiddleware[dto.PublishPostReq],
 			postHandler.Publish,
+		)
+		// 更新草稿
+		rg.PUT("/:post_id",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.PostDetailReq],
+			middleware.BindJsonMiddleware[dto.UpdateDraftReq],
+			postHandler.UpdateDraft,
 		)
 		// 创建评论
 		rg.POST("/:post_id/comments",

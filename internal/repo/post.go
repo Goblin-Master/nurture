@@ -40,9 +40,11 @@ type IPostRepo interface {
 	ListByAuthor(ctx context.Context, authorID string, page, pageSize int, strategy string) ([]PostRow, bool, error)
 	ListDraftsByAuthor(ctx context.Context, authorID string, page, pageSize int) ([]PostRow, bool, error)
 	ListMilestonesByAuthor(ctx context.Context, authorID string, page, pageSize int) ([]PostRow, bool, error)
+	ListFollowing(ctx context.Context, userID string, page, pageSize int, strategy string) ([]PostRow, bool, error)
 	GetDetail(ctx context.Context, postID string) (PostRow, error)
 	CreatePost(ctx context.Context, postID, authorID, title, content, status string, ctime, utime int64, tagIDs []string) error
 	Publish(ctx context.Context, postID, userID string) error
+	UpdateDraft(ctx context.Context, postID, userID, title, content string, tagIDs []string) error
 	CreateComment(ctx context.Context, commentID, postID, userID string, parentID *string, content string, now int64) error
 	GetPostStatus(ctx context.Context, postID string) (string, error)
 	GetCommentParentInfo(ctx context.Context, commentID string) (string, string, error)
@@ -194,6 +196,61 @@ func (r *PostRepo) ListHome(ctx context.Context, page, pageSize int, strategy st
 			Offset: offset,
 		})
 	}
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	res := make([]PostRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, toPostRow(
+			v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+			v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+			v.Ctime, v.Utime, v.Birthday, v.Tags,
+		))
+	}
+	hasMore := int32(len(rows)) >= limit
+	return res, hasMore, nil
+}
+
+func (r *PostRepo) ListFollowing(ctx context.Context, userID string, page, pageSize int, strategy string) ([]PostRow, bool, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return nil, false, ErrParamsType
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		rows, err := r.dao.ListFollowingByHot(ctx, post.ListFollowingByHotParams{
+			Follower: uid,
+			Limit:    limit,
+			Offset:   offset,
+		})
+		if err != nil {
+			global.Log.Error(err)
+			return nil, false, ErrDefault
+		}
+		res := make([]PostRow, 0, pageSize)
+		for i, v := range rows {
+			if int32(i) >= limit-1 {
+				break
+			}
+			res = append(res, toPostRow(
+				v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+				v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+				v.Ctime, v.Utime, v.Birthday, v.Tags,
+			))
+		}
+		hasMore := int32(len(rows)) >= limit
+		return res, hasMore, nil
+	}
+	rows, err := r.dao.ListFollowingByCtime(ctx, post.ListFollowingByCtimeParams{
+		Follower: uid,
+		Limit:    limit,
+		Offset:   offset,
+	})
 	if err != nil {
 		global.Log.Error(err)
 		return nil, false, ErrDefault
@@ -786,6 +843,60 @@ func (r *PostRepo) Publish(ctx context.Context, postID, userID string) error {
 		return ErrPostNotDraft
 	}
 	return nil
+}
+
+func (r *PostRepo) UpdateDraft(ctx context.Context, postID, userID, title, content string, tagIDs []string) error {
+	var pid, uid pgtype.UUID
+	if err := pid.Scan(postID); err != nil {
+		return err
+	}
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	aff, err := qtx.UpdateDraftByOwner(ctx, post.UpdateDraftByOwnerParams{
+		PostID:   pid,
+		AuthorID: uid,
+		Title:    title,
+		Content:  content,
+		Utime:    time.Now().UnixMilli(),
+	})
+	if err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if aff == 0 {
+		_ = tx.Rollback(ctx)
+		return ErrPostNotDraft
+	}
+	if err := qtx.DeletePostTagsByPost(ctx, pid); err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	for _, tid := range tagIDs {
+		if strings.TrimSpace(tid) == "" {
+			continue
+		}
+		var tg pgtype.UUID
+		if err := tg.Scan(tid); err != nil {
+			continue
+		}
+		if err := qtx.AddPostTag(ctx, post.AddPostTagParams{
+			PostID: pid,
+			TagID:  tg,
+		}); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *PostRepo) GetPostStatus(ctx context.Context, postID string) (string, error) {

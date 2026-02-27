@@ -38,8 +38,8 @@ type BabyGrowthRecord struct {
 	RecordID pgtype.UUID
 	// 宝宝ID(外键)
 	BabyID pgtype.UUID
-	// 用户ID(UUID)
-	UserID pgtype.UUID
+	// 创建者用户ID
+	CreatedBy pgtype.UUID
 	// 记录时间(毫秒时间戳)
 	RecordTime int64
 	// 身高(cm)
@@ -52,6 +52,8 @@ type BabyGrowthRecord struct {
 	Remark pgtype.Text
 	// 创建时间戳
 	Ctime int64
+	// 最近更新者用户ID
+	UpdatedBy pgtype.UUID
 	// 更新时间戳
 	Utime int64
 }
@@ -156,6 +158,84 @@ type CommentLike struct {
 	UserID pgtype.UUID
 	// 评论ID
 	CommentID pgtype.UUID
+	// 创建时间戳
+	Ctime int64
+	// 更新时间戳
+	Utime int64
+}
+
+// 换尿布记录表
+type DailyDiaper struct {
+	// 主键ID
+	ID int64
+	// 换尿布记录ID
+	DiaperID pgtype.UUID
+	// 宝宝ID(外键)
+	BabyID pgtype.UUID
+	// 用户ID(UUID)
+	UserID pgtype.UUID
+	// 更换时间(毫秒时间戳)
+	ChangeTime int64
+	// 尿布状态
+	DiaperType string
+	// 嘘嘘颜色
+	PeeColor pgtype.Text
+	// 便便颜色
+	PoopColor pgtype.Text
+	// 便便状态
+	PoopConsistency pgtype.Text
+	// 备注
+	Remark pgtype.Text
+	// 创建时间戳
+	Ctime int64
+	// 更新时间戳
+	Utime int64
+}
+
+// 喂养记录表
+type DailyFeeding struct {
+	// 主键ID
+	ID int64
+	// 喂养记录ID
+	FeedingID pgtype.UUID
+	// 宝宝ID(外键)
+	BabyID pgtype.UUID
+	// 用户ID(UUID)
+	UserID pgtype.UUID
+	// 喂养时间(毫秒时间戳)
+	FeedTime int64
+	// 喂养方式
+	FeedType string
+	// 备注
+	Remark pgtype.Text
+	// 创建时间戳
+	Ctime int64
+	// 更新时间戳
+	Utime int64
+}
+
+// 睡眠记录表
+type DailySleep struct {
+	// 主键ID
+	ID int64
+	// 睡眠记录ID
+	SleepID pgtype.UUID
+	// 宝宝ID(外键)
+	BabyID pgtype.UUID
+	// 用户ID(UUID)
+	UserID pgtype.UUID
+	// 开始时间(毫秒时间戳)
+	StartTime int64
+	// 结束时间(毫秒时间戳)
+	EndTime pgtype.Int8
+	// 睡眠时长(毫秒)
+	Duration pgtype.Int8
+	// 记录方式(timer/manual)
+	Source string
+	// 状态(running/finished)
+	Status string
+	// 备注
+	Remark pgtype.Text
 	// 创建时间戳
 	Ctime int64
 	// 更新时间戳

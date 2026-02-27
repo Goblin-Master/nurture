@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"nurture/internal/dto"
@@ -21,9 +22,11 @@ type IPostLogic interface {
 	ListMyPosts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
 	ListMyDrafts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
 	ListMyMilestones(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
+	Following(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
 	Detail(ctx context.Context, req dto.PostDetailReq) (dto.PostDetailResp, error)
 	NewPost(ctx context.Context, userID string, req dto.CreatePostReq) (dto.CreatePostResp, error)
 	Publish(ctx context.Context, userID string, req dto.PublishPostReq) (dto.PublishPostResp, error)
+	UpdateDraft(ctx context.Context, userID string, uri dto.PostDetailReq, req dto.UpdateDraftReq) (dto.UpdateDraftResp, error)
 	CreateComment(ctx context.Context, userID string, postID string, req dto.CreateCommentReq) (dto.CreateCommentResp, error)
 	ListComments(ctx context.Context, userID string, postID string, req dto.CommentListReq) (dto.CommentListResp, error)
 	ListReplies(ctx context.Context, userID string, uri dto.CommentRepliesReq, req dto.CommentListReq) (dto.CommentListResp, error)
@@ -64,7 +67,6 @@ func (l *PostLogic) Home(ctx context.Context, req dto.PostHomeListReq) (dto.Post
 	resp.Items = make([]dto.PostItem, 0, len(items))
 	for _, v := range items {
 		y, m, ageText := calcAge(v.Birthday, time.Now())
-		preview := makePreview(v.Content, 15)
 		resp.Items = append(resp.Items, dto.PostItem{
 			PostID:         v.PostID,
 			AuthorID:       v.AuthorID,
@@ -73,8 +75,54 @@ func (l *PostLogic) Home(ctx context.Context, req dto.PostHomeListReq) (dto.Post
 			AuthorProvince: v.AuthorProvince,
 			AuthorCity:     v.AuthorCity,
 			Title:          v.Title,
-			Content:        v.Content,
-			ContentPreview: preview,
+			Content:        json.RawMessage([]byte(v.Content)),
+			Status:         v.Status,
+			LikeCount:      v.LikeCount,
+			DislikeCount:   v.DislikeCount,
+			CollectCount:   v.CollectCount,
+			CommentCount:   v.CommentCount,
+			Ctime:          v.Ctime,
+			Utime:          v.Utime,
+			Tags:           v.Tags,
+			BabyAgeYear:    y,
+			BabyAgeMonth:   m,
+			BabyAgeText:    ageText,
+		})
+	}
+	resp.Page = req.Page
+	resp.PageSize = req.PageSize
+	resp.HasMore = hasMore
+	return resp, nil
+}
+
+func (l *PostLogic) Following(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error) {
+	var resp dto.PostListResp
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10
+	}
+	items, hasMore, err := l.postRepo.ListFollowing(ctx, userID, req.Page, req.PageSize, req.Strategy)
+	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Items = make([]dto.PostItem, 0, len(items))
+	for _, v := range items {
+		y, m, ageText := calcAge(v.Birthday, time.Now())
+		resp.Items = append(resp.Items, dto.PostItem{
+			PostID:         v.PostID,
+			AuthorID:       v.AuthorID,
+			AuthorName:     v.AuthorName,
+			AuthorAvatar:   v.AuthorAvatar,
+			AuthorProvince: v.AuthorProvince,
+			AuthorCity:     v.AuthorCity,
+			Title:          v.Title,
+			Content:        json.RawMessage([]byte(v.Content)),
 			Status:         v.Status,
 			LikeCount:      v.LikeCount,
 			DislikeCount:   v.DislikeCount,
@@ -226,7 +274,6 @@ func (l *PostLogic) ListByTag(ctx context.Context, req dto.PostTagListReq) (dto.
 	resp.Items = make([]dto.PostItem, 0, len(items))
 	for _, v := range items {
 		y, m, ageText := calcAge(v.Birthday, time.Now())
-		preview := makePreview(v.Content, 15)
 		resp.Items = append(resp.Items, dto.PostItem{
 			PostID:         v.PostID,
 			AuthorID:       v.AuthorID,
@@ -235,8 +282,7 @@ func (l *PostLogic) ListByTag(ctx context.Context, req dto.PostTagListReq) (dto.
 			AuthorProvince: v.AuthorProvince,
 			AuthorCity:     v.AuthorCity,
 			Title:          v.Title,
-			Content:        v.Content,
-			ContentPreview: preview,
+			Content:        json.RawMessage([]byte(v.Content)),
 			Status:         v.Status,
 			LikeCount:      v.LikeCount,
 			DislikeCount:   v.DislikeCount,
@@ -275,7 +321,6 @@ func (l *PostLogic) Search(ctx context.Context, req dto.PostSearchListReq) (dto.
 	resp.Items = make([]dto.PostItem, 0, len(items))
 	for _, v := range items {
 		y, m, ageText := calcAge(v.Birthday, time.Now())
-		preview := makePreview(v.Content, 15)
 		resp.Items = append(resp.Items, dto.PostItem{
 			PostID:         v.PostID,
 			AuthorID:       v.AuthorID,
@@ -284,8 +329,7 @@ func (l *PostLogic) Search(ctx context.Context, req dto.PostSearchListReq) (dto.
 			AuthorProvince: v.AuthorProvince,
 			AuthorCity:     v.AuthorCity,
 			Title:          v.Title,
-			Content:        v.Content,
-			ContentPreview: preview,
+			Content:        json.RawMessage([]byte(v.Content)),
 			Status:         v.Status,
 			LikeCount:      v.LikeCount,
 			DislikeCount:   v.DislikeCount,
@@ -324,7 +368,6 @@ func (l *PostLogic) ListMyPosts(ctx context.Context, userID string, req dto.Post
 	resp.Items = make([]dto.PostItem, 0, len(items))
 	for _, v := range items {
 		y, m, ageText := calcAge(v.Birthday, time.Now())
-		preview := makePreview(v.Content, 15)
 		resp.Items = append(resp.Items, dto.PostItem{
 			PostID:         v.PostID,
 			AuthorID:       v.AuthorID,
@@ -333,8 +376,7 @@ func (l *PostLogic) ListMyPosts(ctx context.Context, userID string, req dto.Post
 			AuthorProvince: v.AuthorProvince,
 			AuthorCity:     v.AuthorCity,
 			Title:          v.Title,
-			Content:        v.Content,
-			ContentPreview: preview,
+			Content:        json.RawMessage([]byte(v.Content)),
 			Status:         v.Status,
 			LikeCount:      v.LikeCount,
 			DislikeCount:   v.DislikeCount,
@@ -373,7 +415,6 @@ func (l *PostLogic) ListMyDrafts(ctx context.Context, userID string, req dto.Pos
 	resp.Items = make([]dto.PostItem, 0, len(items))
 	for _, v := range items {
 		y, m, ageText := calcAge(v.Birthday, time.Now())
-		preview := makePreview(v.Content, 15)
 		resp.Items = append(resp.Items, dto.PostItem{
 			PostID:         v.PostID,
 			AuthorID:       v.AuthorID,
@@ -382,8 +423,7 @@ func (l *PostLogic) ListMyDrafts(ctx context.Context, userID string, req dto.Pos
 			AuthorProvince: v.AuthorProvince,
 			AuthorCity:     v.AuthorCity,
 			Title:          v.Title,
-			Content:        v.Content,
-			ContentPreview: preview,
+			Content:        json.RawMessage([]byte(v.Content)),
 			Status:         v.Status,
 			LikeCount:      v.LikeCount,
 			DislikeCount:   v.DislikeCount,
@@ -422,7 +462,6 @@ func (l *PostLogic) ListMyMilestones(ctx context.Context, userID string, req dto
 	resp.Items = make([]dto.PostItem, 0, len(items))
 	for _, v := range items {
 		y, m, ageText := calcAge(v.Birthday, time.Now())
-		preview := makePreview(v.Content, 15)
 		resp.Items = append(resp.Items, dto.PostItem{
 			PostID:         v.PostID,
 			AuthorID:       v.AuthorID,
@@ -431,8 +470,7 @@ func (l *PostLogic) ListMyMilestones(ctx context.Context, userID string, req dto
 			AuthorProvince: v.AuthorProvince,
 			AuthorCity:     v.AuthorCity,
 			Title:          v.Title,
-			Content:        v.Content,
-			ContentPreview: preview,
+			Content:        json.RawMessage([]byte(v.Content)),
 			Status:         v.Status,
 			LikeCount:      v.LikeCount,
 			DislikeCount:   v.DislikeCount,
@@ -470,6 +508,31 @@ func (l *PostLogic) Publish(ctx context.Context, userID string, req dto.PublishP
 	resp.PostID = req.PostID
 	resp.Status = "published"
 	resp.Message = "发布成功"
+	return resp, nil
+}
+func (l *PostLogic) UpdateDraft(ctx context.Context, userID string, uri dto.PostDetailReq, req dto.UpdateDraftReq) (dto.UpdateDraftResp, error) {
+	var resp dto.UpdateDraftResp
+	if strings.TrimSpace(uri.PostID) == "" {
+		return resp, ErrParamsType
+	}
+	title := strings.TrimSpace(req.Title)
+	if title == "" || len(req.Content) == 0 {
+		return resp, ErrParamsType
+	}
+	err := l.postRepo.UpdateDraft(ctx, uri.PostID, userID, title, string(req.Content), req.TagIDs)
+	if err != nil {
+		if errors.Is(err, repo.ErrPostNotExist) {
+			return resp, ErrPostNotExist
+		}
+		if errors.Is(err, repo.ErrPostNotDraft) {
+			return resp, ErrInvalidPostStatus
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.PostID = uri.PostID
+	resp.Status = "draft"
+	resp.Message = "更新成功"
 	return resp, nil
 }
 func (l *PostLogic) NewPost(ctx context.Context, userID string, req dto.CreatePostReq) (dto.CreatePostResp, error) {
@@ -614,7 +677,7 @@ func (l *PostLogic) Detail(ctx context.Context, req dto.PostDetailReq) (dto.Post
 		AuthorProvince: row.AuthorProvince,
 		AuthorCity:     row.AuthorCity,
 		Title:          row.Title,
-		Content:        row.Content,
+		Content:        json.RawMessage([]byte(row.Content)),
 		Status:         row.Status,
 		LikeCount:      row.LikeCount,
 		DislikeCount:   row.DislikeCount,

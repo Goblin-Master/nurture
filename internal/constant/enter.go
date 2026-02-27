@@ -31,4 +31,9 @@ const (
 	SSE_TYPE_CONTENT = "content"
 	SSE_TYPE_ERROR   = "error"
 	SSE_TYPE_DONE    = "done"
+
+	// 喂养方式
+	FEED_BREAST_MILK = "breast_milk"
+	FEED_FORMULA     = "formula"
+	FEED_SOLID       = "solid"
 )

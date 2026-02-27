@@ -466,10 +466,80 @@ WHERE p.title ILIKE $1 AND pt2.tag_id = $2 AND p.status = 'published'
 ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $3 OFFSET $4;
 
+-- name: ListFollowingByCtime :many
+SELECT
+  p.post_id::text AS post_id,
+  p.author_id::text AS author_id,
+  COALESCE(ua.username, '') AS author_name,
+  COALESCE(ua.avatar, '') AS author_avatar,
+  COALESCE(ua.province, '') AS author_province,
+  COALESCE(ua.city, '') AS author_city,
+  p.title, p.content, p.status,
+  p.like_count, p.dislike_count, p.collect_count, p.comment_count,
+  p.cover, p.ctime, p.utime,
+  COALESCE((
+    SELECT b.birthday
+    FROM "baby" b
+    WHERE b.user_id = p.author_id
+    ORDER BY b.ctime DESC
+    LIMIT 1
+  ), 0) AS birthday,
+  COALESCE((
+    SELECT array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL)
+    FROM "post_tag" pt
+    JOIN "tag" t ON t.tag_id = pt.tag_id
+    WHERE pt.post_id = p.post_id
+  ), '{}') AS tags
+FROM "post" p
+JOIN "user_follow" f ON f.followee = p.author_id
+LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
+WHERE f.follower = $1 AND p.status = 'published'
+ORDER BY p.ctime DESC
+LIMIT $2 OFFSET $3;
+
+-- name: ListFollowingByHot :many
+SELECT
+  p.post_id::text AS post_id,
+  p.author_id::text AS author_id,
+  COALESCE(ua.username, '') AS author_name,
+  COALESCE(ua.avatar, '') AS author_avatar,
+  COALESCE(ua.province, '') AS author_province,
+  COALESCE(ua.city, '') AS author_city,
+  p.title, p.content, p.status,
+  p.like_count, p.dislike_count, p.collect_count, p.comment_count,
+  p.cover, p.ctime, p.utime,
+  COALESCE((
+    SELECT b.birthday
+    FROM "baby" b
+    WHERE b.user_id = p.author_id
+    ORDER BY b.ctime DESC
+    LIMIT 1
+  ), 0) AS birthday,
+  COALESCE((
+    SELECT array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL)
+    FROM "post_tag" pt
+    JOIN "tag" t ON t.tag_id = pt.tag_id
+    WHERE pt.post_id = p.post_id
+  ), '{}') AS tags
+FROM "post" p
+JOIN "user_follow" f ON f.followee = p.author_id
+LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
+WHERE f.follower = $1 AND p.status = 'published'
+ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
+LIMIT $2 OFFSET $3;
+
 -- name: PublishPost :execrows
 UPDATE "post"
 SET status = 'published', utime = $3
 WHERE post_id = $1 AND author_id = $2 AND status = 'draft';
+
+-- name: UpdateDraftByOwner :execrows
+UPDATE "post"
+SET title = $3, content = $4, utime = $5
+WHERE post_id = $1 AND author_id = $2 AND status = 'draft';
+
+-- name: DeletePostTagsByPost :exec
+DELETE FROM "post_tag" WHERE post_id = $1;
 
 -- name: GetPostStatusByID :one
 SELECT status FROM "post" WHERE post_id = $1;
