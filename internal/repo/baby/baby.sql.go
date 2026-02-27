@@ -42,14 +42,13 @@ func (q *Queries) CreateBaby(ctx context.Context, arg CreateBabyParams) error {
 }
 
 const createBabyGrowthRecord = `-- name: CreateBabyGrowthRecord :exec
-INSERT INTO "baby_growth_record" (record_id, baby_id, user_id, record_time, height, weight, head_circumference, remark, ctime, utime)
+INSERT INTO "baby_growth_record" (record_id, baby_id, record_time, height, weight, head_circumference, remark, ctime, utime, created_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type CreateBabyGrowthRecordParams struct {
 	RecordID          pgtype.UUID
 	BabyID            pgtype.UUID
-	UserID            pgtype.UUID
 	RecordTime        int64
 	Height            pgtype.Float8
 	Weight            pgtype.Float8
@@ -57,13 +56,13 @@ type CreateBabyGrowthRecordParams struct {
 	Remark            pgtype.Text
 	Ctime             int64
 	Utime             int64
+	CreatedBy         pgtype.UUID
 }
 
 func (q *Queries) CreateBabyGrowthRecord(ctx context.Context, arg CreateBabyGrowthRecordParams) error {
 	_, err := q.db.Exec(ctx, createBabyGrowthRecord,
 		arg.RecordID,
 		arg.BabyID,
-		arg.UserID,
 		arg.RecordTime,
 		arg.Height,
 		arg.Weight,
@@ -71,6 +70,7 @@ func (q *Queries) CreateBabyGrowthRecord(ctx context.Context, arg CreateBabyGrow
 		arg.Remark,
 		arg.Ctime,
 		arg.Utime,
+		arg.CreatedBy,
 	)
 	return err
 }
@@ -101,6 +101,113 @@ func (q *Queries) CreateBabyVaccineRecord(ctx context.Context, arg CreateBabyVac
 	return err
 }
 
+const createDiaper = `-- name: CreateDiaper :one
+INSERT INTO "daily_diaper" (
+  diaper_id, baby_id, user_id, change_time, diaper_type,
+  pee_color, poop_color, poop_consistency, remark, ctime, utime
+) VALUES (
+  gen_random_uuid(), $1, $2, $3, $4,
+  COALESCE(NULLIF($5, ''), NULL),
+  COALESCE(NULLIF($6, ''), NULL),
+  COALESCE(NULLIF($7, ''), NULL),
+  COALESCE(NULLIF($8, ''), NULL), $9, $9
+) RETURNING diaper_id::text AS diaper_id, change_time, diaper_type,
+  COALESCE(pee_color, '') AS pee_color,
+  COALESCE(poop_color, '') AS poop_color,
+  COALESCE(poop_consistency, '') AS poop_consistency,
+  COALESCE(remark, '') AS remark
+`
+
+type CreateDiaperParams struct {
+	BabyID     pgtype.UUID
+	UserID     pgtype.UUID
+	ChangeTime int64
+	DiaperType string
+	Column5    interface{}
+	Column6    interface{}
+	Column7    interface{}
+	Column8    interface{}
+	Ctime      int64
+}
+
+type CreateDiaperRow struct {
+	DiaperID        string
+	ChangeTime      int64
+	DiaperType      string
+	PeeColor        string
+	PoopColor       string
+	PoopConsistency string
+	Remark          string
+}
+
+func (q *Queries) CreateDiaper(ctx context.Context, arg CreateDiaperParams) (CreateDiaperRow, error) {
+	row := q.db.QueryRow(ctx, createDiaper,
+		arg.BabyID,
+		arg.UserID,
+		arg.ChangeTime,
+		arg.DiaperType,
+		arg.Column5,
+		arg.Column6,
+		arg.Column7,
+		arg.Column8,
+		arg.Ctime,
+	)
+	var i CreateDiaperRow
+	err := row.Scan(
+		&i.DiaperID,
+		&i.ChangeTime,
+		&i.DiaperType,
+		&i.PeeColor,
+		&i.PoopColor,
+		&i.PoopConsistency,
+		&i.Remark,
+	)
+	return i, err
+}
+
+const createFeeding = `-- name: CreateFeeding :one
+INSERT INTO "daily_feeding" (
+  feeding_id, baby_id, user_id, feed_time, feed_type, remark, ctime, utime
+) VALUES (
+  gen_random_uuid(), $1, $2, $3, $4, COALESCE(NULLIF($5, ''), NULL), $6, $6
+) RETURNING feeding_id::text AS feeding_id, feed_time, feed_type, COALESCE(remark, '') AS remark
+`
+
+type CreateFeedingParams struct {
+	BabyID   pgtype.UUID
+	UserID   pgtype.UUID
+	FeedTime int64
+	FeedType string
+	Column5  interface{}
+	Ctime    int64
+}
+
+type CreateFeedingRow struct {
+	FeedingID string
+	FeedTime  int64
+	FeedType  string
+	Remark    string
+}
+
+func (q *Queries) CreateFeeding(ctx context.Context, arg CreateFeedingParams) (CreateFeedingRow, error) {
+	row := q.db.QueryRow(ctx, createFeeding,
+		arg.BabyID,
+		arg.UserID,
+		arg.FeedTime,
+		arg.FeedType,
+		arg.Column5,
+		arg.Ctime,
+	)
+	var i CreateFeedingRow
+	err := row.Scan(
+		&i.FeedingID,
+		&i.FeedTime,
+		&i.FeedType,
+		&i.Remark,
+	)
+	return i, err
+}
+
 const deleteBabyPhotos = `-- name: DeleteBabyPhotos :execrows
 DELETE FROM "baby_photo"
 WHERE baby_id = $1 AND photo_id = ANY($2::uuid[])
@@ -117,6 +224,30 @@ func (q *Queries) DeleteBabyPhotos(ctx context.Context, arg DeleteBabyPhotosPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getActiveSleep = `-- name: GetActiveSleep :one
+SELECT sleep_id::text AS sleep_id, start_time
+FROM "daily_sleep"
+WHERE baby_id = $1 AND user_id = $2 AND status = 'running'
+LIMIT 1
+`
+
+type GetActiveSleepParams struct {
+	BabyID pgtype.UUID
+	UserID pgtype.UUID
+}
+
+type GetActiveSleepRow struct {
+	SleepID   string
+	StartTime int64
+}
+
+func (q *Queries) GetActiveSleep(ctx context.Context, arg GetActiveSleepParams) (GetActiveSleepRow, error) {
+	row := q.db.QueryRow(ctx, getActiveSleep, arg.BabyID, arg.UserID)
+	var i GetActiveSleepRow
+	err := row.Scan(&i.SleepID, &i.StartTime)
+	return i, err
 }
 
 const getBabyByIDAndUser = `-- name: GetBabyByIDAndUser :one
@@ -145,34 +276,165 @@ func (q *Queries) GetBabyByIDAndUser(ctx context.Context, arg GetBabyByIDAndUser
 	return i, err
 }
 
-const getLatestGrowthByBabyIDAndUser = `-- name: GetLatestGrowthByBabyIDAndUser :one
-SELECT id, record_id, baby_id, user_id, record_time, height, weight, head_circumference, remark, ctime, utime FROM "baby_growth_record"
-WHERE baby_id = $1 AND user_id = $2
+const getDailyStatsByBaby = `-- name: GetDailyStatsByBaby :one
+WITH feed_stats AS (
+  SELECT COUNT(*) AS c
+  FROM "daily_feeding" f
+  WHERE f.baby_id = $1 AND f.feed_time BETWEEN $2 AND $3
+),
+sleep_stats AS (
+  SELECT COALESCE(SUM(LEAST(s.end_time, $3) - GREATEST(s.start_time, $2)), 0)::bigint AS d
+  FROM "daily_sleep" s
+  WHERE s.baby_id = $1 AND s.status = 'finished' AND s.start_time <= $3 AND s.end_time >= $2
+),
+diaper_stats AS (
+  SELECT COUNT(*) AS c
+  FROM "daily_diaper" d
+  WHERE d.baby_id = $1 AND d.change_time BETWEEN $2 AND $3
+)
+SELECT feed_stats.c AS feeding_count, sleep_stats.d AS sleep_duration_ms, diaper_stats.c AS diaper_count
+FROM feed_stats, sleep_stats, diaper_stats
+`
+
+type GetDailyStatsByBabyParams struct {
+	BabyID     pgtype.UUID
+	FeedTime   int64
+	FeedTime_2 int64
+}
+
+type GetDailyStatsByBabyRow struct {
+	FeedingCount    int64
+	SleepDurationMs int64
+	DiaperCount     int64
+}
+
+func (q *Queries) GetDailyStatsByBaby(ctx context.Context, arg GetDailyStatsByBabyParams) (GetDailyStatsByBabyRow, error) {
+	row := q.db.QueryRow(ctx, getDailyStatsByBaby, arg.BabyID, arg.FeedTime, arg.FeedTime_2)
+	var i GetDailyStatsByBabyRow
+	err := row.Scan(&i.FeedingCount, &i.SleepDurationMs, &i.DiaperCount)
+	return i, err
+}
+
+const getDiaperByBabyBetween = `-- name: GetDiaperByBabyBetween :one
+SELECT diaper_id::text AS diaper_id, change_time, diaper_type,
+  COALESCE(pee_color, '') AS pee_color,
+  COALESCE(poop_color, '') AS poop_color,
+  COALESCE(poop_consistency, '') AS poop_consistency,
+  COALESCE(remark, '') AS remark
+FROM "daily_diaper"
+WHERE baby_id = $1 AND change_time BETWEEN $2 AND $3
+ORDER BY change_time DESC
+LIMIT 1
+`
+
+type GetDiaperByBabyBetweenParams struct {
+	BabyID       pgtype.UUID
+	ChangeTime   int64
+	ChangeTime_2 int64
+}
+
+type GetDiaperByBabyBetweenRow struct {
+	DiaperID        string
+	ChangeTime      int64
+	DiaperType      string
+	PeeColor        string
+	PoopColor       string
+	PoopConsistency string
+	Remark          string
+}
+
+func (q *Queries) GetDiaperByBabyBetween(ctx context.Context, arg GetDiaperByBabyBetweenParams) (GetDiaperByBabyBetweenRow, error) {
+	row := q.db.QueryRow(ctx, getDiaperByBabyBetween, arg.BabyID, arg.ChangeTime, arg.ChangeTime_2)
+	var i GetDiaperByBabyBetweenRow
+	err := row.Scan(
+		&i.DiaperID,
+		&i.ChangeTime,
+		&i.DiaperType,
+		&i.PeeColor,
+		&i.PoopColor,
+		&i.PoopConsistency,
+		&i.Remark,
+	)
+	return i, err
+}
+
+const getGrowthByBabyIDBetween = `-- name: GetGrowthByBabyIDBetween :one
+SELECT id, record_id, baby_id, created_by, record_time, height, weight, head_circumference, remark, ctime, updated_by, utime FROM "baby_growth_record"
+WHERE baby_id = $1 AND record_time BETWEEN $2 AND $3
 ORDER BY record_time DESC
 LIMIT 1
 `
 
-type GetLatestGrowthByBabyIDAndUserParams struct {
-	BabyID pgtype.UUID
-	UserID pgtype.UUID
+type GetGrowthByBabyIDBetweenParams struct {
+	BabyID       pgtype.UUID
+	RecordTime   int64
+	RecordTime_2 int64
 }
 
-func (q *Queries) GetLatestGrowthByBabyIDAndUser(ctx context.Context, arg GetLatestGrowthByBabyIDAndUserParams) (BabyGrowthRecord, error) {
-	row := q.db.QueryRow(ctx, getLatestGrowthByBabyIDAndUser, arg.BabyID, arg.UserID)
+func (q *Queries) GetGrowthByBabyIDBetween(ctx context.Context, arg GetGrowthByBabyIDBetweenParams) (BabyGrowthRecord, error) {
+	row := q.db.QueryRow(ctx, getGrowthByBabyIDBetween, arg.BabyID, arg.RecordTime, arg.RecordTime_2)
 	var i BabyGrowthRecord
 	err := row.Scan(
 		&i.ID,
 		&i.RecordID,
 		&i.BabyID,
-		&i.UserID,
+		&i.CreatedBy,
 		&i.RecordTime,
 		&i.Height,
 		&i.Weight,
 		&i.HeadCircumference,
 		&i.Remark,
 		&i.Ctime,
+		&i.UpdatedBy,
 		&i.Utime,
 	)
+	return i, err
+}
+
+const getLatestGrowthByBabyID = `-- name: GetLatestGrowthByBabyID :one
+SELECT id, record_id, baby_id, created_by, record_time, height, weight, head_circumference, remark, ctime, updated_by, utime FROM "baby_growth_record"
+WHERE baby_id = $1
+ORDER BY record_time DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestGrowthByBabyID(ctx context.Context, babyID pgtype.UUID) (BabyGrowthRecord, error) {
+	row := q.db.QueryRow(ctx, getLatestGrowthByBabyID, babyID)
+	var i BabyGrowthRecord
+	err := row.Scan(
+		&i.ID,
+		&i.RecordID,
+		&i.BabyID,
+		&i.CreatedBy,
+		&i.RecordTime,
+		&i.Height,
+		&i.Weight,
+		&i.HeadCircumference,
+		&i.Remark,
+		&i.Ctime,
+		&i.UpdatedBy,
+		&i.Utime,
+	)
+	return i, err
+}
+
+const getLatestNonNullGrowthValuesByBaby = `-- name: GetLatestNonNullGrowthValuesByBaby :one
+SELECT
+  (SELECT bgr.height FROM "baby_growth_record" bgr WHERE bgr.baby_id = $1 AND bgr.height IS NOT NULL ORDER BY bgr.record_time DESC LIMIT 1) AS height,
+  (SELECT bgr.weight FROM "baby_growth_record" bgr WHERE bgr.baby_id = $1 AND bgr.weight IS NOT NULL ORDER BY bgr.record_time DESC LIMIT 1) AS weight,
+  (SELECT bgr.head_circumference FROM "baby_growth_record" bgr WHERE bgr.baby_id = $1 AND bgr.head_circumference IS NOT NULL ORDER BY bgr.record_time DESC LIMIT 1) AS head_circumference
+`
+
+type GetLatestNonNullGrowthValuesByBabyRow struct {
+	Height            pgtype.Float8
+	Weight            pgtype.Float8
+	HeadCircumference pgtype.Float8
+}
+
+func (q *Queries) GetLatestNonNullGrowthValuesByBaby(ctx context.Context, babyID pgtype.UUID) (GetLatestNonNullGrowthValuesByBabyRow, error) {
+	row := q.db.QueryRow(ctx, getLatestNonNullGrowthValuesByBaby, babyID)
+	var i GetLatestNonNullGrowthValuesByBabyRow
+	err := row.Scan(&i.Height, &i.Weight, &i.HeadCircumference)
 	return i, err
 }
 
@@ -298,6 +560,230 @@ func (q *Queries) ListBabyPhotos(ctx context.Context, arg ListBabyPhotosParams) 
 	return items, nil
 }
 
+const listDiaperByBabyBetween = `-- name: ListDiaperByBabyBetween :many
+SELECT diaper_id::text AS diaper_id, change_time, diaper_type,
+  COALESCE(pee_color, '') AS pee_color,
+  COALESCE(poop_color, '') AS poop_color,
+  COALESCE(poop_consistency, '') AS poop_consistency,
+  COALESCE(remark, '') AS remark
+FROM "daily_diaper"
+WHERE baby_id = $1 AND change_time BETWEEN $2 AND $3
+ORDER BY change_time ASC
+`
+
+type ListDiaperByBabyBetweenParams struct {
+	BabyID       pgtype.UUID
+	ChangeTime   int64
+	ChangeTime_2 int64
+}
+
+type ListDiaperByBabyBetweenRow struct {
+	DiaperID        string
+	ChangeTime      int64
+	DiaperType      string
+	PeeColor        string
+	PoopColor       string
+	PoopConsistency string
+	Remark          string
+}
+
+func (q *Queries) ListDiaperByBabyBetween(ctx context.Context, arg ListDiaperByBabyBetweenParams) ([]ListDiaperByBabyBetweenRow, error) {
+	rows, err := q.db.Query(ctx, listDiaperByBabyBetween, arg.BabyID, arg.ChangeTime, arg.ChangeTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDiaperByBabyBetweenRow
+	for rows.Next() {
+		var i ListDiaperByBabyBetweenRow
+		if err := rows.Scan(
+			&i.DiaperID,
+			&i.ChangeTime,
+			&i.DiaperType,
+			&i.PeeColor,
+			&i.PoopColor,
+			&i.PoopConsistency,
+			&i.Remark,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFeedingByBabyBetween = `-- name: ListFeedingByBabyBetween :many
+SELECT feeding_id::text AS feeding_id, feed_time, feed_type, COALESCE(remark, '') AS remark
+FROM "daily_feeding"
+WHERE baby_id = $1 AND feed_time BETWEEN $2 AND $3
+ORDER BY feed_time ASC
+`
+
+type ListFeedingByBabyBetweenParams struct {
+	BabyID     pgtype.UUID
+	FeedTime   int64
+	FeedTime_2 int64
+}
+
+type ListFeedingByBabyBetweenRow struct {
+	FeedingID string
+	FeedTime  int64
+	FeedType  string
+	Remark    string
+}
+
+func (q *Queries) ListFeedingByBabyBetween(ctx context.Context, arg ListFeedingByBabyBetweenParams) ([]ListFeedingByBabyBetweenRow, error) {
+	rows, err := q.db.Query(ctx, listFeedingByBabyBetween, arg.BabyID, arg.FeedTime, arg.FeedTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFeedingByBabyBetweenRow
+	for rows.Next() {
+		var i ListFeedingByBabyBetweenRow
+		if err := rows.Scan(
+			&i.FeedingID,
+			&i.FeedTime,
+			&i.FeedType,
+			&i.Remark,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHeadCircumferenceCurveByBabyIDBetween = `-- name: ListHeadCircumferenceCurveByBabyIDBetween :many
+SELECT record_time, head_circumference
+FROM "baby_growth_record"
+WHERE baby_id = $1 AND record_time BETWEEN $2 AND $3 AND head_circumference IS NOT NULL
+ORDER BY record_time ASC
+`
+
+type ListHeadCircumferenceCurveByBabyIDBetweenParams struct {
+	BabyID       pgtype.UUID
+	RecordTime   int64
+	RecordTime_2 int64
+}
+
+type ListHeadCircumferenceCurveByBabyIDBetweenRow struct {
+	RecordTime        int64
+	HeadCircumference pgtype.Float8
+}
+
+func (q *Queries) ListHeadCircumferenceCurveByBabyIDBetween(ctx context.Context, arg ListHeadCircumferenceCurveByBabyIDBetweenParams) ([]ListHeadCircumferenceCurveByBabyIDBetweenRow, error) {
+	rows, err := q.db.Query(ctx, listHeadCircumferenceCurveByBabyIDBetween, arg.BabyID, arg.RecordTime, arg.RecordTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHeadCircumferenceCurveByBabyIDBetweenRow
+	for rows.Next() {
+		var i ListHeadCircumferenceCurveByBabyIDBetweenRow
+		if err := rows.Scan(&i.RecordTime, &i.HeadCircumference); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHeightCurveByBabyIDBetween = `-- name: ListHeightCurveByBabyIDBetween :many
+SELECT record_time, height
+FROM "baby_growth_record"
+WHERE baby_id = $1 AND record_time BETWEEN $2 AND $3 AND height IS NOT NULL
+ORDER BY record_time ASC
+`
+
+type ListHeightCurveByBabyIDBetweenParams struct {
+	BabyID       pgtype.UUID
+	RecordTime   int64
+	RecordTime_2 int64
+}
+
+type ListHeightCurveByBabyIDBetweenRow struct {
+	RecordTime int64
+	Height     pgtype.Float8
+}
+
+func (q *Queries) ListHeightCurveByBabyIDBetween(ctx context.Context, arg ListHeightCurveByBabyIDBetweenParams) ([]ListHeightCurveByBabyIDBetweenRow, error) {
+	rows, err := q.db.Query(ctx, listHeightCurveByBabyIDBetween, arg.BabyID, arg.RecordTime, arg.RecordTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHeightCurveByBabyIDBetweenRow
+	for rows.Next() {
+		var i ListHeightCurveByBabyIDBetweenRow
+		if err := rows.Scan(&i.RecordTime, &i.Height); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSleepByBabyBetween = `-- name: ListSleepByBabyBetween :many
+SELECT sleep_id::text AS session_id, start_time, end_time, duration
+FROM "daily_sleep"
+WHERE baby_id = $1
+  AND status = 'finished'
+  AND start_time <= $3
+  AND end_time >= $2
+ORDER BY start_time ASC
+`
+
+type ListSleepByBabyBetweenParams struct {
+	BabyID    pgtype.UUID
+	EndTime   pgtype.Int8
+	StartTime int64
+}
+
+type ListSleepByBabyBetweenRow struct {
+	SessionID string
+	StartTime int64
+	EndTime   pgtype.Int8
+	Duration  pgtype.Int8
+}
+
+func (q *Queries) ListSleepByBabyBetween(ctx context.Context, arg ListSleepByBabyBetweenParams) ([]ListSleepByBabyBetweenRow, error) {
+	rows, err := q.db.Query(ctx, listSleepByBabyBetween, arg.BabyID, arg.EndTime, arg.StartTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSleepByBabyBetweenRow
+	for rows.Next() {
+		var i ListSleepByBabyBetweenRow
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.StartTime,
+			&i.EndTime,
+			&i.Duration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVaccineRecordsByBabyID = `-- name: ListVaccineRecordsByBabyID :many
 SELECT 
   d.dose_id::text AS dose_id,
@@ -356,6 +842,272 @@ func (q *Queries) ListVaccineRecordsByBabyID(ctx context.Context, babyID pgtype.
 		return nil, err
 	}
 	return items, nil
+}
+
+const listWeightCurveByBabyIDBetween = `-- name: ListWeightCurveByBabyIDBetween :many
+SELECT record_time, weight
+FROM "baby_growth_record"
+WHERE baby_id = $1 AND record_time BETWEEN $2 AND $3 AND weight IS NOT NULL
+ORDER BY record_time ASC
+`
+
+type ListWeightCurveByBabyIDBetweenParams struct {
+	BabyID       pgtype.UUID
+	RecordTime   int64
+	RecordTime_2 int64
+}
+
+type ListWeightCurveByBabyIDBetweenRow struct {
+	RecordTime int64
+	Weight     pgtype.Float8
+}
+
+func (q *Queries) ListWeightCurveByBabyIDBetween(ctx context.Context, arg ListWeightCurveByBabyIDBetweenParams) ([]ListWeightCurveByBabyIDBetweenRow, error) {
+	rows, err := q.db.Query(ctx, listWeightCurveByBabyIDBetween, arg.BabyID, arg.RecordTime, arg.RecordTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWeightCurveByBabyIDBetweenRow
+	for rows.Next() {
+		var i ListWeightCurveByBabyIDBetweenRow
+		if err := rows.Scan(&i.RecordTime, &i.Weight); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const startSleep = `-- name: StartSleep :one
+WITH ins AS (
+  INSERT INTO "daily_sleep" (
+    sleep_id, baby_id, user_id, start_time, end_time, duration,
+    source, status, ctime, utime
+  )
+  VALUES (
+    gen_random_uuid(), $1, $2, EXTRACT(EPOCH FROM NOW())*1000, NULL, NULL,
+    'timer', 'running', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000
+  )
+  ON CONFLICT DO NOTHING
+  RETURNING sleep_id, baby_id, user_id, start_time
+)
+SELECT sleep_id::text AS sleep_id, baby_id::text AS baby_id, user_id::text AS user_id, start_time
+FROM ins
+UNION ALL
+SELECT sleep_id::text, baby_id::text, user_id::text, start_time
+FROM "daily_sleep"
+WHERE baby_id = $1 AND user_id = $2 AND status = 'running'
+LIMIT 1
+`
+
+type StartSleepParams struct {
+	BabyID pgtype.UUID
+	UserID pgtype.UUID
+}
+
+type StartSleepRow struct {
+	SleepID   string
+	BabyID    string
+	UserID    string
+	StartTime int64
+}
+
+func (q *Queries) StartSleep(ctx context.Context, arg StartSleepParams) (StartSleepRow, error) {
+	row := q.db.QueryRow(ctx, startSleep, arg.BabyID, arg.UserID)
+	var i StartSleepRow
+	err := row.Scan(
+		&i.SleepID,
+		&i.BabyID,
+		&i.UserID,
+		&i.StartTime,
+	)
+	return i, err
+}
+
+const stopSleep = `-- name: StopSleep :one
+UPDATE "daily_sleep"
+SET
+  end_time = EXTRACT(EPOCH FROM NOW())*1000,
+  duration = EXTRACT(EPOCH FROM NOW())*1000 - start_time,
+  status   = 'finished',
+  utime    = EXTRACT(EPOCH FROM NOW())*1000
+WHERE sleep_id = $1
+RETURNING sleep_id::text AS sleep_id, baby_id::text AS baby_id, user_id::text AS user_id, start_time, end_time, duration
+`
+
+type StopSleepRow struct {
+	SleepID   string
+	BabyID    string
+	UserID    string
+	StartTime int64
+	EndTime   pgtype.Int8
+	Duration  pgtype.Int8
+}
+
+func (q *Queries) StopSleep(ctx context.Context, sleepID pgtype.UUID) (StopSleepRow, error) {
+	row := q.db.QueryRow(ctx, stopSleep, sleepID)
+	var i StopSleepRow
+	err := row.Scan(
+		&i.SleepID,
+		&i.BabyID,
+		&i.UserID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Duration,
+	)
+	return i, err
+}
+
+const updateDiaper = `-- name: UpdateDiaper :one
+UPDATE "daily_diaper"
+SET
+  diaper_type      = $3,
+  change_time      = $4,
+  pee_color        = COALESCE(NULLIF($5, ''), NULL),
+  poop_color       = COALESCE(NULLIF($6, ''), NULL),
+  poop_consistency = COALESCE(NULLIF($7, ''), NULL),
+  remark           = COALESCE(NULLIF($8, ''), NULL),
+  utime            = $9
+WHERE baby_id = $1 AND diaper_id = $2
+RETURNING diaper_id::text AS diaper_id, change_time, diaper_type,
+  COALESCE(pee_color, '') AS pee_color,
+  COALESCE(poop_color, '') AS poop_color,
+  COALESCE(poop_consistency, '') AS poop_consistency,
+  COALESCE(remark, '') AS remark
+`
+
+type UpdateDiaperParams struct {
+	BabyID     pgtype.UUID
+	DiaperID   pgtype.UUID
+	DiaperType string
+	ChangeTime int64
+	Column5    interface{}
+	Column6    interface{}
+	Column7    interface{}
+	Column8    interface{}
+	Utime      int64
+}
+
+type UpdateDiaperRow struct {
+	DiaperID        string
+	ChangeTime      int64
+	DiaperType      string
+	PeeColor        string
+	PoopColor       string
+	PoopConsistency string
+	Remark          string
+}
+
+func (q *Queries) UpdateDiaper(ctx context.Context, arg UpdateDiaperParams) (UpdateDiaperRow, error) {
+	row := q.db.QueryRow(ctx, updateDiaper,
+		arg.BabyID,
+		arg.DiaperID,
+		arg.DiaperType,
+		arg.ChangeTime,
+		arg.Column5,
+		arg.Column6,
+		arg.Column7,
+		arg.Column8,
+		arg.Utime,
+	)
+	var i UpdateDiaperRow
+	err := row.Scan(
+		&i.DiaperID,
+		&i.ChangeTime,
+		&i.DiaperType,
+		&i.PeeColor,
+		&i.PoopColor,
+		&i.PoopConsistency,
+		&i.Remark,
+	)
+	return i, err
+}
+
+const updateFeeding = `-- name: UpdateFeeding :one
+UPDATE "daily_feeding"
+SET
+  feed_type = $3,
+  feed_time = $4,
+  remark    = COALESCE(NULLIF($5, ''), NULL),
+  utime     = $6
+WHERE baby_id = $1 AND feeding_id = $2
+RETURNING feeding_id::text AS feeding_id, feed_time, feed_type, COALESCE(remark, '') AS remark
+`
+
+type UpdateFeedingParams struct {
+	BabyID    pgtype.UUID
+	FeedingID pgtype.UUID
+	FeedType  string
+	FeedTime  int64
+	Column5   interface{}
+	Utime     int64
+}
+
+type UpdateFeedingRow struct {
+	FeedingID string
+	FeedTime  int64
+	FeedType  string
+	Remark    string
+}
+
+func (q *Queries) UpdateFeeding(ctx context.Context, arg UpdateFeedingParams) (UpdateFeedingRow, error) {
+	row := q.db.QueryRow(ctx, updateFeeding,
+		arg.BabyID,
+		arg.FeedingID,
+		arg.FeedType,
+		arg.FeedTime,
+		arg.Column5,
+		arg.Utime,
+	)
+	var i UpdateFeedingRow
+	err := row.Scan(
+		&i.FeedingID,
+		&i.FeedTime,
+		&i.FeedType,
+		&i.Remark,
+	)
+	return i, err
+}
+
+const updateGrowthByRecordID = `-- name: UpdateGrowthByRecordID :exec
+UPDATE "baby_growth_record"
+SET record_time = $2,
+    height = $3,
+    weight = $4,
+    head_circumference = $5,
+    remark = COALESCE(NULLIF($6, ''), remark),
+    updated_by = $7,
+    utime = $8
+WHERE record_id = $1
+`
+
+type UpdateGrowthByRecordIDParams struct {
+	RecordID          pgtype.UUID
+	RecordTime        int64
+	Height            pgtype.Float8
+	Weight            pgtype.Float8
+	HeadCircumference pgtype.Float8
+	Column6           interface{}
+	UpdatedBy         pgtype.UUID
+	Utime             int64
+}
+
+func (q *Queries) UpdateGrowthByRecordID(ctx context.Context, arg UpdateGrowthByRecordIDParams) error {
+	_, err := q.db.Exec(ctx, updateGrowthByRecordID,
+		arg.RecordID,
+		arg.RecordTime,
+		arg.Height,
+		arg.Weight,
+		arg.HeadCircumference,
+		arg.Column6,
+		arg.UpdatedBy,
+		arg.Utime,
+	)
+	return err
 }
 
 const updateVaccineStatusGiven = `-- name: UpdateVaccineStatusGiven :execrows

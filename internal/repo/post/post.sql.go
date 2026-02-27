@@ -195,6 +195,15 @@ func (q *Queries) DeleteCommentVisibleByOwner(ctx context.Context, arg DeleteCom
 	return result.RowsAffected(), nil
 }
 
+const deletePostTagsByPost = `-- name: DeletePostTagsByPost :exec
+DELETE FROM "post_tag" WHERE post_id = $1
+`
+
+func (q *Queries) DeletePostTagsByPost(ctx context.Context, postID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deletePostTagsByPost, postID)
+	return err
+}
+
 const getCommentMetaByID = `-- name: GetCommentMetaByID :one
 SELECT
   post_id::text AS post_id,
@@ -594,6 +603,202 @@ func (q *Queries) ListDraftsByAuthor(ctx context.Context, arg ListDraftsByAuthor
 	var items []ListDraftsByAuthorRow
 	for rows.Next() {
 		var i ListDraftsByAuthorRow
+		if err := rows.Scan(
+			&i.PostID,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.AuthorAvatar,
+			&i.AuthorProvince,
+			&i.AuthorCity,
+			&i.Title,
+			&i.Content,
+			&i.Status,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CollectCount,
+			&i.CommentCount,
+			&i.Cover,
+			&i.Ctime,
+			&i.Utime,
+			&i.Birthday,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFollowingByCtime = `-- name: ListFollowingByCtime :many
+SELECT
+  p.post_id::text AS post_id,
+  p.author_id::text AS author_id,
+  COALESCE(ua.username, '') AS author_name,
+  COALESCE(ua.avatar, '') AS author_avatar,
+  COALESCE(ua.province, '') AS author_province,
+  COALESCE(ua.city, '') AS author_city,
+  p.title, p.content, p.status,
+  p.like_count, p.dislike_count, p.collect_count, p.comment_count,
+  p.cover, p.ctime, p.utime,
+  COALESCE((
+    SELECT b.birthday
+    FROM "baby" b
+    WHERE b.user_id = p.author_id
+    ORDER BY b.ctime DESC
+    LIMIT 1
+  ), 0) AS birthday,
+  COALESCE((
+    SELECT array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL)
+    FROM "post_tag" pt
+    JOIN "tag" t ON t.tag_id = pt.tag_id
+    WHERE pt.post_id = p.post_id
+  ), '{}') AS tags
+FROM "post" p
+JOIN "user_follow" f ON f.followee = p.author_id
+LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
+WHERE f.follower = $1 AND p.status = 'published'
+ORDER BY p.ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListFollowingByCtimeParams struct {
+	Follower pgtype.UUID
+	Limit    int32
+	Offset   int32
+}
+
+type ListFollowingByCtimeRow struct {
+	PostID         string
+	AuthorID       string
+	AuthorName     string
+	AuthorAvatar   string
+	AuthorProvince string
+	AuthorCity     string
+	Title          string
+	Content        string
+	Status         string
+	LikeCount      int32
+	DislikeCount   int32
+	CollectCount   int32
+	CommentCount   int32
+	Cover          string
+	Ctime          int64
+	Utime          int64
+	Birthday       interface{}
+	Tags           interface{}
+}
+
+func (q *Queries) ListFollowingByCtime(ctx context.Context, arg ListFollowingByCtimeParams) ([]ListFollowingByCtimeRow, error) {
+	rows, err := q.db.Query(ctx, listFollowingByCtime, arg.Follower, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFollowingByCtimeRow
+	for rows.Next() {
+		var i ListFollowingByCtimeRow
+		if err := rows.Scan(
+			&i.PostID,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.AuthorAvatar,
+			&i.AuthorProvince,
+			&i.AuthorCity,
+			&i.Title,
+			&i.Content,
+			&i.Status,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CollectCount,
+			&i.CommentCount,
+			&i.Cover,
+			&i.Ctime,
+			&i.Utime,
+			&i.Birthday,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFollowingByHot = `-- name: ListFollowingByHot :many
+SELECT
+  p.post_id::text AS post_id,
+  p.author_id::text AS author_id,
+  COALESCE(ua.username, '') AS author_name,
+  COALESCE(ua.avatar, '') AS author_avatar,
+  COALESCE(ua.province, '') AS author_province,
+  COALESCE(ua.city, '') AS author_city,
+  p.title, p.content, p.status,
+  p.like_count, p.dislike_count, p.collect_count, p.comment_count,
+  p.cover, p.ctime, p.utime,
+  COALESCE((
+    SELECT b.birthday
+    FROM "baby" b
+    WHERE b.user_id = p.author_id
+    ORDER BY b.ctime DESC
+    LIMIT 1
+  ), 0) AS birthday,
+  COALESCE((
+    SELECT array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL)
+    FROM "post_tag" pt
+    JOIN "tag" t ON t.tag_id = pt.tag_id
+    WHERE pt.post_id = p.post_id
+  ), '{}') AS tags
+FROM "post" p
+JOIN "user_follow" f ON f.followee = p.author_id
+LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
+WHERE f.follower = $1 AND p.status = 'published'
+ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListFollowingByHotParams struct {
+	Follower pgtype.UUID
+	Limit    int32
+	Offset   int32
+}
+
+type ListFollowingByHotRow struct {
+	PostID         string
+	AuthorID       string
+	AuthorName     string
+	AuthorAvatar   string
+	AuthorProvince string
+	AuthorCity     string
+	Title          string
+	Content        string
+	Status         string
+	LikeCount      int32
+	DislikeCount   int32
+	CollectCount   int32
+	CommentCount   int32
+	Cover          string
+	Ctime          int64
+	Utime          int64
+	Birthday       interface{}
+	Tags           interface{}
+}
+
+func (q *Queries) ListFollowingByHot(ctx context.Context, arg ListFollowingByHotParams) ([]ListFollowingByHotRow, error) {
+	rows, err := q.db.Query(ctx, listFollowingByHot, arg.Follower, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFollowingByHotRow
+	for rows.Next() {
+		var i ListFollowingByHotRow
 		if err := rows.Scan(
 			&i.PostID,
 			&i.AuthorID,
@@ -2114,6 +2319,34 @@ func (q *Queries) UpdateCommentContentByOwner(ctx context.Context, arg UpdateCom
 		arg.Content,
 		arg.Utime,
 		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateDraftByOwner = `-- name: UpdateDraftByOwner :execrows
+UPDATE "post"
+SET title = $3, content = $4, utime = $5
+WHERE post_id = $1 AND author_id = $2 AND status = 'draft'
+`
+
+type UpdateDraftByOwnerParams struct {
+	PostID   pgtype.UUID
+	AuthorID pgtype.UUID
+	Title    string
+	Content  string
+	Utime    int64
+}
+
+func (q *Queries) UpdateDraftByOwner(ctx context.Context, arg UpdateDraftByOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateDraftByOwner,
+		arg.PostID,
+		arg.AuthorID,
+		arg.Title,
+		arg.Content,
+		arg.Utime,
 	)
 	if err != nil {
 		return 0, err

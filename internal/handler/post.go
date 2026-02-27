@@ -71,6 +71,16 @@ func (h *PostHandler) Publish(c *gin.Context) {
 	response.Response(c, resp, err)
 }
 
+func (h *PostHandler) UpdateDraft(c *gin.Context) {
+	uri := middleware.GetBind[dto.PostDetailReq](c)
+	body := middleware.GetBind[dto.UpdateDraftReq](c)
+	global.Log.Info(uri, body)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.UpdateDraft(c.Request.Context(), userID, uri, body)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
 func (h *PostHandler) CreateComment(c *gin.Context) {
 	uri := middleware.GetBind[dto.PublishPostReq](c)
 	body := middleware.GetBind[dto.CreateCommentReq](c)
@@ -86,6 +96,15 @@ func (h *PostHandler) ListMyPosts(c *gin.Context) {
 	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := h.postLogic.ListMyPosts(c.Request.Context(), userID, cr)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
+func (h *PostHandler) Following(c *gin.Context) {
+	cr := middleware.GetBind[dto.PostMyListReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.Following(c.Request.Context(), userID, cr)
 	global.Log.Info(resp)
 	response.Response(c, resp, err)
 }

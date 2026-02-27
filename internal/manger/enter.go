@@ -20,6 +20,7 @@ type RouteManager struct {
 	UserRoutes   *gin.RouterGroup //用户相关的路由组
 	BabyRoutes   *gin.RouterGroup //宝宝相关的路由组
 	PostRoutes   *gin.RouterGroup //帖子相关的路由组
+	DailyRoutes  *gin.RouterGroup //日常记录相关的路由组
 	WSRoutes     *gin.RouterGroup //WebSocket相关的路由组
 }
 
@@ -30,6 +31,7 @@ func NewRouteManager(router *gin.Engine) *RouteManager {
 		UserRoutes:   router.Group("/api/user"),   //用户相关的路由组
 		BabyRoutes:   router.Group("/api/baby"),   //宝宝相关的路由组
 		PostRoutes:   router.Group("/api/post"),   //帖子相关的路由组
+		DailyRoutes:  router.Group("/api/daily"),  //日常记录相关的路由组
 		WSRoutes:     router.Group("/ws"),         //WebSocket相关的路由组
 	}
 }
@@ -54,6 +56,11 @@ func (rm *RouteManager) RegisterPostRoutes(handler PathHandler) {
 	handler(rm.PostRoutes)
 }
 
+// RegisterDailyRoutes 日常记录相关的路由组
+func (rm *RouteManager) RegisterDailyRoutes(handler PathHandler) {
+	handler(rm.DailyRoutes)
+}
+
 // RegisterWSRoutes WebSocket相关的路由组
 func (rm *RouteManager) RegisterWSRoutes(handler PathHandler) {
 	handler(rm.WSRoutes)
@@ -70,6 +77,8 @@ func (rm *RouteManager) RegisterMiddleware(group string, middleware Middleware) 
 		rm.BabyRoutes.Use(middleware())
 	case "post":
 		rm.PostRoutes.Use(middleware())
+	case "daily":
+		rm.DailyRoutes.Use(middleware())
 	case "ws":
 		rm.WSRoutes.Use(middleware())
 	default:
