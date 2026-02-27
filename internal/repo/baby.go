@@ -827,33 +827,26 @@ func (r *BabyRepo) ListDiaperBetween(ctx context.Context, babyID string, from, t
 	if err := bid.Scan(babyID); err != nil {
 		return nil, err
 	}
-	rows, err := global.DB.Query(ctx, `
-SELECT diaper_id::text AS diaper_id, change_time, diaper_type,
-  COALESCE(pee_color, '') AS pee_color,
-  COALESCE(poop_color, '') AS poop_color,
-  COALESCE(poop_consistency, '') AS poop_consistency,
-  COALESCE(remark, '') AS remark
-FROM "daily_diaper"
-WHERE baby_id = $1 AND change_time BETWEEN $2 AND $3
-ORDER BY change_time ASC
-`, bid, from, to)
+	rows, err := r.babyDao.ListDiaperByBabyBetween(ctx, baby.ListDiaperByBabyBetweenParams{
+		BabyID:       bid,
+		ChangeTime:   from,
+		ChangeTime_2: to,
+	})
 	if err != nil {
 		global.Log.Error(err)
 		return nil, ErrDefault
 	}
-	defer rows.Close()
-	var items []DiaperRow
-	for rows.Next() {
-		var it DiaperRow
-		if scanErr := rows.Scan(&it.DiaperID, &it.ChangeTime, &it.DiaperType, &it.PeeColor, &it.PoopColor, &it.PoopConsistency, &it.Remark); scanErr != nil {
-			global.Log.Error(scanErr)
-			return nil, ErrDefault
-		}
-		items = append(items, it)
-	}
-	if rows.Err() != nil {
-		global.Log.Error(rows.Err())
-		return nil, ErrDefault
+	items := make([]DiaperRow, 0, len(rows))
+	for _, v := range rows {
+		items = append(items, DiaperRow{
+			DiaperID:        v.DiaperID,
+			ChangeTime:      v.ChangeTime,
+			DiaperType:      v.DiaperType,
+			PeeColor:        v.PeeColor,
+			PoopColor:       v.PoopColor,
+			PoopConsistency: v.PoopConsistency,
+			Remark:          v.Remark,
+		})
 	}
 	return items, nil
 }
