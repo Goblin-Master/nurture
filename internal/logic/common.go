@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/minio/minio-go/v7"
+	"github.com/tmc/langchaingo/llms"
 )
 
 type ICommonLogic interface {
@@ -25,6 +26,7 @@ type ICommonLogic interface {
 	ChatStream(ctx context.Context, userID string, req dto.ChatStreamReq, streamFunc func(event dto.SSEEvent)) error
 	UploadKnowledge(ctx context.Context, userID string, req dto.KnowledgeUploadReq) error
 	GetChatHistory(ctx context.Context, userID string, req dto.ChatHistoryReq) (dto.ChatHistoryResp, error)
+	GrowthAnalysisStream(ctx context.Context, userID string, req dto.GrowthAnalysisReq, streamFunc func(event dto.SSEEvent)) error
 }
 
 type CommonLogic struct {
@@ -222,4 +224,77 @@ func (l *CommonLogic) buildCollections(userID string, cfg dto.KBConfig) []string
 		collections = append(collections, constant.COLLECTION_PUBLIC)
 	}
 	return collections
+}
+
+// GrowthAnalysisStream 成长曲线分析
+func (l *CommonLogic) GrowthAnalysisStream(ctx context.Context, userID string, req dto.GrowthAnalysisReq, streamFunc func(event dto.SSEEvent)) error {
+	// 1. 验证单位
+	switch req.Metric {
+	case "height", "head_circumference":
+		if req.Unit != "cm" {
+			return fmt.Errorf("invalid unit for %s: expected cm, got %s", req.Metric, req.Unit)
+		}
+	case "weight":
+		if req.Unit != "kg" {
+			return fmt.Errorf("invalid unit for %s: expected kg, got %s", req.Metric, req.Unit)
+		}
+	}
+
+	// 2. 构建提示词
+	var sb strings.Builder
+	sb.WriteString("请作为专业的儿科医生，分析以下宝宝的生长发育数据，并给出评估意见和建议。\n\n")
+
+	// 基础信息
+	birthday := time.UnixMilli(req.Birthday).Format("2006-01-02")
+	metricName := map[string]string{
+		"height":             "身高",
+		"weight":             "体重",
+		"head_circumference": "头围",
+	}[req.Metric]
+
+	sb.WriteString(fmt.Sprintf("宝宝出生日期：%s\n", birthday))
+	sb.WriteString(fmt.Sprintf("测量指标：%s (%s)\n", metricName, req.Unit))
+	sb.WriteString("测量记录：\n")
+
+	// 记录列表
+	for _, item := range req.Items {
+		recordTime := time.UnixMilli(item.Time).Format("2006-01-02")
+		// 计算月龄
+		ageDays := int(time.UnixMilli(item.Time).Sub(time.UnixMilli(req.Birthday)).Hours() / 24)
+		ageMonths := float64(ageDays) / 30.0
+		sb.WriteString(fmt.Sprintf("- %s (约%.1f个月): %.2f\n", recordTime, ageMonths, item.Value))
+	}
+
+	sb.WriteString("\n请分析：\n1. 生长趋势是否正常？\n2. 与标准曲线相比处于什么水平？\n3. 有什么具体的喂养或护理建议？")
+
+	prompt := sb.String()
+
+	// 3. 调用 AI
+	messages := []llms.MessageContent{
+		llms.TextParts(llms.ChatMessageTypeSystem, "你是一个专业的儿科医生助手，擅长分析婴幼儿生长发育数据。"),
+		llms.TextParts(llms.ChatMessageTypeHuman, prompt),
+	}
+
+	_, err := global.AIX.StreamChat(ctx, messages, func(chunk string) {
+		streamFunc(dto.SSEEvent{
+			Type:    constant.SSE_TYPE_CONTENT,
+			Content: chunk,
+		})
+	})
+
+	if err != nil {
+		global.Log.Error(err)
+		streamFunc(dto.SSEEvent{
+			Type:  constant.SSE_TYPE_ERROR,
+			Error: ErrChatStream.Error(),
+		})
+		return ErrChatStream
+	}
+
+	// 4. 完成
+	streamFunc(dto.SSEEvent{
+		Type: constant.SSE_TYPE_DONE,
+	})
+
+	return nil
 }

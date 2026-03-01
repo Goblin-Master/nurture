@@ -52,3 +52,17 @@ type (
 		Timestamp int64    `json:"timestamp"`
 	}
 )
+
+// 成长分析
+type (
+	GrowthAnalysisReq struct {
+		Birthday int64        `json:"birthday" binding:"required"` // 13位毫秒级Unix时间戳
+		Metric   string       `json:"metric" binding:"required,oneof=height weight head_circumference"`
+		Unit     string       `json:"unit" binding:"required"` // cm / kg
+		Items    []GrowthItem `json:"items" binding:"required,dive"`
+	}
+	GrowthItem struct {
+		Time  int64   `json:"time" binding:"required"` // 13位毫秒级Unix时间戳
+		Value float64 `json:"value" binding:"required"`
+	}
+)
