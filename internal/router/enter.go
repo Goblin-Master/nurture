@@ -70,6 +70,13 @@ func registerRoutes(routeManager *manager.RouteManager) {
 				middleware.BindQueryMiddleware[dto.ChatHistoryReq],
 				commonHandler.GetChatHistory,
 			)
+
+			// 成长曲线分析
+			ai.POST("/growth/analysis",
+				middleware.Authentication(jwtx.COMMON_USER),
+				middleware.BindJsonMiddleware[dto.GrowthAnalysisReq],
+				commonHandler.GrowthAnalysis,
+			)
 		}
 	})
 

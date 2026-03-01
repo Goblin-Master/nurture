@@ -92,3 +92,25 @@ func (h *CommonHandler) GetChatHistory(c *gin.Context) {
 	resp, err := h.commonLogic.GetChatHistory(c.Request.Context(), userID, req)
 	response.Response(c, resp, err)
 }
+
+// GrowthAnalysis 成长曲线分析
+func (h *CommonHandler) GrowthAnalysis(c *gin.Context) {
+	req := middleware.GetBind[dto.GrowthAnalysisReq](c)
+	userID := jwtx.GetUserID(c)
+	global.Log.Infof("GrowthAnalysis %s: %v", userID, req)
+
+	// 设置 SSE 响应头
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+
+	// 流式回调
+	streamFunc := func(event dto.SSEEvent) {
+		data, _ := json.Marshal(event)
+		c.SSEvent("message", string(data))
+		c.Writer.Flush()
+	}
+
+	// 执行分析
+	_ = h.commonLogic.GrowthAnalysisStream(c.Request.Context(), userID, req, streamFunc)
+}
