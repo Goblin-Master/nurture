@@ -7,6 +7,7 @@ import (
 	"nurture/internal/dto"
 	"nurture/internal/global"
 	"nurture/internal/repo"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,8 @@ type IBabyLogic interface {
 	GetProfile(ctx context.Context, userID string, req dto.BabyProfileReq) (dto.BabyProfileResp, error)
 	GetVaccineList(ctx context.Context, userID string, req dto.GetVaccineListReq) (dto.GetVaccineListResp, error)
 	ChangeVaccineStatus(ctx context.Context, userID string, req dto.ChangeVaccineStatusReq) (dto.ChangeVaccineStatusResp, error)
+	// admin vaccine
+	AdminCreateVaccine(ctx context.Context, req dto.AdminCreateVaccineReq) (dto.AdminCreateVaccineResp, error)
 	UploadBabyPhotos(ctx context.Context, userID string, req dto.UploadBabyPhotosReq) (dto.UploadBabyPhotosResp, error)
 	DeleteBabyPhotos(ctx context.Context, userID string, req dto.DeleteBabyPhotosReq) (dto.DeleteBabyPhotosResp, error)
 	ListBabyPhotos(ctx context.Context, userID string, req dto.ListBabyPhotosReq) (dto.ListBabyPhotosResp, error)
@@ -386,10 +389,54 @@ func (l *BabyLogic) DailyStats(ctx context.Context, userID string, uri dto.Daily
 		global.Log.Error(e)
 		return dto.DailyStatsResp{}, ErrDefault
 	}
+	feedRows, fe := l.babyRepo.ListFeedingBetween(ctx, uri.BabyID, from, to)
+	if fe != nil {
+		global.Log.Error(fe)
+		return dto.DailyStatsResp{}, ErrDefault
+	}
+	diaperRows, de := l.babyRepo.ListDiaperBetween(ctx, uri.BabyID, from, to)
+	if de != nil {
+		global.Log.Error(de)
+		return dto.DailyStatsResp{}, ErrDefault
+	}
+	sleepRows, se := l.babyRepo.ListSleepBetween(ctx, uri.BabyID, from, to)
+	if se != nil {
+		global.Log.Error(se)
+		return dto.DailyStatsResp{}, ErrDefault
+	}
+	items := make([]dto.DailyRecordItem, 0, len(feedRows)+len(diaperRows)+len(sleepRows))
+	for _, v := range feedRows {
+		items = append(items, dto.DailyRecordItem{
+			ID:      v.FeedingID,
+			Type:    "feeding",
+			SubType: v.FeedType,
+			Time:    v.FeedTime,
+		})
+	}
+	for _, v := range diaperRows {
+		items = append(items, dto.DailyRecordItem{
+			ID:      v.DiaperID,
+			Type:    "diaper",
+			SubType: v.DiaperType,
+			Time:    v.ChangeTime,
+		})
+	}
+	for _, v := range sleepRows {
+		items = append(items, dto.DailyRecordItem{
+			ID:         v.SessionID,
+			Type:       "sleep",
+			SubType:    "duration",
+			Time:       v.StartTime,
+			DurationMs: v.Duration,
+		})
+	}
+	// 统一按时间升序
+	sort.Slice(items, func(i, j int) bool { return items[i].Time < items[j].Time })
 	return dto.DailyStatsResp{
 		FeedingCount:    s.FeedingCount,
 		SleepDurationMs: s.SleepDurationMs,
 		DiaperCount:     s.DiaperCount,
+		Items:           items,
 	}, nil
 }
 
@@ -621,10 +668,7 @@ func (l *BabyLogic) GetProfile(ctx context.Context, userID string, req dto.BabyP
 		return resp, ErrDefault
 	}
 	gr, err := l.babyRepo.GetLatestGrowthByBabyID(ctx, req.BabyID)
-	if err != nil {
-		if errors.Is(err, repo.ErrBabyGrowthNotExist) {
-			return resp, ErrBabyGrowthNotExist
-		}
+	if err != nil && !errors.Is(err, repo.ErrBabyGrowthNotExist) {
 		global.Log.Error(err)
 		return resp, ErrDefault
 	}
@@ -633,15 +677,17 @@ func (l *BabyLogic) GetProfile(ctx context.Context, userID string, req dto.BabyP
 	resp.Avatar = b.Avatar
 	resp.Gender = b.Gender
 	resp.Birthday = b.Birthday
-	resp.RecordTime = gr.RecordTime
-	if gr.Height.Valid {
-		resp.Height = gr.Height.Float64
-	}
-	if gr.Weight.Valid {
-		resp.Weight = gr.Weight.Float64
-	}
-	if gr.HeadCircumference.Valid {
-		resp.HeadCircumference = gr.HeadCircumference.Float64
+	if err == nil {
+		resp.RecordTime = gr.RecordTime
+		if gr.Height.Valid {
+			resp.Height = gr.Height.Float64
+		}
+		if gr.Weight.Valid {
+			resp.Weight = gr.Weight.Float64
+		}
+		if gr.HeadCircumference.Valid {
+			resp.HeadCircumference = gr.HeadCircumference.Float64
+		}
 	}
 	return resp, nil
 }
@@ -818,6 +864,39 @@ func (l *BabyLogic) GetVaccineList(ctx context.Context, userID string, req dto.G
 		})
 	}
 	resp.Items = items
+	return resp, nil
+}
+
+func (l *BabyLogic) AdminCreateVaccine(ctx context.Context, req dto.AdminCreateVaccineReq) (dto.AdminCreateVaccineResp, error) {
+	var resp dto.AdminCreateVaccineResp
+	if req.Name == "" || req.Disease == "" || len(req.Doses) == 0 {
+		return resp, ErrParamsType
+	}
+	vaccineID := uuid.NewString()
+	doses := make([]repo.DoseSpec, 0, len(req.Doses))
+	for _, d := range req.Doses {
+		if d.DoseNumber <= 0 || d.RecommendAgeDays < 0 {
+			return resp, ErrParamsType
+		}
+		doses = append(doses, repo.DoseSpec{
+			DoseNumber:       d.DoseNumber,
+			RecommendAgeDays: d.RecommendAgeDays,
+		})
+	}
+	vid, created, err := l.babyRepo.AdminCreateVaccine(ctx, vaccineID, req.Name, req.Disease, req.Link, doses)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.VaccineID = vid
+	resp.Doses = make([]dto.AdminCreatedDose, 0, len(created))
+	for _, c := range created {
+		resp.Doses = append(resp.Doses, dto.AdminCreatedDose{
+			DoseID:           c.DoseID,
+			DoseNumber:       c.DoseNumber,
+			RecommendAgeDays: c.RecommendAgeDays,
+		})
+	}
 	return resp, nil
 }
 

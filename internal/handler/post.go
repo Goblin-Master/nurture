@@ -161,6 +161,46 @@ func (h *PostHandler) UnlikeComment(c *gin.Context) {
 	err := h.postLogic.UnlikeComment(c.Request.Context(), userID, uri)
 	response.Response(c, nil, err)
 }
+
+func (h *PostHandler) LikePost(c *gin.Context) {
+	uri := middleware.GetBind[dto.PostDetailReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	err := h.postLogic.LikePost(c.Request.Context(), userID, uri)
+	response.Response(c, nil, err)
+}
+
+func (h *PostHandler) UnlikePost(c *gin.Context) {
+	uri := middleware.GetBind[dto.PostDetailReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	err := h.postLogic.UnlikePost(c.Request.Context(), userID, uri)
+	response.Response(c, nil, err)
+}
+func (h *PostHandler) CollectPost(c *gin.Context) {
+	uri := middleware.GetBind[dto.PostDetailReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.CollectPost(c.Request.Context(), userID, uri)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+func (h *PostHandler) UncollectPost(c *gin.Context) {
+	uri := middleware.GetBind[dto.PostDetailReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.UncollectPost(c.Request.Context(), userID, uri)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+func (h *PostHandler) ListMyCollections(c *gin.Context) {
+	cr := middleware.GetBind[dto.PostMyListReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.ListMyCollections(c.Request.Context(), userID, cr)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
 func (h *PostHandler) ListMyDrafts(c *gin.Context) {
 	cr := middleware.GetBind[dto.PostMyListReq](c)
 	global.Log.Info(cr)
@@ -175,6 +215,29 @@ func (h *PostHandler) ListMyMilestones(c *gin.Context) {
 	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := h.postLogic.ListMyMilestones(c.Request.Context(), userID, cr)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
+func (h *PostHandler) AdminCreateTag(c *gin.Context) {
+	body := middleware.GetBind[dto.AdminTagCreateReq](c)
+	global.Log.Info(body)
+	resp, err := h.postLogic.AdminCreateTag(c.Request.Context(), body)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
+func (h *PostHandler) AdminDeleteTag(c *gin.Context) {
+	uri := middleware.GetBind[dto.AdminTagDeleteUri](c)
+	global.Log.Info(uri)
+	err := h.postLogic.AdminDeleteTag(c.Request.Context(), uri)
+	response.Response(c, nil, err)
+}
+
+func (h *PostHandler) ListTags(c *gin.Context) {
+	query := middleware.GetBind[dto.TagListReq](c)
+	global.Log.Info(query)
+	resp, err := h.postLogic.ListTags(c.Request.Context(), query)
 	global.Log.Info(resp)
 	response.Response(c, resp, err)
 }

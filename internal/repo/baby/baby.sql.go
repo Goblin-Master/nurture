@@ -208,6 +208,68 @@ func (q *Queries) CreateFeeding(ctx context.Context, arg CreateFeedingParams) (C
 	return i, err
 }
 
+const createVaccine = `-- name: CreateVaccine :one
+INSERT INTO "vaccine" (vaccine_id, name, disease, link, ctime, utime)
+VALUES ($1, $2, $3, $4, $5, $5)
+RETURNING vaccine_id::text AS vaccine_id
+`
+
+type CreateVaccineParams struct {
+	VaccineID pgtype.UUID
+	Name      string
+	Disease   string
+	Link      string
+	Ctime     int64
+}
+
+// 管理员：创建疫苗
+func (q *Queries) CreateVaccine(ctx context.Context, arg CreateVaccineParams) (string, error) {
+	row := q.db.QueryRow(ctx, createVaccine,
+		arg.VaccineID,
+		arg.Name,
+		arg.Disease,
+		arg.Link,
+		arg.Ctime,
+	)
+	var vaccine_id string
+	err := row.Scan(&vaccine_id)
+	return vaccine_id, err
+}
+
+const createVaccineDose = `-- name: CreateVaccineDose :one
+INSERT INTO "vaccine_dose" (dose_id, vaccine_id, dose_number, recommend_age_days, ctime, utime)
+VALUES ($1, $2, $3, $4, $5, $5)
+RETURNING dose_id::text AS dose_id, dose_number, recommend_age_days
+`
+
+type CreateVaccineDoseParams struct {
+	DoseID           pgtype.UUID
+	VaccineID        pgtype.UUID
+	DoseNumber       int32
+	RecommendAgeDays int32
+	Ctime            int64
+}
+
+type CreateVaccineDoseRow struct {
+	DoseID           string
+	DoseNumber       int32
+	RecommendAgeDays int32
+}
+
+// 管理员：为疫苗新增剂次
+func (q *Queries) CreateVaccineDose(ctx context.Context, arg CreateVaccineDoseParams) (CreateVaccineDoseRow, error) {
+	row := q.db.QueryRow(ctx, createVaccineDose,
+		arg.DoseID,
+		arg.VaccineID,
+		arg.DoseNumber,
+		arg.RecommendAgeDays,
+		arg.Ctime,
+	)
+	var i CreateVaccineDoseRow
+	err := row.Scan(&i.DoseID, &i.DoseNumber, &i.RecommendAgeDays)
+	return i, err
+}
+
 const deleteBabyPhotos = `-- name: DeleteBabyPhotos :execrows
 DELETE FROM "baby_photo"
 WHERE baby_id = $1 AND photo_id = ANY($2::uuid[])
@@ -224,6 +286,41 @@ func (q *Queries) DeleteBabyPhotos(ctx context.Context, arg DeleteBabyPhotosPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const forceStopSleepWithCap = `-- name: ForceStopSleepWithCap :one
+UPDATE "daily_sleep"
+SET
+  end_time = start_time + $2,
+  duration = $2,
+  status   = 'finished',
+  utime    = EXTRACT(EPOCH FROM NOW())*1000
+WHERE sleep_id = $1 AND status = 'running'
+RETURNING sleep_id::text AS sleep_id, start_time, end_time, duration
+`
+
+type ForceStopSleepWithCapParams struct {
+	SleepID  pgtype.UUID
+	Duration pgtype.Int8
+}
+
+type ForceStopSleepWithCapRow struct {
+	SleepID   string
+	StartTime int64
+	EndTime   pgtype.Int8
+	Duration  pgtype.Int8
+}
+
+func (q *Queries) ForceStopSleepWithCap(ctx context.Context, arg ForceStopSleepWithCapParams) (ForceStopSleepWithCapRow, error) {
+	row := q.db.QueryRow(ctx, forceStopSleepWithCap, arg.SleepID, arg.Duration)
+	var i ForceStopSleepWithCapRow
+	err := row.Scan(
+		&i.SleepID,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Duration,
+	)
+	return i, err
 }
 
 const getActiveSleep = `-- name: GetActiveSleep :one
@@ -436,6 +533,28 @@ func (q *Queries) GetLatestNonNullGrowthValuesByBaby(ctx context.Context, babyID
 	var i GetLatestNonNullGrowthValuesByBabyRow
 	err := row.Scan(&i.Height, &i.Weight, &i.HeadCircumference)
 	return i, err
+}
+
+const initBabyVaccineRecordsForDose = `-- name: InitBabyVaccineRecordsForDose :execrows
+INSERT INTO "baby_vaccine_record" (record_id, baby_id, dose_id, due_time, status, actual_time, ctime, utime)
+SELECT gen_random_uuid(), b.baby_id, $1, b.birthday + (d.recommend_age_days * 24 * 3600 * 1000), 'not_given', NULL, $2, $2
+FROM "baby" b
+JOIN "vaccine_dose" d ON d.dose_id = $1
+ON CONFLICT (baby_id, dose_id) DO NOTHING
+`
+
+type InitBabyVaccineRecordsForDoseParams struct {
+	DoseID pgtype.UUID
+	Ctime  int64
+}
+
+// 管理员：为新剂次初始化所有宝宝的接种记录（未接种）
+func (q *Queries) InitBabyVaccineRecordsForDose(ctx context.Context, arg InitBabyVaccineRecordsForDoseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, initBabyVaccineRecordsForDose, arg.DoseID, arg.Ctime)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listAllDoses = `-- name: ListAllDoses :many

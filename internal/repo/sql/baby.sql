@@ -48,6 +48,26 @@ ORDER BY v.name ASC, d.dose_number ASC;
 INSERT INTO "baby_vaccine_record" (record_id, baby_id, dose_id, due_time, status, actual_time, ctime, utime)
 VALUES ($1, $2, $3, $4, 'not_given', NULL, $5, $6);
 
+-- 管理员：创建疫苗
+-- name: CreateVaccine :one
+INSERT INTO "vaccine" (vaccine_id, name, disease, link, ctime, utime)
+VALUES ($1, $2, $3, $4, $5, $5)
+RETURNING vaccine_id::text AS vaccine_id;
+
+-- 管理员：为疫苗新增剂次
+-- name: CreateVaccineDose :one
+INSERT INTO "vaccine_dose" (dose_id, vaccine_id, dose_number, recommend_age_days, ctime, utime)
+VALUES ($1, $2, $3, $4, $5, $5)
+RETURNING dose_id::text AS dose_id, dose_number, recommend_age_days;
+
+-- 管理员：为新剂次初始化所有宝宝的接种记录（未接种）
+-- name: InitBabyVaccineRecordsForDose :execrows
+INSERT INTO "baby_vaccine_record" (record_id, baby_id, dose_id, due_time, status, actual_time, ctime, utime)
+SELECT gen_random_uuid(), b.baby_id, $1, b.birthday + (d.recommend_age_days * 24 * 3600 * 1000), 'not_given', NULL, $2, $2
+FROM "baby" b
+JOIN "vaccine_dose" d ON d.dose_id = $1
+ON CONFLICT (baby_id, dose_id) DO NOTHING;
+
 -- name: ListVaccineRecordsByBabyID :many
 SELECT 
   d.dose_id::text AS dose_id,
@@ -146,6 +166,16 @@ SET
   utime    = EXTRACT(EPOCH FROM NOW())*1000
 WHERE sleep_id = $1
 RETURNING sleep_id::text AS sleep_id, baby_id::text AS baby_id, user_id::text AS user_id, start_time, end_time, duration;
+
+-- name: ForceStopSleepWithCap :one
+UPDATE "daily_sleep"
+SET
+  end_time = start_time + $2,
+  duration = $2,
+  status   = 'finished',
+  utime    = EXTRACT(EPOCH FROM NOW())*1000
+WHERE sleep_id = $1 AND status = 'running'
+RETURNING sleep_id::text AS sleep_id, start_time, end_time, duration;
 
 -- name: GetActiveSleep :one
 SELECT sleep_id::text AS sleep_id, start_time

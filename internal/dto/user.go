@@ -76,10 +76,12 @@ type (
 		Password string `json:"password"`
 	}
 	PartnerBindResp struct {
-		PartnerID string `json:"partner_id"`
+		PartnerID       string `json:"partner_id"`
+		PartnerUsername string `json:"partner_username"`
 	}
 	PartnerGetResp struct {
-		PartnerID string `json:"partner_id"`
+		PartnerID       string `json:"partner_id"`
+		PartnerUsername string `json:"partner_username"`
 	}
 	MyProfileResp struct {
 		UserID     string `json:"user_id"`
@@ -132,5 +134,25 @@ type (
 	FollowersListResp struct {
 		List    []FollowingUserItem `json:"list"`
 		HasMore bool                `json:"has_more"`
+	}
+)
+
+type (
+	AdminListUsersReq struct {
+		Keyword  string `form:"keyword"`
+		Page     int    `form:"page"`
+		PageSize int    `form:"page_size"`
+	}
+	AdminUserItem struct {
+		UserID   string `json:"user_id"`
+		Username string `json:"username"`
+		Avatar   string `json:"avatar"`
+	}
+	AdminListUsersResp struct {
+		List    []AdminUserItem `json:"list"`
+		HasMore bool            `json:"has_more"`
+	}
+	AdminPromoteUri struct {
+		UserID string `uri:"user_id"`
 	}
 )

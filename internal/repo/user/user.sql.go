@@ -11,6 +11,72 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminListUsers = `-- name: AdminListUsers :many
+SELECT 
+  ub.user_id::text AS user_id,
+  ub.username,
+  COALESCE(ua.avatar, '') AS avatar
+FROM "user_base" ub
+LEFT JOIN "user_addition" ua ON ua.user_id = ub.user_id
+WHERE ($1 = '' OR ub.username ILIKE '%' || $1 || '%')
+ORDER BY ub.ctime DESC
+LIMIT $2 OFFSET $3
+`
+
+type AdminListUsersParams struct {
+	Column1 interface{}
+	Limit   int32
+	Offset  int32
+}
+
+type AdminListUsersRow struct {
+	UserID   string
+	Username string
+	Avatar   string
+}
+
+// admin
+func (q *Queries) AdminListUsers(ctx context.Context, arg AdminListUsersParams) ([]AdminListUsersRow, error) {
+	rows, err := q.db.Query(ctx, adminListUsers, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUsersRow
+	for rows.Next() {
+		var i AdminListUsersRow
+		if err := rows.Scan(&i.UserID, &i.Username, &i.Avatar); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminUpdateUserRole = `-- name: AdminUpdateUserRole :execrows
+UPDATE "user_base"
+SET role = $2, utime = $3
+WHERE user_id = $1
+`
+
+type AdminUpdateUserRoleParams struct {
+	UserID pgtype.UUID
+	Role   int16
+	Utime  int64
+}
+
+// admin
+func (q *Queries) AdminUpdateUserRole(ctx context.Context, arg AdminUpdateUserRoleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminUpdateUserRole, arg.UserID, arg.Role, arg.Utime)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createFollow = `-- name: CreateFollow :exec
 INSERT INTO "user_follow"(follower, followee, ctime, utime)
 VALUES ($1, $2, $3, $3)
@@ -356,25 +422,6 @@ func (q *Queries) ListFollowingByUserID(ctx context.Context, arg ListFollowingBy
 		return nil, err
 	}
 	return items, nil
-}
-
-const updateAvatarByUserID = `-- name: UpdateAvatarByUserID :execrows
-UPDATE "user_addition"
-SET avatar = $2
-WHERE user_id = $1
-`
-
-type UpdateAvatarByUserIDParams struct {
-	UserID pgtype.UUID
-	Avatar string
-}
-
-func (q *Queries) UpdateAvatarByUserID(ctx context.Context, arg UpdateAvatarByUserIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateAvatarByUserID, arg.UserID, arg.Avatar)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const updateBaseGenderByUserID = `-- name: UpdateBaseGenderByUserID :execrows

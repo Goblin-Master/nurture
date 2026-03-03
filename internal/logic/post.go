@@ -28,12 +28,22 @@ type IPostLogic interface {
 	Publish(ctx context.Context, userID string, req dto.PublishPostReq) (dto.PublishPostResp, error)
 	UpdateDraft(ctx context.Context, userID string, uri dto.PostDetailReq, req dto.UpdateDraftReq) (dto.UpdateDraftResp, error)
 	CreateComment(ctx context.Context, userID string, postID string, req dto.CreateCommentReq) (dto.CreateCommentResp, error)
+	LikePost(ctx context.Context, userID string, uri dto.PostDetailReq) error
+	UnlikePost(ctx context.Context, userID string, uri dto.PostDetailReq) error
 	ListComments(ctx context.Context, userID string, postID string, req dto.CommentListReq) (dto.CommentListResp, error)
 	ListReplies(ctx context.Context, userID string, uri dto.CommentRepliesReq, req dto.CommentListReq) (dto.CommentListResp, error)
 	DeleteComment(ctx context.Context, userID string, uri dto.CommentDeleteReq) error
 	UpdateComment(ctx context.Context, userID string, uri dto.CommentUpdateReq, req dto.UpdateCommentReq) error
 	LikeComment(ctx context.Context, userID string, uri dto.CommentLikeReq) error
 	UnlikeComment(ctx context.Context, userID string, uri dto.CommentLikeReq) error
+	CollectPost(ctx context.Context, userID string, uri dto.PostDetailReq) (dto.CollectResp, error)
+	UncollectPost(ctx context.Context, userID string, uri dto.PostDetailReq) (dto.CollectResp, error)
+	ListMyCollections(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
+	// admin tag
+	AdminCreateTag(ctx context.Context, req dto.AdminTagCreateReq) (dto.AdminTagCreateResp, error)
+	AdminDeleteTag(ctx context.Context, uri dto.AdminTagDeleteUri) error
+	// public
+	ListTags(ctx context.Context, req dto.TagListReq) (dto.TagListResp, error)
 }
 
 type PostLogic struct {
@@ -177,6 +187,174 @@ func (l *PostLogic) UnlikeComment(ctx context.Context, userID string, uri dto.Co
 		return ErrDefault
 	}
 	return nil
+}
+
+func (l *PostLogic) LikePost(ctx context.Context, userID string, uri dto.PostDetailReq) error {
+	if strings.TrimSpace(uri.PostID) == "" {
+		return ErrParamsType
+	}
+	if err := l.postRepo.LikePost(ctx, uri.PostID, userID); err != nil {
+		if errors.Is(err, repo.ErrInvalidPostStatus) {
+			return ErrInvalidPostStatus
+		}
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	return nil
+}
+func (l *PostLogic) UnlikePost(ctx context.Context, userID string, uri dto.PostDetailReq) error {
+	if strings.TrimSpace(uri.PostID) == "" {
+		return ErrParamsType
+	}
+	if err := l.postRepo.UnlikePost(ctx, uri.PostID, userID); err != nil {
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	return nil
+}
+
+func (l *PostLogic) CollectPost(ctx context.Context, userID string, uri dto.PostDetailReq) (dto.CollectResp, error) {
+	var resp dto.CollectResp
+	if strings.TrimSpace(uri.PostID) == "" {
+		return resp, ErrParamsType
+	}
+	cid := uuid.NewString()
+	if err := l.postRepo.CollectPost(ctx, uri.PostID, userID, cid); err != nil {
+		if errors.Is(err, repo.ErrInvalidPostStatus) {
+			return resp, ErrInvalidPostStatus
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.CollectionID = cid
+	resp.Message = "OK"
+	return resp, nil
+}
+
+func (l *PostLogic) AdminCreateTag(ctx context.Context, req dto.AdminTagCreateReq) (dto.AdminTagCreateResp, error) {
+	var resp dto.AdminTagCreateResp
+	name := strings.TrimSpace(req.Name)
+	if name == "" || utf8.RuneCountInString(name) > 32 {
+		return resp, ErrParamsType
+	}
+	desc := strings.TrimSpace(req.Description)
+	tagID := uuid.NewString()
+	now := time.Now().UnixMilli()
+	row, err := l.postRepo.CreateTag(ctx, tagID, name, desc, now)
+	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.TagID = row.TagID
+	resp.Name = row.Name
+	resp.Description = row.Description
+	return resp, nil
+}
+
+func (l *PostLogic) AdminDeleteTag(ctx context.Context, uri dto.AdminTagDeleteUri) error {
+	if strings.TrimSpace(uri.TagID) == "" {
+		return ErrParamsType
+	}
+	if err := l.postRepo.DeleteTag(ctx, uri.TagID); err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return ErrParamsType
+		}
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	return nil
+}
+
+func (l *PostLogic) ListTags(ctx context.Context, req dto.TagListReq) (dto.TagListResp, error) {
+	var resp dto.TagListResp
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10
+	}
+	items, hasMore, err := l.postRepo.ListTags(ctx, strings.TrimSpace(req.Keyword), req.Page, req.PageSize)
+	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Items = make([]dto.TagItem, 0, len(items))
+	for _, v := range items {
+		resp.Items = append(resp.Items, dto.TagItem{
+			TagID:       v.TagID,
+			Name:        v.Name,
+			Description: v.Description,
+		})
+	}
+	resp.Page = req.Page
+	resp.PageSize = req.PageSize
+	resp.HasMore = hasMore
+	return resp, nil
+}
+func (l *PostLogic) UncollectPost(ctx context.Context, userID string, uri dto.PostDetailReq) (dto.CollectResp, error) {
+	var resp dto.CollectResp
+	if strings.TrimSpace(uri.PostID) == "" {
+		return resp, ErrParamsType
+	}
+	if err := l.postRepo.UncollectPost(ctx, uri.PostID, userID); err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Message = "OK"
+	return resp, nil
+}
+
+func (l *PostLogic) ListMyCollections(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error) {
+	var resp dto.PostListResp
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10
+	}
+	items, hasMore, err := l.postRepo.ListMyCollections(ctx, userID, req.Page, req.PageSize, req.Strategy)
+	if err != nil {
+		if errors.Is(err, repo.ErrParamsType) {
+			return resp, ErrParamsType
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Items = make([]dto.PostItem, 0, len(items))
+	for _, v := range items {
+		y, m, ageText := calcAge(v.Birthday, time.Now())
+		resp.Items = append(resp.Items, dto.PostItem{
+			PostID:         v.PostID,
+			AuthorID:       v.AuthorID,
+			AuthorName:     v.AuthorName,
+			AuthorAvatar:   v.AuthorAvatar,
+			AuthorProvince: v.AuthorProvince,
+			AuthorCity:     v.AuthorCity,
+			Title:          v.Title,
+			Content:        json.RawMessage([]byte(v.Content)),
+			Status:         v.Status,
+			LikeCount:      v.LikeCount,
+			DislikeCount:   v.DislikeCount,
+			CollectCount:   v.CollectCount,
+			CommentCount:   v.CommentCount,
+			Ctime:          v.Ctime,
+			Utime:          v.Utime,
+			Tags:           v.Tags,
+			BabyAgeYear:    y,
+			BabyAgeMonth:   m,
+			BabyAgeText:    ageText,
+		})
+	}
+	resp.Page = req.Page
+	resp.PageSize = req.PageSize
+	resp.HasMore = hasMore
+	return resp, nil
 }
 
 func (l *PostLogic) UpdateComment(ctx context.Context, userID string, uri dto.CommentUpdateReq, req dto.UpdateCommentReq) error {

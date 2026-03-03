@@ -2,7 +2,10 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"nurture/internal/constant"
 	"nurture/internal/global"
 	"nurture/internal/repo/post"
 	"strings"
@@ -33,6 +36,12 @@ type PostRow struct {
 	Tags           []string
 }
 
+type TagRow struct {
+	TagID       string
+	Name        string
+	Description string
+}
+
 type IPostRepo interface {
 	ListHome(ctx context.Context, page, pageSize int, strategy string) ([]PostRow, bool, error)
 	ListByTag(ctx context.Context, tagID string, page, pageSize int, strategy string) ([]PostRow, bool, error)
@@ -52,8 +61,17 @@ type IPostRepo interface {
 	ListRepliesByComment(ctx context.Context, commentID string, userID string, page, pageSize int, strategy string) ([]CommentRow, bool, error)
 	DeleteComment(ctx context.Context, commentID, userID string) error
 	UpdateComment(ctx context.Context, commentID, userID, content string) error
+	LikePost(ctx context.Context, postID, userID string) error
+	UnlikePost(ctx context.Context, postID, userID string) error
 	LikeComment(ctx context.Context, commentID, userID string) error
 	UnlikeComment(ctx context.Context, commentID, userID string) error
+	CollectPost(ctx context.Context, postID, userID, collectionID string) error
+	UncollectPost(ctx context.Context, postID, userID string) error
+	ListMyCollections(ctx context.Context, userID string, page, pageSize int, strategy string) ([]PostRow, bool, error)
+	// admin tag
+	CreateTag(ctx context.Context, tagID, name, description string, now int64) (TagRow, error)
+	DeleteTag(ctx context.Context, tagID string) error
+	ListTags(ctx context.Context, keyword string, page, pageSize int) ([]TagRow, bool, error)
 }
 
 type PostRepo struct {
@@ -68,9 +86,89 @@ func NewPostRepo() *PostRepo {
 
 var _ IPostRepo = (*PostRepo)(nil)
 
-// 已删除旧的动态 List 方法
+func (r *PostRepo) CreateTag(ctx context.Context, tagID, name, description string, now int64) (TagRow, error) {
+	var tid pgtype.UUID
+	if err := tid.Scan(tagID); err != nil {
+		return TagRow{}, ErrParamsType
+	}
+	row, err := r.dao.CreateTag(ctx, post.CreateTagParams{
+		TagID:       tid,
+		TagName:     name,
+		Description: pgtype.Text{String: description, Valid: true},
+		Ctime:       now,
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return TagRow{}, ErrDefault
+		}
+		global.Log.Error(err)
+		return TagRow{}, ErrDefault
+	}
+	return TagRow{TagID: row.TagID, Name: row.TagName, Description: row.Description}, nil
+}
+
+func (r *PostRepo) DeleteTag(ctx context.Context, tagID string) error {
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	var tid pgtype.UUID
+	if err := tid.Scan(tagID); err != nil {
+		_ = tx.Rollback(ctx)
+		return ErrParamsType
+	}
+	if _, err := qtx.DeletePostTagsByTagID(ctx, tid); err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if _, err := qtx.DeleteTagByID(ctx, tid); err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostRepo) ListTags(ctx context.Context, keyword string, page, pageSize int) ([]TagRow, bool, error) {
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	rows, err := r.dao.ListTags(ctx, post.ListTagsParams{
+		Column1: keyword,
+		Limit:   limit,
+		Offset:  offset,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	hasMore := int32(len(rows)) >= limit
+	res := make([]TagRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, TagRow{
+			TagID:       v.TagID,
+			Name:        v.TagName,
+			Description: v.Description,
+		})
+	}
+	return res, hasMore, nil
+}
 
 func (r *PostRepo) GetDetail(ctx context.Context, postID string) (PostRow, error) {
+	if global.RDB != nil {
+		key := fmt.Sprintf(constant.POST_HOT_DETAIL_KEY, postID)
+		if s, err := global.RDB.Get(ctx, key).Result(); err == nil && s != "" {
+			var cached PostRow
+			if jsonErr := json.Unmarshal([]byte(s), &cached); jsonErr == nil {
+				return cached, nil
+			}
+		}
+	}
 	var pid pgtype.UUID
 	if err := pid.Scan(postID); err != nil {
 		return PostRow{}, err
@@ -99,7 +197,7 @@ func (r *PostRepo) GetDetail(ctx context.Context, postID string) (PostRow, error
 	default:
 		birthday = 0
 	}
-	return PostRow{
+	ret := PostRow{
 		PostID:         row.PostID,
 		AuthorID:       row.AuthorID,
 		AuthorName:     row.AuthorName,
@@ -117,7 +215,13 @@ func (r *PostRepo) GetDetail(ctx context.Context, postID string) (PostRow, error
 		Utime:          row.Utime,
 		Birthday:       birthday,
 		Tags:           tags,
-	}, nil
+	}
+	if global.RDB != nil {
+		if b, mErr := json.Marshal(ret); mErr == nil {
+			_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.POST_HOT_DETAIL_KEY, postID), string(b), time.Duration(constant.POST_HOT_DETAIL_TTL)*time.Second).Err()
+		}
+	}
+	return ret, nil
 }
 
 func toPostRow(postID, authorID, authorName, authorAvatar, authorProvince, authorCity, title, content, status string,
@@ -161,6 +265,19 @@ func toPostRow(postID, authorID, authorName, authorAvatar, authorProvince, autho
 }
 
 func (r *PostRepo) ListHome(ctx context.Context, page, pageSize int, strategy string) ([]PostRow, bool, error) {
+	if global.RDB != nil && strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		key := fmt.Sprintf(constant.POST_HOT_LIST_KEY, page, pageSize)
+		if s, err := global.RDB.Get(ctx, key).Result(); err == nil && s != "" {
+			type listCache struct {
+				Rows    []PostRow `json:"rows"`
+				HasMore bool      `json:"has_more"`
+			}
+			var cached listCache
+			if jsonErr := json.Unmarshal([]byte(s), &cached); jsonErr == nil {
+				return cached.Rows, cached.HasMore, nil
+			}
+		}
+	}
 	limit := int32(pageSize + 1)
 	offset := int32((page - 1) * pageSize)
 	var (
@@ -212,6 +329,16 @@ func (r *PostRepo) ListHome(ctx context.Context, page, pageSize int, strategy st
 		))
 	}
 	hasMore := int32(len(rows)) >= limit
+	if global.RDB != nil && strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		type listCache struct {
+			Rows    []PostRow `json:"rows"`
+			HasMore bool      `json:"has_more"`
+		}
+		payload := listCache{Rows: res, HasMore: hasMore}
+		if b, mErr := json.Marshal(payload); mErr == nil {
+			_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.POST_HOT_LIST_KEY, page, pageSize), string(b), time.Duration(constant.POST_HOT_LIST_TTL)*time.Second).Err()
+		}
+	}
 	return res, hasMore, nil
 }
 
@@ -403,6 +530,80 @@ func (r *PostRepo) LikeComment(ctx context.Context, commentID, userID string) er
 	return tx.Commit(ctx)
 }
 
+func (r *PostRepo) LikePost(ctx context.Context, postID, userID string) error {
+	var pid, uid pgtype.UUID
+	if err := pid.Scan(postID); err != nil {
+		return err
+	}
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	status, err := r.dao.GetPostStatusByID(ctx, pid)
+	if err != nil {
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	if status != "published" {
+		return ErrInvalidPostStatus
+	}
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	now := time.Now().UnixMilli()
+	aff, err := qtx.CreatePostLike(ctx, post.CreatePostLikeParams{
+		UserID: uid,
+		PostID: pid,
+		Ctime:  now,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if aff > 0 {
+		if _, err := qtx.IncPostLikeCount(ctx, pid); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostRepo) UnlikePost(ctx context.Context, postID, userID string) error {
+	var pid, uid pgtype.UUID
+	if err := pid.Scan(postID); err != nil {
+		return err
+	}
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	aff, err := qtx.DeletePostLike(ctx, post.DeletePostLikeParams{
+		UserID: uid,
+		PostID: pid,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if aff > 0 {
+		if _, err := qtx.DecPostLikeCount(ctx, pid); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *PostRepo) UnlikeComment(ctx context.Context, commentID, userID string) error {
 	var cid, uid pgtype.UUID
 	if err := cid.Scan(commentID); err != nil {
@@ -435,6 +636,19 @@ func (r *PostRepo) UnlikeComment(ctx context.Context, commentID, userID string) 
 	return tx.Commit(ctx)
 }
 func (r *PostRepo) ListRepliesByComment(ctx context.Context, commentID string, userID string, page, pageSize int, strategy string) ([]CommentRow, bool, error) {
+	if global.RDB != nil && strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		key := fmt.Sprintf(constant.COMMENT_HOT_REPLIES_KEY, commentID, userID, page, pageSize)
+		if s, err := global.RDB.Get(ctx, key).Result(); err == nil && s != "" {
+			type listCache struct {
+				Rows    []CommentRow `json:"rows"`
+				HasMore bool         `json:"has_more"`
+			}
+			var cached listCache
+			if jsonErr := json.Unmarshal([]byte(s), &cached); jsonErr == nil {
+				return cached.Rows, cached.HasMore, nil
+			}
+		}
+	}
 	var cid pgtype.UUID
 	if err := cid.Scan(commentID); err != nil {
 		return nil, false, ErrParamsType
@@ -470,6 +684,16 @@ func (r *PostRepo) ListRepliesByComment(ctx context.Context, commentID string, u
 			})
 		}
 		hasMore := int32(len(rows)) >= limit
+		if global.RDB != nil {
+			type listCache struct {
+				Rows    []CommentRow `json:"rows"`
+				HasMore bool         `json:"has_more"`
+			}
+			payload := listCache{Rows: res, HasMore: hasMore}
+			if b, mErr := json.Marshal(payload); mErr == nil {
+				_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.COMMENT_HOT_REPLIES_KEY, commentID, userID, page, pageSize), string(b), time.Duration(constant.COMMENT_HOT_REPLIES_TTL)*time.Second).Err()
+			}
+		}
 		return res, hasMore, nil
 	}
 	rows, err := r.dao.ListCommentRepliesByCtime(ctx, post.ListCommentRepliesByCtimeParams{
@@ -504,6 +728,19 @@ func (r *PostRepo) ListRepliesByComment(ctx context.Context, commentID string, u
 }
 
 func (r *PostRepo) ListByTag(ctx context.Context, tagID string, page, pageSize int, strategy string) ([]PostRow, bool, error) {
+	if global.RDB != nil && strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		key := fmt.Sprintf(constant.POST_HOT_LIST_BY_TAG, tagID, page, pageSize)
+		if s, err := global.RDB.Get(ctx, key).Result(); err == nil && s != "" {
+			type listCache struct {
+				Rows    []PostRow `json:"rows"`
+				HasMore bool      `json:"has_more"`
+			}
+			var cached listCache
+			if jsonErr := json.Unmarshal([]byte(s), &cached); jsonErr == nil {
+				return cached.Rows, cached.HasMore, nil
+			}
+		}
+	}
 	var tg pgtype.UUID
 	if err := tg.Scan(tagID); err != nil {
 		return nil, false, ErrParamsType
@@ -549,6 +786,16 @@ func (r *PostRepo) ListByTag(ctx context.Context, tagID string, page, pageSize i
 		))
 	}
 	hasMore := int32(len(rows)) >= limit
+	if global.RDB != nil && strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		type listCache struct {
+			Rows    []PostRow `json:"rows"`
+			HasMore bool      `json:"has_more"`
+		}
+		payload := listCache{Rows: res, HasMore: hasMore}
+		if b, mErr := json.Marshal(payload); mErr == nil {
+			_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.POST_HOT_LIST_BY_TAG, tagID, page, pageSize), string(b), time.Duration(constant.POST_HOT_LIST_TTL)*time.Second).Err()
+		}
+	}
 	return res, hasMore, nil
 }
 
@@ -822,6 +1069,138 @@ func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, cont
 	return tx.Commit(ctx)
 }
 
+func (r *PostRepo) CollectPost(ctx context.Context, postID, userID, collectionID string) error {
+	var pid, uid, cid pgtype.UUID
+	if err := pid.Scan(postID); err != nil {
+		return err
+	}
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	if err := cid.Scan(collectionID); err != nil {
+		return err
+	}
+	status, err := r.dao.GetPostStatusByID(ctx, pid)
+	if err != nil {
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	if status != "published" {
+		return ErrInvalidPostStatus
+	}
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	now := time.Now().UnixMilli()
+	aff, err := qtx.CreateCollection(ctx, post.CreateCollectionParams{
+		CollectionID: cid,
+		UserID:       uid,
+		PostID:       pid,
+		Ctime:        now,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if aff > 0 {
+		if _, err := qtx.IncPostCollectCount(ctx, pid); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostRepo) UncollectPost(ctx context.Context, postID, userID string) error {
+	var pid, uid pgtype.UUID
+	if err := pid.Scan(postID); err != nil {
+		return err
+	}
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	qtx := r.dao.WithTx(tx)
+	aff, err := qtx.DeleteCollection(ctx, post.DeleteCollectionParams{
+		UserID: uid,
+		PostID: pid,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return ErrDefault
+	}
+	if aff > 0 {
+		if _, err := qtx.DecPostCollectCount(ctx, pid); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostRepo) ListMyCollections(ctx context.Context, userID string, page, pageSize int, strategy string) ([]PostRow, bool, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return nil, false, ErrParamsType
+	}
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		rows, err := r.dao.ListCollectionsByHot(ctx, post.ListCollectionsByHotParams{
+			UserID: uid,
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			global.Log.Error(err)
+			return nil, false, ErrDefault
+		}
+		res := make([]PostRow, 0, pageSize)
+		for i, v := range rows {
+			if int32(i) >= limit-1 {
+				break
+			}
+			res = append(res, toPostRow(
+				v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+				v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+				v.Ctime, v.Utime, v.Birthday, v.Tags,
+			))
+		}
+		hasMore := int32(len(rows)) >= limit
+		return res, hasMore, nil
+	}
+	rows, err := r.dao.ListCollectionsByCtime(ctx, post.ListCollectionsByCtimeParams{
+		UserID: uid,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	res := make([]PostRow, 0, pageSize)
+	for i, v := range rows {
+		if int32(i) >= limit-1 {
+			break
+		}
+		res = append(res, toPostRow(
+			v.PostID, v.AuthorID, v.AuthorName, v.AuthorAvatar, v.AuthorProvince, v.AuthorCity,
+			v.Title, v.Content, v.Status, v.LikeCount, v.DislikeCount, v.CollectCount, v.CommentCount,
+			v.Ctime, v.Utime, v.Birthday, v.Tags,
+		))
+	}
+	hasMore := int32(len(rows)) >= limit
+	return res, hasMore, nil
+}
 func (r *PostRepo) Publish(ctx context.Context, postID, userID string) error {
 	var pid, uid pgtype.UUID
 	if err := pid.Scan(postID); err != nil {
@@ -1005,6 +1384,19 @@ type CommentRow struct {
 }
 
 func (r *PostRepo) ListCommentsByPost(ctx context.Context, postID string, userID string, page, pageSize int, strategy string) ([]CommentRow, bool, error) {
+	if global.RDB != nil && strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
+		key := fmt.Sprintf(constant.POST_HOT_COMMENTS_KEY, postID, userID, page, pageSize)
+		if s, err := global.RDB.Get(ctx, key).Result(); err == nil && s != "" {
+			type listCache struct {
+				Rows    []CommentRow `json:"rows"`
+				HasMore bool         `json:"has_more"`
+			}
+			var cached listCache
+			if jsonErr := json.Unmarshal([]byte(s), &cached); jsonErr == nil {
+				return cached.Rows, cached.HasMore, nil
+			}
+		}
+	}
 	var pid pgtype.UUID
 	if err := pid.Scan(postID); err != nil {
 		return nil, false, ErrParamsType
@@ -1041,6 +1433,16 @@ func (r *PostRepo) ListCommentsByPost(ctx context.Context, postID string, userID
 			})
 		}
 		hasMore := int32(len(rows)) >= limit
+		if global.RDB != nil {
+			type listCache struct {
+				Rows    []CommentRow `json:"rows"`
+				HasMore bool         `json:"has_more"`
+			}
+			payload := listCache{Rows: res, HasMore: hasMore}
+			if b, mErr := json.Marshal(payload); mErr == nil {
+				_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.POST_HOT_COMMENTS_KEY, postID, userID, page, pageSize), string(b), time.Duration(constant.POST_HOT_COMMENTS_TTL)*time.Second).Err()
+			}
+		}
 		return res, hasMore, nil
 	}
 	rows, err := r.dao.ListPostCommentsByCtime(ctx, post.ListPostCommentsByCtimeParams{

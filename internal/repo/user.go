@@ -2,7 +2,10 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"nurture/internal/constant"
 	"nurture/internal/global"
 	"nurture/internal/repo/baby"
 	"nurture/internal/repo/user"
@@ -58,6 +61,16 @@ func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, passwo
 }
 
 func (ur *UserRepo) GetMyProfile(ctx context.Context, userID string) (user.GetMyProfileRow, error) {
+	if global.RDB != nil {
+		key := fmt.Sprintf(constant.USER_PROFILE_KEY, userID)
+		if s, err := global.RDB.Get(ctx, key).Result(); err == nil && s != "" {
+			var cached user.GetMyProfileRow
+			if jsonErr := json.Unmarshal([]byte(s), &cached); jsonErr == nil {
+				global.Log.Info("user_cache_hit", "type", "profile", "user", userID)
+				return cached, nil
+			}
+		}
+	}
 	var uid pgtype.UUID
 	if err := uid.Scan(userID); err != nil {
 		return user.GetMyProfileRow{}, err
@@ -69,6 +82,11 @@ func (ur *UserRepo) GetMyProfile(ctx context.Context, userID string) (user.GetMy
 		}
 		global.Log.Error(err)
 		return user.GetMyProfileRow{}, ErrDefault
+	}
+	if global.RDB != nil {
+		if b, mErr := json.Marshal(p); mErr == nil {
+			_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.USER_PROFILE_KEY, userID), string(b), time.Duration(constant.USER_PROFILE_TTL)*time.Second).Err()
+		}
 	}
 	return p, nil
 }
@@ -89,6 +107,18 @@ func (ur *UserRepo) FollowUser(ctx context.Context, followerID, followeeID strin
 	if err != nil {
 		global.Log.Error(err)
 		return ErrDefault
+	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_PROFILE_KEY, followerID)).Err()
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_PROFILE_KEY, followeeID)).Err()
+		iter1 := global.RDB.Scan(ctx, 0, fmt.Sprintf(constant.USER_FOLLOWING_KEY, followerID, 0, 0), 100).Iterator()
+		for iter1.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter1.Val()).Err()
+		}
+		iter2 := global.RDB.Scan(ctx, 0, fmt.Sprintf(constant.USER_FOLLOWERS_KEY, followeeID, 0, 0), 100).Iterator()
+		for iter2.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter2.Val()).Err()
+		}
 	}
 	return nil
 }
@@ -112,10 +142,36 @@ func (ur *UserRepo) UnfollowUser(ctx context.Context, followerID, followeeID str
 	if n == 0 {
 		return nil
 	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_PROFILE_KEY, followerID)).Err()
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_PROFILE_KEY, followeeID)).Err()
+		iter1 := global.RDB.Scan(ctx, 0, fmt.Sprintf("user:following:%s:*", followerID), 100).Iterator()
+		for iter1.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter1.Val()).Err()
+		}
+		iter2 := global.RDB.Scan(ctx, 0, fmt.Sprintf("user:followers:%s:*", followeeID), 100).Iterator()
+		for iter2.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter2.Val()).Err()
+		}
+	}
 	return nil
 }
 
 func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowingByUserIDRow, bool, error) {
+	if global.RDB != nil {
+		key := fmt.Sprintf(constant.USER_FOLLOWING_KEY, userID, page, pageSize)
+		if s, err := global.RDB.Get(ctx, key).Result(); err == nil && s != "" {
+			type listCache struct {
+				Rows    []user.ListFollowingByUserIDRow `json:"rows"`
+				HasMore bool                            `json:"has_more"`
+			}
+			var cached listCache
+			if jsonErr := json.Unmarshal([]byte(s), &cached); jsonErr == nil {
+				global.Log.Info("user_cache_hit", "type", "following", "user", userID, "page", page, "size", pageSize)
+				return cached.Rows, cached.HasMore, nil
+			}
+		}
+	}
 	var uid pgtype.UUID
 	if err := uid.Scan(userID); err != nil {
 		return nil, false, err
@@ -131,15 +187,42 @@ func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, page
 		global.Log.Error(err)
 		return nil, false, ErrDefault
 	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_FOLLOWING_KEY, userID, page, pageSize)).Err()
+	}
 	hasMore := false
 	if len(rows) > pageSize {
 		hasMore = true
 		rows = rows[:pageSize]
 	}
+	if global.RDB != nil {
+		type listCache struct {
+			Rows    []user.ListFollowingByUserIDRow `json:"rows"`
+			HasMore bool                            `json:"has_more"`
+		}
+		payload := listCache{Rows: rows, HasMore: hasMore}
+		if b, mErr := json.Marshal(payload); mErr == nil {
+			_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.USER_FOLLOWING_KEY, userID, page, pageSize), string(b), time.Duration(constant.USER_LIST_TTL)*time.Second).Err()
+		}
+	}
 	return rows, hasMore, nil
 }
 
 func (ur *UserRepo) ListFollowers(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowersByUserIDRow, bool, error) {
+	if global.RDB != nil {
+		key := fmt.Sprintf(constant.USER_FOLLOWERS_KEY, userID, page, pageSize)
+		if s, err := global.RDB.Get(ctx, key).Result(); err == nil && s != "" {
+			type listCache struct {
+				Rows    []user.ListFollowersByUserIDRow `json:"rows"`
+				HasMore bool                            `json:"has_more"`
+			}
+			var cached listCache
+			if jsonErr := json.Unmarshal([]byte(s), &cached); jsonErr == nil {
+				global.Log.Info("user_cache_hit", "type", "followers", "user", userID, "page", page, "size", pageSize)
+				return cached.Rows, cached.HasMore, nil
+			}
+		}
+	}
 	var uid pgtype.UUID
 	if err := uid.Scan(userID); err != nil {
 		return nil, false, err
@@ -155,10 +238,23 @@ func (ur *UserRepo) ListFollowers(ctx context.Context, userID string, page, page
 		global.Log.Error(err)
 		return nil, false, ErrDefault
 	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_FOLLOWERS_KEY, userID, page, pageSize)).Err()
+	}
 	hasMore := false
 	if len(rows) > pageSize {
 		hasMore = true
 		rows = rows[:pageSize]
+	}
+	if global.RDB != nil {
+		type listCache struct {
+			Rows    []user.ListFollowersByUserIDRow `json:"rows"`
+			HasMore bool                            `json:"has_more"`
+		}
+		payload := listCache{Rows: rows, HasMore: hasMore}
+		if b, mErr := json.Marshal(payload); mErr == nil {
+			_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.USER_FOLLOWERS_KEY, userID, page, pageSize), string(b), time.Duration(constant.USER_LIST_TTL)*time.Second).Err()
+		}
 	}
 	return rows, hasMore, nil
 }
@@ -264,6 +360,13 @@ func (ur *UserRepo) UpdateGender(ctx context.Context, userID, gender string) err
 
 // GetPartnerByUserID 查询另一半（返回对方ID；没有则返回空字符串）
 func (ur *UserRepo) GetPartnerByUserID(ctx context.Context, userID string) (string, error) {
+	if global.RDB != nil {
+		key := fmt.Sprintf(constant.USER_PARTNER_KEY, userID)
+		if s, err := global.RDB.Get(ctx, key).Result(); err == nil {
+			global.Log.Info("user_cache_hit", "type", "partner", "user", userID)
+			return s, nil
+		}
+	}
 	var uid pgtype.UUID
 	if err := uid.Scan(userID); err != nil {
 		return "", err
@@ -271,13 +374,22 @@ func (ur *UserRepo) GetPartnerByUserID(ctx context.Context, userID string) (stri
 	row, err := ur.userDao.GetPartnerByUserID(ctx, uid)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if global.RDB != nil {
+				_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.USER_PARTNER_KEY, userID), "", time.Duration(constant.USER_PROFILE_TTL)*time.Second).Err()
+			}
 			return "", nil
 		}
 		global.Log.Error(err)
 		return "", ErrDefault
 	}
 	if row.Father == userID {
+		if global.RDB != nil {
+			_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.USER_PARTNER_KEY, userID), row.Mother, time.Duration(constant.USER_PARTNER_TTL)*time.Second).Err()
+		}
 		return row.Mother, nil
+	}
+	if global.RDB != nil {
+		_ = global.RDB.SetEX(ctx, fmt.Sprintf(constant.USER_PARTNER_KEY, userID), row.Father, time.Duration(constant.USER_PARTNER_TTL)*time.Second).Err()
 	}
 	return row.Father, nil
 }
@@ -386,6 +498,21 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 			return ErrDefault
 		}
 	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_PARTNER_KEY, fatherUserID)).Err()
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_PARTNER_KEY, motherUserID)).Err()
+		for _, uid := range []string{fatherUserID, motherUserID} {
+			iter1 := global.RDB.Scan(ctx, 0, fmt.Sprintf("user:following:%s:*", uid), 100).Iterator()
+			for iter1.Next(ctx) {
+				_ = global.RDB.Del(ctx, iter1.Val()).Err()
+			}
+			iter2 := global.RDB.Scan(ctx, 0, fmt.Sprintf("user:followers:%s:*", uid), 100).Iterator()
+			for iter2.Next(ctx) {
+				_ = global.RDB.Del(ctx, iter2.Val()).Err()
+			}
+			_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_PROFILE_KEY, uid)).Err()
+		}
+	}
 	return nil
 }
 func (ur *UserRepo) ResetPassword(ctx context.Context, email, newPassword string) error {
@@ -408,9 +535,18 @@ func (ur *UserRepo) UpdateAvatarByID(ctx context.Context, userID, url string) er
 	if err := userUUID.Scan(userID); err != nil {
 		return err
 	}
-	count, err := ur.userDao.UpdateAvatarByUserID(ctx, user.UpdateAvatarByUserIDParams{
-		UserID: userUUID,
-		Avatar: url,
+	// 兼容：使用 UpdateUserAdditionByUserID 仅更新 avatar 字段
+	var v2, v3, v4, v5 interface{}
+	v6 := url
+	count, err := ur.userDao.UpdateUserAdditionByUserID(ctx, user.UpdateUserAdditionByUserIDParams{
+		UserID:  userUUID,
+		Column2: v2,
+		Column3: v3,
+		Column4: v4,
+		Column5: v5,
+		Column6: v6,
+		Column7: -1,
+		Utime:   time.Now().UnixMilli(),
 	})
 	if err != nil {
 		global.Log.Error(err)
@@ -418,6 +554,9 @@ func (ur *UserRepo) UpdateAvatarByID(ctx context.Context, userID, url string) er
 	}
 	if count == 0 {
 		return ErrUserNotExist
+	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_PROFILE_KEY, userID)).Err()
 	}
 	return nil
 }
@@ -464,6 +603,50 @@ func (ur *UserRepo) UpdateAdditionByID(ctx context.Context, userID string, occup
 	if err != nil {
 		global.Log.Error(err)
 		return ErrUserUpdateFailed
+	}
+	if n == 0 {
+		return ErrUserNotExist
+	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.USER_PROFILE_KEY, userID)).Err()
+	}
+	return nil
+}
+
+// admin
+func (ur *UserRepo) AdminListUsers(ctx context.Context, keyword string, page, pageSize int) ([]user.AdminListUsersRow, bool, error) {
+	limit := int32(pageSize + 1)
+	offset := int32((page - 1) * pageSize)
+	rows, err := ur.userDao.AdminListUsers(ctx, user.AdminListUsersParams{
+		Column1: keyword,
+		Limit:   limit,
+		Offset:  offset,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, false, ErrDefault
+	}
+	hasMore := false
+	if len(rows) > pageSize {
+		hasMore = true
+		rows = rows[:pageSize]
+	}
+	return rows, hasMore, nil
+}
+
+func (ur *UserRepo) AdminUpdateUserRole(ctx context.Context, userID string, role int16) error {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return err
+	}
+	n, err := ur.userDao.AdminUpdateUserRole(ctx, user.AdminUpdateUserRoleParams{
+		UserID: uid,
+		Role:   role,
+		Utime:  time.Now().UnixMilli(),
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return ErrDefault
 	}
 	if n == 0 {
 		return ErrUserNotExist

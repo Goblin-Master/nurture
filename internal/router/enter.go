@@ -293,6 +293,11 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.BindQueryMiddleware[dto.PostHomeListReq],
 			postHandler.Home,
 		)
+		// 标签选择列表
+		rg.GET("/tags",
+			middleware.BindQueryMiddleware[dto.TagListReq],
+			postHandler.ListTags,
+		)
 		// 按标签列表
 		rg.GET("/tag/:tag_id",
 			middleware.BindUriMiddleware[dto.PostTagListReq],
@@ -352,6 +357,36 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.BindJsonMiddleware[dto.UpdateDraftReq],
 			postHandler.UpdateDraft,
 		)
+		// 点赞帖子
+		rg.POST("/:post_id/like",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.PostDetailReq],
+			postHandler.LikePost,
+		)
+		// 取消点赞帖子
+		rg.DELETE("/:post_id/like",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.PostDetailReq],
+			postHandler.UnlikePost,
+		)
+		// 收藏帖子
+		rg.POST("/:post_id/collect",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.PostDetailReq],
+			postHandler.CollectPost,
+		)
+		// 取消收藏帖子
+		rg.DELETE("/:post_id/collect",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.PostDetailReq],
+			postHandler.UncollectPost,
+		)
+		// 我的收藏列表
+		rg.GET("/mine/collections",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindQueryMiddleware[dto.PostMyListReq],
+			postHandler.ListMyCollections,
+		)
 		// 创建评论
 		rg.POST("/:post_id/comments",
 			middleware.Authentication(jwtx.COMMON_USER),
@@ -395,6 +430,40 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.Authentication(jwtx.COMMON_USER),
 			middleware.BindUriMiddleware[dto.CommentLikeReq],
 			postHandler.UnlikeComment,
+		)
+	})
+
+	// 管理员模块路由
+	routeManager.RegisterAdminRoutes(func(rg *gin.RouterGroup) {
+		userHandler := handler.NewUserHandler()
+		postHandler := handler.NewPostHandler()
+		babyHandler := handler.NewBabyHandler()
+		rg.GET("/users/list",
+			middleware.Authentication(jwtx.ADMIN),
+			middleware.BindQueryMiddleware[dto.AdminListUsersReq],
+			userHandler.AdminListUsers,
+		)
+		rg.PUT("/users/:user_id/role/admin",
+			middleware.Authentication(jwtx.ADMIN),
+			middleware.BindUriMiddleware[dto.AdminPromoteUri],
+			userHandler.AdminPromoteToAdmin,
+		)
+		// 标签管理
+		rg.POST("/tags",
+			middleware.Authentication(jwtx.ADMIN),
+			middleware.BindJsonMiddleware[dto.AdminTagCreateReq],
+			postHandler.AdminCreateTag,
+		)
+		rg.DELETE("/tags/:tag_id",
+			middleware.Authentication(jwtx.ADMIN),
+			middleware.BindUriMiddleware[dto.AdminTagDeleteUri],
+			postHandler.AdminDeleteTag,
+		)
+		// 疫苗管理（仅创建）
+		rg.POST("/vaccines",
+			middleware.Authentication(jwtx.ADMIN),
+			middleware.BindJsonMiddleware[dto.AdminCreateVaccineReq],
+			babyHandler.AdminCreateVaccine,
 		)
 	})
 

@@ -26,7 +26,6 @@ UPDATE "user_base"
 SET password = $2
 WHERE email = $1;
 
--- name: UpdateAvatarByUserID :execrows
 UPDATE "user_addition"
 SET avatar = $2
 WHERE user_id = $1;
@@ -120,4 +119,22 @@ SET
   avatar     = COALESCE(NULLIF($6, ''), avatar),
   birthday   = COALESCE(NULLIF($7::BIGINT, -1), birthday),
   utime      = $8
+WHERE user_id = $1;
+
+-- admin
+-- name: AdminListUsers :many
+SELECT 
+  ub.user_id::text AS user_id,
+  ub.username,
+  COALESCE(ua.avatar, '') AS avatar
+FROM "user_base" ub
+LEFT JOIN "user_addition" ua ON ua.user_id = ub.user_id
+WHERE ($1 = '' OR ub.username ILIKE '%' || $1 || '%')
+ORDER BY ub.ctime DESC
+LIMIT $2 OFFSET $3;
+
+-- admin
+-- name: AdminUpdateUserRole :execrows
+UPDATE "user_base"
+SET role = $2, utime = $3
 WHERE user_id = $1;
