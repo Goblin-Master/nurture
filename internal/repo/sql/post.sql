@@ -1007,7 +1007,9 @@ LIMIT $2 OFFSET $3;
 -- name: CreatePostLike :execrows
 INSERT INTO "like_dislike" (user_id, post_id, type, ctime, utime)
 VALUES ($1, $2, 'like', $3, $3)
-ON CONFLICT (user_id, post_id) DO NOTHING;
+ON CONFLICT (user_id, post_id) DO UPDATE
+SET type = 'like', utime = $3
+WHERE like_dislike.type <> 'like';
 
 
 -- name: DeletePostLike :execrows
