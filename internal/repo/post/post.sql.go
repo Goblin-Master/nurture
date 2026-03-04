@@ -27,6 +27,17 @@ func (q *Queries) AddPostTag(ctx context.Context, arg AddPostTagParams) error {
 	return err
 }
 
+const tagExists = `-- name: TagExists :one
+SELECT EXISTS(SELECT 1 FROM "tag" WHERE tag_id = $1)
+`
+
+func (q *Queries) TagExists(ctx context.Context, tagID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, tagExists, tagID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const createCollection = `-- name: CreateCollection :execrows
 INSERT INTO "collection" (collection_id, user_id, post_id, ctime, utime)
 VALUES ($1, $2, $3, $4, $4)
@@ -144,7 +155,9 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) error {
 const createPostLike = `-- name: CreatePostLike :execrows
 INSERT INTO "like_dislike" (user_id, post_id, type, ctime, utime)
 VALUES ($1, $2, 'like', $3, $3)
-ON CONFLICT (user_id, post_id) DO NOTHING
+ON CONFLICT (user_id, post_id) DO UPDATE
+SET type = 'like', utime = $3
+WHERE like_dislike.type <> 'like'
 `
 
 type CreatePostLikeParams struct {

@@ -17,7 +17,7 @@ var (
 	ErrAccountIsUsed = errors.New("账号已经被使用")
 	ErrEmailIsUsed   = errors.New("邮箱已经被使用")
 
-	// Baby related errors
+	// Baby related errors restored
 	ErrBabyNotExist        = errors.New("宝宝不存在")
 	ErrBabyGrowthNotExist  = errors.New("宝宝成长记录不存在")
 	ErrBabyVaccineNotExist = errors.New("宝宝疫苗记录不存在")

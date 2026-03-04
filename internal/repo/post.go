@@ -191,6 +191,12 @@ func (r *PostRepo) GetDetail(ctx context.Context, userID, postID string) (PostRo
 	switch v := row.Tags.(type) {
 	case []string:
 		tags = v
+	case []interface{}:
+		for _, it := range v {
+			if s, ok := it.(string); ok {
+				tags = append(tags, s)
+			}
+		}
 	default:
 		tags = []string{}
 	}
@@ -240,6 +246,12 @@ func toPostRow(postID, authorID, authorName, authorAvatar, authorProvince, autho
 	switch v := tags.(type) {
 	case []string:
 		tagList = v
+	case []interface{}:
+		for _, it := range v {
+			if s, ok := it.(string); ok {
+				tagList = append(tagList, s)
+			}
+		}
 	default:
 		tagList = []string{}
 	}
@@ -584,7 +596,17 @@ func (r *PostRepo) LikePost(ctx context.Context, postID, userID string) error {
 			return ErrDefault
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.POST_HOT_DETAIL_KEY, postID)+":"+userID).Err()
+		iter := global.RDB.Scan(ctx, 0, fmt.Sprintf("post:list:hot:*:*:%s", userID), 100).Iterator()
+		for iter.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter.Val()).Err()
+		}
+	}
+	return nil
 }
 
 func (r *PostRepo) UnlikePost(ctx context.Context, postID, userID string) error {
@@ -616,7 +638,17 @@ func (r *PostRepo) UnlikePost(ctx context.Context, postID, userID string) error 
 			return ErrDefault
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.POST_HOT_DETAIL_KEY, postID)+":"+userID).Err()
+		iter := global.RDB.Scan(ctx, 0, fmt.Sprintf("post:list:hot:*:*:%s", userID), 100).Iterator()
+		for iter.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter.Val()).Err()
+		}
+	}
+	return nil
 }
 
 func (r *PostRepo) UnlikeComment(ctx context.Context, commentID, userID string) error {
@@ -1066,6 +1098,16 @@ func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, cont
 		if err := tg.Scan(tid); err != nil {
 			continue
 		}
+		exists, err := qtx.TagExists(ctx, tg)
+		if err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+		if !exists {
+			_ = tx.Rollback(ctx)
+			return ErrParamsType
+		}
 		if err := qtx.AddPostTag(ctx, post.AddPostTagParams{
 			PostID: pid,
 			TagID:  tg,
@@ -1121,7 +1163,17 @@ func (r *PostRepo) CollectPost(ctx context.Context, postID, userID, collectionID
 			return ErrDefault
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.POST_HOT_DETAIL_KEY, postID)+":"+userID).Err()
+		iter := global.RDB.Scan(ctx, 0, fmt.Sprintf("post:list:hot:*:*:%s", userID), 100).Iterator()
+		for iter.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter.Val()).Err()
+		}
+	}
+	return nil
 }
 
 func (r *PostRepo) UncollectPost(ctx context.Context, postID, userID string) error {
@@ -1153,7 +1205,17 @@ func (r *PostRepo) UncollectPost(ctx context.Context, postID, userID string) err
 			return ErrDefault
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	if global.RDB != nil {
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.POST_HOT_DETAIL_KEY, postID)+":"+userID).Err()
+		iter := global.RDB.Scan(ctx, 0, fmt.Sprintf("post:list:hot:*:*:%s", userID), 100).Iterator()
+		for iter.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter.Val()).Err()
+		}
+	}
+	return nil
 }
 
 func (r *PostRepo) DeleteDraft(ctx context.Context, postID, authorID string) error {
@@ -1307,6 +1369,16 @@ func (r *PostRepo) UpdateDraft(ctx context.Context, postID, userID, title, conte
 		var tg pgtype.UUID
 		if err := tg.Scan(tid); err != nil {
 			continue
+		}
+		exists, err := qtx.TagExists(ctx, tg)
+		if err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return ErrDefault
+		}
+		if !exists {
+			_ = tx.Rollback(ctx)
+			return ErrParamsType
 		}
 		if err := qtx.AddPostTag(ctx, post.AddPostTagParams{
 			PostID: pid,
