@@ -5,7 +5,8 @@ ORDER BY ctime DESC;
 
 -- name: CreateBaby :exec
 INSERT INTO "baby" (baby_id, user_id, name, gender, birthday, avatar, ctime, utime)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (baby_id, user_id) DO NOTHING;
 
 -- name: GetBabyByIDAndUser :one
 SELECT * FROM "baby" WHERE baby_id = $1 AND user_id = $2 LIMIT 1;

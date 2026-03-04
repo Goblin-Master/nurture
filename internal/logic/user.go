@@ -286,6 +286,20 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 	if self.Gender == ub.Gender {
 		return resp, ErrPartnerGenderMismatch
 	}
+	// 已绑定校验：若已绑定不同对象则拒绝；若已绑定同一对象则幂等返回
+	existingPID, e1 := ul.userRepo.GetPartnerByUserID(ctx, userID)
+	if e1 != nil {
+		global.Log.Error(e1)
+		return resp, ErrDefault
+	}
+	if existingPID != "" {
+		if existingPID == ub.UserID.String() {
+			resp.PartnerID = ub.UserID.String()
+			resp.PartnerUsername = ub.Username
+			return resp, nil
+		}
+		return resp, ErrPartnerAlreadyBound
+	}
 	fatherID, motherID := userID, ub.UserID.String()
 	if self.Gender != "male" { // self female
 		fatherID, motherID = ub.UserID.String(), userID

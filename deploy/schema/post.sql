@@ -160,3 +160,31 @@ COMMENT ON COLUMN "collection".user_id IS '用户user_id(UUID)';
 COMMENT ON COLUMN "collection".post_id IS '帖子ID';
 COMMENT ON COLUMN "collection".ctime IS '创建时间戳';
 COMMENT ON COLUMN "collection".utime IS '更新时间戳';
+
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES (gen_random_uuid(), '产后恢复', '产后科学恢复', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
+ON CONFLICT (tag_name) DO NOTHING;
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES (gen_random_uuid(), '健康科普', '常见疾病与预防', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
+ON CONFLICT (tag_name) DO NOTHING;
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES (gen_random_uuid(), '日常护理', '洗澡、皮肤与安全', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
+ON CONFLICT (tag_name) DO NOTHING;
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES (gen_random_uuid(), '疫苗', '接种与时间表', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
+ON CONFLICT (tag_name) DO NOTHING;
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES (gen_random_uuid(), '睡眠', '睡眠与作息', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
+ON CONFLICT (tag_name) DO NOTHING;
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES (gen_random_uuid(), '喂养', '母乳与配方奶', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
+ON CONFLICT (tag_name) DO NOTHING;
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES (gen_random_uuid(), '成长', '成长记录与评估', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
+ON CONFLICT (tag_name) DO NOTHING;
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES (gen_random_uuid(), '里程碑', '阶段性发展目标', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
+ON CONFLICT (tag_name) DO NOTHING;
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES (gen_random_uuid(), '图片', '图片类内容', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
+ON CONFLICT (tag_name) DO NOTHING;

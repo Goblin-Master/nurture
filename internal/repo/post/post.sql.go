@@ -319,6 +319,24 @@ func (q *Queries) DeleteCommentVisibleByOwner(ctx context.Context, arg DeleteCom
 	return result.RowsAffected(), nil
 }
 
+const deleteDraftByOwner = `-- name: DeleteDraftByOwner :execrows
+DELETE FROM "post"
+WHERE post_id = $1 AND author_id = $2 AND status = 'draft'
+`
+
+type DeleteDraftByOwnerParams struct {
+	PostID   pgtype.UUID
+	AuthorID pgtype.UUID
+}
+
+func (q *Queries) DeleteDraftByOwner(ctx context.Context, arg DeleteDraftByOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDraftByOwner, arg.PostID, arg.AuthorID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deletePostLike = `-- name: DeletePostLike :execrows
 DELETE FROM "like_dislike"
 WHERE user_id = $1 AND post_id = $2 AND type = 'like'
@@ -442,11 +460,28 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($2, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($2, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($2, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.post_id = $1
 `
+
+type GetPostDetailParams struct {
+	PostID  pgtype.UUID
+	Column2 interface{}
+}
 
 type GetPostDetailRow struct {
 	PostID         string
@@ -467,10 +502,13 @@ type GetPostDetailRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
-func (q *Queries) GetPostDetail(ctx context.Context, postID pgtype.UUID) (GetPostDetailRow, error) {
-	row := q.db.QueryRow(ctx, getPostDetail, postID)
+func (q *Queries) GetPostDetail(ctx context.Context, arg GetPostDetailParams) (GetPostDetailRow, error) {
+	row := q.db.QueryRow(ctx, getPostDetail, arg.PostID, arg.Column2)
 	var i GetPostDetailRow
 	err := row.Scan(
 		&i.PostID,
@@ -491,6 +529,9 @@ func (q *Queries) GetPostDetail(ctx context.Context, postID pgtype.UUID) (GetPos
 		&i.Utime,
 		&i.Birthday,
 		&i.Tags,
+		&i.IsLike,
+		&i.IsDislike,
+		&i.IsCollect,
 	)
 	return i, err
 }
@@ -599,19 +640,28 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  TRUE AS is_collect
 FROM "collection" c
 JOIN "post" p ON p.post_id = c.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE c.user_id = $1
+WHERE c.user_id = NULLIF($1, '')::uuid
 ORDER BY c.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListCollectionsByCtimeParams struct {
-	UserID pgtype.UUID
-	Limit  int32
-	Offset int32
+	Column1 interface{}
+	Limit   int32
+	Offset  int32
 }
 
 type ListCollectionsByCtimeRow struct {
@@ -633,10 +683,13 @@ type ListCollectionsByCtimeRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListCollectionsByCtime(ctx context.Context, arg ListCollectionsByCtimeParams) ([]ListCollectionsByCtimeRow, error) {
-	rows, err := q.db.Query(ctx, listCollectionsByCtime, arg.UserID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listCollectionsByCtime, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -663,6 +716,9 @@ func (q *Queries) ListCollectionsByCtime(ctx context.Context, arg ListCollection
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -697,19 +753,28 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  TRUE AS is_collect
 FROM "collection" c
 JOIN "post" p ON p.post_id = c.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE c.user_id = $1 AND p.status = 'published'
+WHERE c.user_id = NULLIF($1, '')::uuid AND p.status = 'published'
 ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, c.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListCollectionsByHotParams struct {
-	UserID pgtype.UUID
-	Limit  int32
-	Offset int32
+	Column1 interface{}
+	Limit   int32
+	Offset  int32
 }
 
 type ListCollectionsByHotRow struct {
@@ -731,10 +796,13 @@ type ListCollectionsByHotRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListCollectionsByHot(ctx context.Context, arg ListCollectionsByHotParams) ([]ListCollectionsByHotRow, error) {
-	rows, err := q.db.Query(ctx, listCollectionsByHot, arg.UserID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listCollectionsByHot, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -761,6 +829,9 @@ func (q *Queries) ListCollectionsByHot(ctx context.Context, arg ListCollectionsB
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -951,18 +1022,30 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1::text, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1::text, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1::text, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE p.author_id = $1 AND p.status = 'draft'
+WHERE p.author_id = NULLIF($1::text, '')::uuid AND p.status = 'draft'
 ORDER BY p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListDraftsByAuthorParams struct {
-	AuthorID pgtype.UUID
-	Limit    int32
-	Offset   int32
+	Column1 string
+	Limit   int32
+	Offset  int32
 }
 
 type ListDraftsByAuthorRow struct {
@@ -984,10 +1067,13 @@ type ListDraftsByAuthorRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListDraftsByAuthor(ctx context.Context, arg ListDraftsByAuthorParams) ([]ListDraftsByAuthorRow, error) {
-	rows, err := q.db.Query(ctx, listDraftsByAuthor, arg.AuthorID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listDraftsByAuthor, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -1014,6 +1100,9 @@ func (q *Queries) ListDraftsByAuthor(ctx context.Context, arg ListDraftsByAuthor
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -1048,19 +1137,31 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "user_follow" f ON f.followee = p.author_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE f.follower = $1 AND p.status = 'published'
+WHERE f.follower = NULLIF($1, '')::uuid AND p.status = 'published'
 ORDER BY p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListFollowingByCtimeParams struct {
-	Follower pgtype.UUID
-	Limit    int32
-	Offset   int32
+	Column1 interface{}
+	Limit   int32
+	Offset  int32
 }
 
 type ListFollowingByCtimeRow struct {
@@ -1082,10 +1183,13 @@ type ListFollowingByCtimeRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListFollowingByCtime(ctx context.Context, arg ListFollowingByCtimeParams) ([]ListFollowingByCtimeRow, error) {
-	rows, err := q.db.Query(ctx, listFollowingByCtime, arg.Follower, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listFollowingByCtime, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -1112,6 +1216,9 @@ func (q *Queries) ListFollowingByCtime(ctx context.Context, arg ListFollowingByC
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -1146,19 +1253,31 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "user_follow" f ON f.followee = p.author_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE f.follower = $1 AND p.status = 'published'
+WHERE f.follower = NULLIF($1, '')::uuid AND p.status = 'published'
 ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListFollowingByHotParams struct {
-	Follower pgtype.UUID
-	Limit    int32
-	Offset   int32
+	Column1 interface{}
+	Limit   int32
+	Offset  int32
 }
 
 type ListFollowingByHotRow struct {
@@ -1180,10 +1299,13 @@ type ListFollowingByHotRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListFollowingByHot(ctx context.Context, arg ListFollowingByHotParams) ([]ListFollowingByHotRow, error) {
-	rows, err := q.db.Query(ctx, listFollowingByHot, arg.Follower, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listFollowingByHot, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -1210,6 +1332,9 @@ func (q *Queries) ListFollowingByHot(ctx context.Context, arg ListFollowingByHot
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -1244,7 +1369,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($3, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($3, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($3, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = 'published'
@@ -1253,8 +1390,9 @@ LIMIT $1 OFFSET $2
 `
 
 type ListHomeByCtimeParams struct {
-	Limit  int32
-	Offset int32
+	Limit   int32
+	Offset  int32
+	Column3 interface{}
 }
 
 type ListHomeByCtimeRow struct {
@@ -1276,10 +1414,13 @@ type ListHomeByCtimeRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListHomeByCtime(ctx context.Context, arg ListHomeByCtimeParams) ([]ListHomeByCtimeRow, error) {
-	rows, err := q.db.Query(ctx, listHomeByCtime, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listHomeByCtime, arg.Limit, arg.Offset, arg.Column3)
 	if err != nil {
 		return nil, err
 	}
@@ -1306,6 +1447,9 @@ func (q *Queries) ListHomeByCtime(ctx context.Context, arg ListHomeByCtimeParams
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -1340,7 +1484,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($3, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($3, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($3, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = 'published'
@@ -1349,8 +1505,9 @@ LIMIT $1 OFFSET $2
 `
 
 type ListHomeByHotParams struct {
-	Limit  int32
-	Offset int32
+	Limit   int32
+	Offset  int32
+	Column3 interface{}
 }
 
 type ListHomeByHotRow struct {
@@ -1372,10 +1529,13 @@ type ListHomeByHotRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListHomeByHot(ctx context.Context, arg ListHomeByHotParams) ([]ListHomeByHotRow, error) {
-	rows, err := q.db.Query(ctx, listHomeByHot, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listHomeByHot, arg.Limit, arg.Offset, arg.Column3)
 	if err != nil {
 		return nil, err
 	}
@@ -1402,6 +1562,9 @@ func (q *Queries) ListHomeByHot(ctx context.Context, arg ListHomeByHotParams) ([
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -1436,7 +1599,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($4, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($4, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($4, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = 'published'
@@ -1448,6 +1623,7 @@ type ListHomeByRandomParams struct {
 	Column1 string
 	Limit   int32
 	Offset  int32
+	Column4 interface{}
 }
 
 type ListHomeByRandomRow struct {
@@ -1469,10 +1645,18 @@ type ListHomeByRandomRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListHomeByRandom(ctx context.Context, arg ListHomeByRandomParams) ([]ListHomeByRandomRow, error) {
-	rows, err := q.db.Query(ctx, listHomeByRandom, arg.Column1, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listHomeByRandom,
+		arg.Column1,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1499,6 +1683,9 @@ func (q *Queries) ListHomeByRandom(ctx context.Context, arg ListHomeByRandomPara
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -1533,7 +1720,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = $1
@@ -1548,6 +1747,7 @@ type ListHomePostsParams struct {
 	Column2 interface{}
 	Limit   int32
 	Offset  int32
+	Column5 interface{}
 }
 
 type ListHomePostsRow struct {
@@ -1569,6 +1769,9 @@ type ListHomePostsRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListHomePosts(ctx context.Context, arg ListHomePostsParams) ([]ListHomePostsRow, error) {
@@ -1577,6 +1780,7 @@ func (q *Queries) ListHomePosts(ctx context.Context, arg ListHomePostsParams) ([
 		arg.Column2,
 		arg.Limit,
 		arg.Offset,
+		arg.Column5,
 	)
 	if err != nil {
 		return nil, err
@@ -1604,6 +1808,9 @@ func (q *Queries) ListHomePosts(ctx context.Context, arg ListHomePostsParams) ([
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -1638,18 +1845,30 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1::text, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1::text, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1::text, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE p.author_id = $1 AND p.status = 'milestone'
+WHERE p.author_id = NULLIF($1::text, '')::uuid AND p.status = 'milestone'
 ORDER BY p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListMilestonesByAuthorParams struct {
-	AuthorID pgtype.UUID
-	Limit    int32
-	Offset   int32
+	Column1 string
+	Limit   int32
+	Offset  int32
 }
 
 type ListMilestonesByAuthorRow struct {
@@ -1671,10 +1890,13 @@ type ListMilestonesByAuthorRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListMilestonesByAuthor(ctx context.Context, arg ListMilestonesByAuthorParams) ([]ListMilestonesByAuthorRow, error) {
-	rows, err := q.db.Query(ctx, listMilestonesByAuthor, arg.AuthorID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listMilestonesByAuthor, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -1701,6 +1923,9 @@ func (q *Queries) ListMilestonesByAuthor(ctx context.Context, arg ListMilestones
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -1891,18 +2116,30 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1::text, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1::text, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1::text, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE p.author_id = $1 AND p.status = 'published'
+WHERE p.author_id = NULLIF($1::text, '')::uuid AND p.status = 'published'
 ORDER BY p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListPostsByAuthorParams struct {
-	AuthorID pgtype.UUID
-	Limit    int32
-	Offset   int32
+	Column1 string
+	Limit   int32
+	Offset  int32
 }
 
 type ListPostsByAuthorRow struct {
@@ -1924,10 +2161,13 @@ type ListPostsByAuthorRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListPostsByAuthor(ctx context.Context, arg ListPostsByAuthorParams) ([]ListPostsByAuthorRow, error) {
-	rows, err := q.db.Query(ctx, listPostsByAuthor, arg.AuthorID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listPostsByAuthor, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -1954,6 +2194,9 @@ func (q *Queries) ListPostsByAuthor(ctx context.Context, arg ListPostsByAuthorPa
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -1988,18 +2231,30 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1::text, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1::text, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1::text, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE p.author_id = $1 AND p.status = 'published'
+WHERE p.author_id = NULLIF($1::text, '')::uuid AND p.status = 'published'
 ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListPostsByAuthorHotParams struct {
-	AuthorID pgtype.UUID
-	Limit    int32
-	Offset   int32
+	Column1 string
+	Limit   int32
+	Offset  int32
 }
 
 type ListPostsByAuthorHotRow struct {
@@ -2021,10 +2276,13 @@ type ListPostsByAuthorHotRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListPostsByAuthorHot(ctx context.Context, arg ListPostsByAuthorHotParams) ([]ListPostsByAuthorHotRow, error) {
-	rows, err := q.db.Query(ctx, listPostsByAuthorHot, arg.AuthorID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listPostsByAuthorHot, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -2051,6 +2309,9 @@ func (q *Queries) ListPostsByAuthorHot(ctx context.Context, arg ListPostsByAutho
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -2085,7 +2346,19 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "post_tag" pt ON pt.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
@@ -2095,10 +2368,11 @@ LIMIT $3 OFFSET $4
 `
 
 type ListPostsByTagParams struct {
-	TagID  pgtype.UUID
-	Status string
-	Limit  int32
-	Offset int32
+	TagID   pgtype.UUID
+	Status  string
+	Limit   int32
+	Offset  int32
+	Column5 interface{}
 }
 
 type ListPostsByTagRow struct {
@@ -2120,6 +2394,9 @@ type ListPostsByTagRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListPostsByTag(ctx context.Context, arg ListPostsByTagParams) ([]ListPostsByTagRow, error) {
@@ -2128,6 +2405,7 @@ func (q *Queries) ListPostsByTag(ctx context.Context, arg ListPostsByTagParams) 
 		arg.Status,
 		arg.Limit,
 		arg.Offset,
+		arg.Column5,
 	)
 	if err != nil {
 		return nil, err
@@ -2155,6 +2433,9 @@ func (q *Queries) ListPostsByTag(ctx context.Context, arg ListPostsByTagParams) 
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -2189,7 +2470,19 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($4, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($4, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($4, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "post_tag" pt ON pt.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
@@ -2199,9 +2492,10 @@ LIMIT $2 OFFSET $3
 `
 
 type ListPostsByTagHotParams struct {
-	TagID  pgtype.UUID
-	Limit  int32
-	Offset int32
+	TagID   pgtype.UUID
+	Limit   int32
+	Offset  int32
+	Column4 interface{}
 }
 
 type ListPostsByTagHotRow struct {
@@ -2223,10 +2517,18 @@ type ListPostsByTagHotRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) ListPostsByTagHot(ctx context.Context, arg ListPostsByTagHotParams) ([]ListPostsByTagHotRow, error) {
-	rows, err := q.db.Query(ctx, listPostsByTagHot, arg.TagID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listPostsByTagHot,
+		arg.TagID,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2253,6 +2555,9 @@ func (q *Queries) ListPostsByTagHot(ctx context.Context, arg ListPostsByTagHotPa
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -2351,7 +2656,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.title ILIKE $1 AND p.status = $2
@@ -2360,10 +2677,11 @@ LIMIT $3 OFFSET $4
 `
 
 type SearchPostsParams struct {
-	Title  string
-	Status string
-	Limit  int32
-	Offset int32
+	Title   string
+	Status  string
+	Limit   int32
+	Offset  int32
+	Column5 interface{}
 }
 
 type SearchPostsRow struct {
@@ -2385,6 +2703,9 @@ type SearchPostsRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) SearchPosts(ctx context.Context, arg SearchPostsParams) ([]SearchPostsRow, error) {
@@ -2393,6 +2714,7 @@ func (q *Queries) SearchPosts(ctx context.Context, arg SearchPostsParams) ([]Sea
 		arg.Status,
 		arg.Limit,
 		arg.Offset,
+		arg.Column5,
 	)
 	if err != nil {
 		return nil, err
@@ -2420,6 +2742,9 @@ func (q *Queries) SearchPosts(ctx context.Context, arg SearchPostsParams) ([]Sea
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -2454,7 +2779,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "post_tag" pt2 ON pt2.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
@@ -2464,10 +2801,11 @@ LIMIT $3 OFFSET $4
 `
 
 type SearchPostsByTitleAndTagCtimeParams struct {
-	Title  string
-	TagID  pgtype.UUID
-	Limit  int32
-	Offset int32
+	Title   string
+	TagID   pgtype.UUID
+	Limit   int32
+	Offset  int32
+	Column5 interface{}
 }
 
 type SearchPostsByTitleAndTagCtimeRow struct {
@@ -2489,6 +2827,9 @@ type SearchPostsByTitleAndTagCtimeRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) SearchPostsByTitleAndTagCtime(ctx context.Context, arg SearchPostsByTitleAndTagCtimeParams) ([]SearchPostsByTitleAndTagCtimeRow, error) {
@@ -2497,6 +2838,7 @@ func (q *Queries) SearchPostsByTitleAndTagCtime(ctx context.Context, arg SearchP
 		arg.TagID,
 		arg.Limit,
 		arg.Offset,
+		arg.Column5,
 	)
 	if err != nil {
 		return nil, err
@@ -2524,6 +2866,9 @@ func (q *Queries) SearchPostsByTitleAndTagCtime(ctx context.Context, arg SearchP
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -2558,7 +2903,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "post_tag" pt2 ON pt2.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
@@ -2568,10 +2925,11 @@ LIMIT $3 OFFSET $4
 `
 
 type SearchPostsByTitleAndTagHotParams struct {
-	Title  string
-	TagID  pgtype.UUID
-	Limit  int32
-	Offset int32
+	Title   string
+	TagID   pgtype.UUID
+	Limit   int32
+	Offset  int32
+	Column5 interface{}
 }
 
 type SearchPostsByTitleAndTagHotRow struct {
@@ -2593,6 +2951,9 @@ type SearchPostsByTitleAndTagHotRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) SearchPostsByTitleAndTagHot(ctx context.Context, arg SearchPostsByTitleAndTagHotParams) ([]SearchPostsByTitleAndTagHotRow, error) {
@@ -2601,6 +2962,7 @@ func (q *Queries) SearchPostsByTitleAndTagHot(ctx context.Context, arg SearchPos
 		arg.TagID,
 		arg.Limit,
 		arg.Offset,
+		arg.Column5,
 	)
 	if err != nil {
 		return nil, err
@@ -2628,6 +2990,9 @@ func (q *Queries) SearchPostsByTitleAndTagHot(ctx context.Context, arg SearchPos
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}
@@ -2662,7 +3027,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($4, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($4, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($4, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.title ILIKE $1 AND p.status = 'published'
@@ -2671,9 +3048,10 @@ LIMIT $2 OFFSET $3
 `
 
 type SearchPostsByTitleHotParams struct {
-	Title  string
-	Limit  int32
-	Offset int32
+	Title   string
+	Limit   int32
+	Offset  int32
+	Column4 interface{}
 }
 
 type SearchPostsByTitleHotRow struct {
@@ -2695,10 +3073,18 @@ type SearchPostsByTitleHotRow struct {
 	Utime          int64
 	Birthday       interface{}
 	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
 }
 
 func (q *Queries) SearchPostsByTitleHot(ctx context.Context, arg SearchPostsByTitleHotParams) ([]SearchPostsByTitleHotRow, error) {
-	rows, err := q.db.Query(ctx, searchPostsByTitleHot, arg.Title, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, searchPostsByTitleHot,
+		arg.Title,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2725,6 +3111,9 @@ func (q *Queries) SearchPostsByTitleHot(ctx context.Context, arg SearchPostsByTi
 			&i.Utime,
 			&i.Birthday,
 			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
 		); err != nil {
 			return nil, err
 		}

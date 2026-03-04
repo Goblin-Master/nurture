@@ -14,6 +14,7 @@ import (
 const createBaby = `-- name: CreateBaby :exec
 INSERT INTO "baby" (baby_id, user_id, name, gender, birthday, avatar, ctime, utime)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (baby_id, user_id) DO NOTHING
 `
 
 type CreateBabyParams struct {
