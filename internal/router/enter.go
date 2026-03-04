@@ -357,6 +357,12 @@ func registerRoutes(routeManager *manager.RouteManager) {
 			middleware.BindJsonMiddleware[dto.UpdateDraftReq],
 			postHandler.UpdateDraft,
 		)
+		// 删除草稿
+		rg.DELETE("/:post_id",
+			middleware.Authentication(jwtx.COMMON_USER),
+			middleware.BindUriMiddleware[dto.PostDetailReq],
+			postHandler.DeleteDraft,
+		)
 		// 点赞帖子
 		rg.POST("/:post_id/like",
 			middleware.Authentication(jwtx.COMMON_USER),

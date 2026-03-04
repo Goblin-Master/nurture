@@ -21,7 +21,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($2, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($2, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($2, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.post_id = $1;
@@ -65,7 +77,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = $1
@@ -97,7 +121,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($3, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($3, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($3, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = 'published'
@@ -127,7 +163,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($3, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($3, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($3, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = 'published'
@@ -157,7 +205,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($4, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($4, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($4, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = 'published'
@@ -186,7 +246,19 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "post_tag" pt ON pt.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
@@ -217,7 +289,19 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($4, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($4, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($4, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "post_tag" pt ON pt.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
@@ -248,10 +332,22 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1::text, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1::text, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1::text, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE p.author_id = $1 AND p.status = 'published'
+WHERE p.author_id = NULLIF($1::text, '')::uuid AND p.status = 'published'
 ORDER BY p.ctime DESC
 LIMIT $2 OFFSET $3;
 
@@ -278,10 +374,22 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1::text, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1::text, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1::text, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE p.author_id = $1 AND p.status = 'published'
+WHERE p.author_id = NULLIF($1::text, '')::uuid AND p.status = 'published'
 ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $2 OFFSET $3;
 -- name: ListDraftsByAuthor :many
@@ -307,10 +415,22 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1::text, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1::text, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1::text, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE p.author_id = $1 AND p.status = 'draft'
+WHERE p.author_id = NULLIF($1::text, '')::uuid AND p.status = 'draft'
 ORDER BY p.ctime DESC
 LIMIT $2 OFFSET $3;
 
@@ -337,10 +457,22 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1::text, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1::text, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1::text, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE p.author_id = $1 AND p.status = 'milestone'
+WHERE p.author_id = NULLIF($1::text, '')::uuid AND p.status = 'milestone'
 ORDER BY p.ctime DESC
 LIMIT $2 OFFSET $3;
 
@@ -367,7 +499,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.title ILIKE $1 AND p.status = $2
@@ -397,7 +541,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($4, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($4, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($4, '')::uuid
+  ) AS is_collect
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.title ILIKE $1 AND p.status = 'published'
@@ -427,7 +583,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "post_tag" pt2 ON pt2.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
@@ -458,7 +626,19 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($5, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($5, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($5, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "post_tag" pt2 ON pt2.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
@@ -489,11 +669,23 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "user_follow" f ON f.followee = p.author_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE f.follower = $1 AND p.status = 'published'
+WHERE f.follower = NULLIF($1, '')::uuid AND p.status = 'published'
 ORDER BY p.ctime DESC
 LIMIT $2 OFFSET $3;
 
@@ -520,11 +712,23 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($1, '')::uuid
+  ) AS is_collect
 FROM "post" p
 JOIN "user_follow" f ON f.followee = p.author_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE f.follower = $1 AND p.status = 'published'
+WHERE f.follower = NULLIF($1, '')::uuid AND p.status = 'published'
 ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $2 OFFSET $3;
 
@@ -540,6 +744,10 @@ WHERE post_id = $1 AND author_id = $2 AND status = 'draft';
 
 -- name: DeletePostTagsByPost :exec
 DELETE FROM "post_tag" WHERE post_id = $1;
+
+-- name: DeleteDraftByOwner :execrows
+DELETE FROM "post"
+WHERE post_id = $1 AND author_id = $2 AND status = 'draft';
 
 -- name: GetPostStatusByID :one
 SELECT status FROM "post" WHERE post_id = $1;
@@ -740,11 +948,20 @@ SELECT
     FROM "post_tag" pt
     JOIN "tag" t ON t.tag_id = pt.tag_id
     WHERE pt.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  TRUE AS is_collect
 FROM "collection" c
 JOIN "post" p ON p.post_id = c.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE c.user_id = $1
+WHERE c.user_id = NULLIF($1, '')::uuid
 ORDER BY c.ctime DESC
 LIMIT $2 OFFSET $3;
 
@@ -771,11 +988,20 @@ SELECT
     FROM "post_tag" pt2
     JOIN "tag" t ON t.tag_id = pt2.tag_id
     WHERE pt2.post_id = p.post_id
-  ), '{}') AS tags
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($1, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($1, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  TRUE AS is_collect
 FROM "collection" c
 JOIN "post" p ON p.post_id = c.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
-WHERE c.user_id = $1 AND p.status = 'published'
+WHERE c.user_id = NULLIF($1, '')::uuid AND p.status = 'published'
 ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, c.ctime DESC
 LIMIT $2 OFFSET $3;
 -- name: CreatePostLike :execrows

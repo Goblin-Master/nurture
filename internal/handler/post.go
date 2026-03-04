@@ -24,7 +24,8 @@ func NewPostHandler() *PostHandler {
 func (h *PostHandler) Home(c *gin.Context) {
 	cr := middleware.GetBind[dto.PostHomeListReq](c)
 	global.Log.Info(cr)
-	resp, err := h.postLogic.Home(c.Request.Context(), cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.Home(c.Request.Context(), userID, cr)
 	global.Log.Info(resp)
 	response.Response(c, resp, err)
 }
@@ -32,7 +33,8 @@ func (h *PostHandler) Home(c *gin.Context) {
 func (h *PostHandler) ListByTag(c *gin.Context) {
 	cr := middleware.GetBind[dto.PostTagListReq](c)
 	global.Log.Info(cr)
-	resp, err := h.postLogic.ListByTag(c.Request.Context(), cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.ListByTag(c.Request.Context(), userID, cr)
 	global.Log.Info(resp)
 	response.Response(c, resp, err)
 }
@@ -40,7 +42,8 @@ func (h *PostHandler) ListByTag(c *gin.Context) {
 func (h *PostHandler) Search(c *gin.Context) {
 	cr := middleware.GetBind[dto.PostSearchListReq](c)
 	global.Log.Info(cr)
-	resp, err := h.postLogic.Search(c.Request.Context(), cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.Search(c.Request.Context(), userID, cr)
 	global.Log.Info(resp)
 	response.Response(c, resp, err)
 }
@@ -48,7 +51,8 @@ func (h *PostHandler) Search(c *gin.Context) {
 func (h *PostHandler) GetDetail(c *gin.Context) {
 	cr := middleware.GetBind[dto.PostDetailReq](c)
 	global.Log.Info(cr)
-	resp, err := h.postLogic.Detail(c.Request.Context(), cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := h.postLogic.Detail(c.Request.Context(), userID, cr)
 	global.Log.Info(resp)
 	response.Response(c, resp, err)
 }
@@ -79,6 +83,14 @@ func (h *PostHandler) UpdateDraft(c *gin.Context) {
 	resp, err := h.postLogic.UpdateDraft(c.Request.Context(), userID, uri, body)
 	global.Log.Info(resp)
 	response.Response(c, resp, err)
+}
+
+func (h *PostHandler) DeleteDraft(c *gin.Context) {
+	uri := middleware.GetBind[dto.PostDetailReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	err := h.postLogic.DeleteDraft(c.Request.Context(), userID, uri)
+	response.Response(c, nil, err)
 }
 
 func (h *PostHandler) CreateComment(c *gin.Context) {

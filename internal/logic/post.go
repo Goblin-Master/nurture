@@ -16,17 +16,18 @@ import (
 )
 
 type IPostLogic interface {
-	Home(ctx context.Context, req dto.PostHomeListReq) (dto.PostListResp, error)
-	ListByTag(ctx context.Context, req dto.PostTagListReq) (dto.PostListResp, error)
-	Search(ctx context.Context, req dto.PostSearchListReq) (dto.PostListResp, error)
+	Home(ctx context.Context, userID string, req dto.PostHomeListReq) (dto.PostListResp, error)
+	ListByTag(ctx context.Context, userID string, req dto.PostTagListReq) (dto.PostListResp, error)
+	Search(ctx context.Context, userID string, req dto.PostSearchListReq) (dto.PostListResp, error)
 	ListMyPosts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
 	ListMyDrafts(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
 	ListMyMilestones(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
 	Following(ctx context.Context, userID string, req dto.PostMyListReq) (dto.PostListResp, error)
-	Detail(ctx context.Context, req dto.PostDetailReq) (dto.PostDetailResp, error)
+	Detail(ctx context.Context, userID string, req dto.PostDetailReq) (dto.PostDetailResp, error)
 	NewPost(ctx context.Context, userID string, req dto.CreatePostReq) (dto.CreatePostResp, error)
 	Publish(ctx context.Context, userID string, req dto.PublishPostReq) (dto.PublishPostResp, error)
 	UpdateDraft(ctx context.Context, userID string, uri dto.PostDetailReq, req dto.UpdateDraftReq) (dto.UpdateDraftResp, error)
+	DeleteDraft(ctx context.Context, userID string, uri dto.PostDetailReq) error
 	CreateComment(ctx context.Context, userID string, postID string, req dto.CreateCommentReq) (dto.CreateCommentResp, error)
 	LikePost(ctx context.Context, userID string, uri dto.PostDetailReq) error
 	UnlikePost(ctx context.Context, userID string, uri dto.PostDetailReq) error
@@ -58,7 +59,7 @@ func NewPostLogic() *PostLogic {
 
 var _ IPostLogic = (*PostLogic)(nil)
 
-func (l *PostLogic) Home(ctx context.Context, req dto.PostHomeListReq) (dto.PostListResp, error) {
+func (l *PostLogic) Home(ctx context.Context, userID string, req dto.PostHomeListReq) (dto.PostListResp, error) {
 	var resp dto.PostListResp
 	if req.Page <= 0 {
 		req.Page = 1
@@ -66,7 +67,7 @@ func (l *PostLogic) Home(ctx context.Context, req dto.PostHomeListReq) (dto.Post
 	if req.PageSize <= 0 || req.PageSize > 100 {
 		req.PageSize = 10
 	}
-	items, hasMore, err := l.postRepo.ListHome(ctx, req.Page, req.PageSize, req.Strategy)
+	items, hasMore, err := l.postRepo.ListHome(ctx, userID, req.Page, req.PageSize, req.Strategy)
 	if err != nil {
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
@@ -93,6 +94,9 @@ func (l *PostLogic) Home(ctx context.Context, req dto.PostHomeListReq) (dto.Post
 			CommentCount:   v.CommentCount,
 			Ctime:          v.Ctime,
 			Utime:          v.Utime,
+			IsLike:         v.IsLike,
+			IsDislike:      v.IsDislike,
+			IsCollect:      v.IsCollect,
 			Tags:           v.Tags,
 			BabyAgeYear:    y,
 			BabyAgeMonth:   m,
@@ -140,6 +144,9 @@ func (l *PostLogic) Following(ctx context.Context, userID string, req dto.PostMy
 			CommentCount:   v.CommentCount,
 			Ctime:          v.Ctime,
 			Utime:          v.Utime,
+			IsLike:         v.IsLike,
+			IsDislike:      v.IsDislike,
+			IsCollect:      v.IsCollect,
 			Tags:           v.Tags,
 			BabyAgeYear:    y,
 			BabyAgeMonth:   m,
@@ -345,6 +352,9 @@ func (l *PostLogic) ListMyCollections(ctx context.Context, userID string, req dt
 			CommentCount:   v.CommentCount,
 			Ctime:          v.Ctime,
 			Utime:          v.Utime,
+			IsLike:         v.IsLike,
+			IsDislike:      v.IsDislike,
+			IsCollect:      v.IsCollect,
 			Tags:           v.Tags,
 			BabyAgeYear:    y,
 			BabyAgeMonth:   m,
@@ -433,7 +443,7 @@ func (l *PostLogic) ListReplies(ctx context.Context, userID string, uri dto.Comm
 	return resp, nil
 }
 
-func (l *PostLogic) ListByTag(ctx context.Context, req dto.PostTagListReq) (dto.PostListResp, error) {
+func (l *PostLogic) ListByTag(ctx context.Context, userID string, req dto.PostTagListReq) (dto.PostListResp, error) {
 	var resp dto.PostListResp
 	if req.Page <= 0 {
 		req.Page = 1
@@ -441,7 +451,7 @@ func (l *PostLogic) ListByTag(ctx context.Context, req dto.PostTagListReq) (dto.
 	if req.PageSize <= 0 || req.PageSize > 100 {
 		req.PageSize = 10
 	}
-	items, hasMore, err := l.postRepo.ListByTag(ctx, req.TagID, req.Page, req.PageSize, req.Strategy)
+	items, hasMore, err := l.postRepo.ListByTag(ctx, userID, req.TagID, req.Page, req.PageSize, req.Strategy)
 	if err != nil {
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
@@ -468,6 +478,9 @@ func (l *PostLogic) ListByTag(ctx context.Context, req dto.PostTagListReq) (dto.
 			CommentCount:   v.CommentCount,
 			Ctime:          v.Ctime,
 			Utime:          v.Utime,
+			IsLike:         v.IsLike,
+			IsDislike:      v.IsDislike,
+			IsCollect:      v.IsCollect,
 			Tags:           v.Tags,
 			BabyAgeYear:    y,
 			BabyAgeMonth:   m,
@@ -480,7 +493,7 @@ func (l *PostLogic) ListByTag(ctx context.Context, req dto.PostTagListReq) (dto.
 	return resp, nil
 }
 
-func (l *PostLogic) Search(ctx context.Context, req dto.PostSearchListReq) (dto.PostListResp, error) {
+func (l *PostLogic) Search(ctx context.Context, userID string, req dto.PostSearchListReq) (dto.PostListResp, error) {
 	var resp dto.PostListResp
 	if req.Page <= 0 {
 		req.Page = 1
@@ -488,7 +501,7 @@ func (l *PostLogic) Search(ctx context.Context, req dto.PostSearchListReq) (dto.
 	if req.PageSize <= 0 || req.PageSize > 100 {
 		req.PageSize = 10
 	}
-	items, hasMore, err := l.postRepo.Search(ctx, req.Keyword, req.TagID, req.Strategy, req.Page, req.PageSize)
+	items, hasMore, err := l.postRepo.Search(ctx, userID, req.Keyword, req.TagID, req.Strategy, req.Page, req.PageSize)
 	if err != nil {
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
@@ -515,6 +528,9 @@ func (l *PostLogic) Search(ctx context.Context, req dto.PostSearchListReq) (dto.
 			CommentCount:   v.CommentCount,
 			Ctime:          v.Ctime,
 			Utime:          v.Utime,
+			IsLike:         v.IsLike,
+			IsDislike:      v.IsDislike,
+			IsCollect:      v.IsCollect,
 			Tags:           v.Tags,
 			BabyAgeYear:    y,
 			BabyAgeMonth:   m,
@@ -562,6 +578,9 @@ func (l *PostLogic) ListMyPosts(ctx context.Context, userID string, req dto.Post
 			CommentCount:   v.CommentCount,
 			Ctime:          v.Ctime,
 			Utime:          v.Utime,
+			IsLike:         v.IsLike,
+			IsDislike:      v.IsDislike,
+			IsCollect:      v.IsCollect,
 			Tags:           v.Tags,
 			BabyAgeYear:    y,
 			BabyAgeMonth:   m,
@@ -609,6 +628,9 @@ func (l *PostLogic) ListMyDrafts(ctx context.Context, userID string, req dto.Pos
 			CommentCount:   v.CommentCount,
 			Ctime:          v.Ctime,
 			Utime:          v.Utime,
+			IsLike:         v.IsLike,
+			IsDislike:      v.IsDislike,
+			IsCollect:      v.IsCollect,
 			Tags:           v.Tags,
 			BabyAgeYear:    y,
 			BabyAgeMonth:   m,
@@ -712,6 +734,23 @@ func (l *PostLogic) UpdateDraft(ctx context.Context, userID string, uri dto.Post
 	resp.Status = "draft"
 	resp.Message = "更新成功"
 	return resp, nil
+}
+func (l *PostLogic) DeleteDraft(ctx context.Context, userID string, uri dto.PostDetailReq) error {
+	if strings.TrimSpace(uri.PostID) == "" {
+		return ErrParamsType
+	}
+	err := l.postRepo.DeleteDraft(ctx, uri.PostID, userID)
+	if err != nil {
+		if errors.Is(err, repo.ErrPostNotExist) {
+			return ErrPostNotExist
+		}
+		if errors.Is(err, repo.ErrInvalidPostStatus) {
+			return ErrInvalidPostStatus
+		}
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	return nil
 }
 func (l *PostLogic) NewPost(ctx context.Context, userID string, req dto.CreatePostReq) (dto.CreatePostResp, error) {
 	var resp dto.CreatePostResp
@@ -833,12 +872,12 @@ func (l *PostLogic) ListComments(ctx context.Context, userID string, postID stri
 	resp.HasMore = hasMore
 	return resp, nil
 }
-func (l *PostLogic) Detail(ctx context.Context, req dto.PostDetailReq) (dto.PostDetailResp, error) {
+func (l *PostLogic) Detail(ctx context.Context, userID string, req dto.PostDetailReq) (dto.PostDetailResp, error) {
 	var resp dto.PostDetailResp
 	if strings.TrimSpace(req.PostID) == "" {
 		return resp, ErrParamsType
 	}
-	row, err := l.postRepo.GetDetail(ctx, req.PostID)
+	row, err := l.postRepo.GetDetail(ctx, userID, req.PostID)
 	if err != nil {
 		if errors.Is(err, repo.ErrPostNotExist) {
 			return resp, ErrPostNotExist
@@ -863,10 +902,23 @@ func (l *PostLogic) Detail(ctx context.Context, req dto.PostDetailReq) (dto.Post
 		CommentCount:   row.CommentCount,
 		Ctime:          row.Ctime,
 		Utime:          row.Utime,
+		IsLike:         row.IsLike,
+		IsDislike:      row.IsDislike,
+		IsCollect:      row.IsCollect,
 		Tags:           row.Tags,
 		BabyAgeYear:    y,
 		BabyAgeMonth:   m,
 		BabyAgeText:    ageText,
+	}
+	// compute is_follow
+	if userID != "" && userID != row.AuthorID {
+		ur := repo.NewUserRepo()
+		ok, e := ur.IsFollowing(ctx, userID, row.AuthorID)
+		if e != nil {
+			global.Log.Error(e)
+		} else {
+			resp.Post.IsFollow = ok
+		}
 	}
 	return resp, nil
 }

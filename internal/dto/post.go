@@ -23,6 +23,10 @@ type (
 		Ctime          int64           `json:"ctime"`
 		Utime          int64           `json:"utime"`
 		Tags           []string        `json:"tags"`
+		IsLike         bool            `json:"is_like"`
+		IsDislike      bool            `json:"is_dislike"`
+		IsCollect      bool            `json:"is_collect"`
+		IsFollow       bool            `json:"is_follow"`
 		BabyAgeYear    int             `json:"baby_age_year"`
 		BabyAgeMonth   int             `json:"baby_age_month"`
 		BabyAgeText    string          `json:"baby_age_text"`
@@ -207,6 +211,9 @@ type (
 		Ctime          int64           `json:"ctime"`
 		Utime          int64           `json:"utime"`
 		Tags           []string        `json:"tags"`
+		IsLike         bool            `json:"is_like"`
+		IsDislike      bool            `json:"is_dislike"`
+		IsCollect      bool            `json:"is_collect"`
 		BabyAgeYear    int             `json:"baby_age_year"`
 		BabyAgeMonth   int             `json:"baby_age_month"`
 		BabyAgeText    string          `json:"baby_age_text"`

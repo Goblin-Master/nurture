@@ -32,6 +32,7 @@ type IUserRepo interface {
 	UnfollowUser(ctx context.Context, followerID, followeeID string) error
 	ListFollowing(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowingByUserIDRow, bool, error)
 	ListFollowers(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowersByUserIDRow, bool, error)
+	IsFollowing(ctx context.Context, followerID, followeeID string) (bool, error)
 }
 type UserRepo struct {
 	userDao *user.Queries
@@ -155,6 +156,26 @@ func (ur *UserRepo) UnfollowUser(ctx context.Context, followerID, followeeID str
 		}
 	}
 	return nil
+}
+
+func (ur *UserRepo) IsFollowing(ctx context.Context, followerID, followeeID string) (bool, error) {
+	var fUID, eUID pgtype.UUID
+	if err := fUID.Scan(followerID); err != nil {
+		return false, err
+	}
+	if err := eUID.Scan(followeeID); err != nil {
+		return false, err
+	}
+	var one int
+	err := global.DB.QueryRow(ctx, `SELECT 1 FROM "user_follow" WHERE follower = $1 AND followee = $2 LIMIT 1`, fUID, eUID).Scan(&one)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		global.Log.Error(err)
+		return false, ErrDefault
+	}
+	return true, nil
 }
 
 func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowingByUserIDRow, bool, error) {
@@ -459,6 +480,9 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 			Utime:    time.Now().UnixMilli(),
 		})
 		if err != nil {
+			if pe, ok := err.(*pgconn.PgError); ok && pe.Code == "23505" {
+				continue
+			}
 			global.Log.Error(err)
 			return ErrDefault
 		}
@@ -494,6 +518,9 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 			Utime:    time.Now().UnixMilli(),
 		})
 		if err != nil {
+			if pe, ok := err.(*pgconn.PgError); ok && pe.Code == "23505" {
+				continue
+			}
 			global.Log.Error(err)
 			return ErrDefault
 		}
