@@ -142,6 +142,29 @@ type (
 	}
 )
 
+// 管理端：疫苗管理
+type (
+	AdminVaccineDose struct {
+		DoseNumber       int32 `json:"dose_number" binding:"required"`
+		RecommendAgeDays int32 `json:"recommend_age_days" binding:"required"`
+	}
+	AdminCreateVaccineReq struct {
+		Name    string             `json:"name" binding:"required"`
+		Disease string             `json:"disease" binding:"required"`
+		Link    string             `json:"link"`
+		Doses   []AdminVaccineDose `json:"doses" binding:"required"`
+	}
+	AdminCreatedDose struct {
+		DoseID           string `json:"dose_id"`
+		DoseNumber       int32  `json:"dose_number"`
+		RecommendAgeDays int32  `json:"recommend_age_days"`
+	}
+	AdminCreateVaccineResp struct {
+		VaccineID string             `json:"vaccine_id"`
+		Doses     []AdminCreatedDose `json:"doses"`
+	}
+)
+
 type (
 	UploadBabyPhotosReq struct {
 		BabyID string   `json:"baby_id" binding:"required"`
@@ -356,9 +379,17 @@ type (
 	DailyStatsReq struct {
 		Date string `form:"date" binding:"required"`
 	}
+	DailyRecordItem struct {
+		ID         string `json:"id"`
+		Type       string `json:"type"`
+		SubType    string `json:"sub_type"`
+		Time       int64  `json:"time"`
+		DurationMs int64  `json:"duration_ms,omitempty"`
+	}
 	DailyStatsResp struct {
-		FeedingCount    int64 `json:"feeding_count"`
-		SleepDurationMs int64 `json:"sleep_duration_ms"`
-		DiaperCount     int64 `json:"diaper_count"`
+		FeedingCount    int64             `json:"feeding_count"`
+		SleepDurationMs int64             `json:"sleep_duration_ms"`
+		DiaperCount     int64             `json:"diaper_count"`
+		Items           []DailyRecordItem `json:"items"`
 	}
 )

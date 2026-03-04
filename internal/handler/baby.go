@@ -66,6 +66,14 @@ func (h *BabyHandler) ChangeVaccineStatus(c *gin.Context) {
 	response.Response(c, resp, err)
 }
 
+func (h *BabyHandler) AdminCreateVaccine(c *gin.Context) {
+	cr := middleware.GetBind[dto.AdminCreateVaccineReq](c)
+	global.Log.Info(cr)
+	resp, err := h.babyLogic.AdminCreateVaccine(c.Request.Context(), cr)
+	global.Log.Info(resp)
+	response.Response(c, resp, err)
+}
+
 func (h *BabyHandler) UploadBabyPhotos(c *gin.Context) {
 	cr := middleware.GetBind[dto.UploadBabyPhotosReq](c)
 	global.Log.Info(cr)

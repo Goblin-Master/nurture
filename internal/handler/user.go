@@ -130,3 +130,22 @@ func (uh *UserHandler) ListFollowers(c *gin.Context) {
 	resp, err := uh.userLogic.ListFollowers(c.Request.Context(), userID, q)
 	response.Response(c, resp, err)
 }
+
+// admin
+func (uh *UserHandler) AdminListUsers(c *gin.Context) {
+	q := middleware.GetBind[dto.AdminListUsersReq](c)
+	global.Log.Info(q)
+	resp, err := uh.userLogic.AdminListUsers(c.Request.Context(), q)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) AdminPromoteToAdmin(c *gin.Context) {
+	uri := middleware.GetBind[dto.AdminPromoteUri](c)
+	global.Log.Info(uri)
+	msg, err := uh.userLogic.AdminPromoteToAdmin(c.Request.Context(), uri.UserID)
+	if err != nil {
+		response.Response(c, nil, err)
+		return
+	}
+	response.Response(c, gin.H{"message": msg}, nil)
+}

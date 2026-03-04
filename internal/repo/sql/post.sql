@@ -697,3 +697,128 @@ WHERE comment_id = $1 AND status = 'visible';
 UPDATE "comment"
 SET like_count = GREATEST(like_count - 1, 0)
 WHERE comment_id = $1;
+
+-- name: CreateCollection :execrows
+INSERT INTO "collection" (collection_id, user_id, post_id, ctime, utime)
+VALUES ($1, $2, $3, $4, $4)
+ON CONFLICT (user_id, post_id) DO NOTHING;
+
+-- name: DeleteCollection :execrows
+DELETE FROM "collection"
+WHERE user_id = $1 AND post_id = $2;
+
+-- name: IncPostCollectCount :execrows
+UPDATE "post"
+SET collect_count = collect_count + 1
+WHERE post_id = $1 AND status = 'published';
+
+-- name: DecPostCollectCount :execrows
+UPDATE "post"
+SET collect_count = GREATEST(collect_count - 1, 0)
+WHERE post_id = $1;
+
+-- name: ListCollectionsByCtime :many
+SELECT
+  p.post_id::text AS post_id,
+  p.author_id::text AS author_id,
+  COALESCE(ua.username, '') AS author_name,
+  COALESCE(ua.avatar, '') AS author_avatar,
+  COALESCE(ua.province, '') AS author_province,
+  COALESCE(ua.city, '') AS author_city,
+  p.title, p.content, p.status,
+  p.like_count, p.dislike_count, p.collect_count, p.comment_count,
+  p.cover, p.ctime, p.utime,
+  COALESCE((
+    SELECT b.birthday
+    FROM "baby" b
+    WHERE b.user_id = p.author_id
+    ORDER BY b.ctime DESC
+    LIMIT 1
+  ), 0) AS birthday,
+  COALESCE((
+    SELECT array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL)
+    FROM "post_tag" pt
+    JOIN "tag" t ON t.tag_id = pt.tag_id
+    WHERE pt.post_id = p.post_id
+  ), '{}') AS tags
+FROM "collection" c
+JOIN "post" p ON p.post_id = c.post_id
+LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
+WHERE c.user_id = $1
+ORDER BY c.ctime DESC
+LIMIT $2 OFFSET $3;
+
+-- name: ListCollectionsByHot :many
+SELECT
+  p.post_id::text AS post_id,
+  p.author_id::text AS author_id,
+  COALESCE(ua.username, '') AS author_name,
+  COALESCE(ua.avatar, '') AS author_avatar,
+  COALESCE(ua.province, '') AS author_province,
+  COALESCE(ua.city, '') AS author_city,
+  p.title, p.content, p.status,
+  p.like_count, p.dislike_count, p.collect_count, p.comment_count,
+  p.cover, p.ctime, p.utime,
+  COALESCE((
+    SELECT b.birthday
+    FROM "baby" b
+    WHERE b.user_id = p.author_id
+    ORDER BY b.ctime DESC
+    LIMIT 1
+  ), 0) AS birthday,
+  COALESCE((
+    SELECT array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL)
+    FROM "post_tag" pt2
+    JOIN "tag" t ON t.tag_id = pt2.tag_id
+    WHERE pt2.post_id = p.post_id
+  ), '{}') AS tags
+FROM "collection" c
+JOIN "post" p ON p.post_id = c.post_id
+LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
+WHERE c.user_id = $1 AND p.status = 'published'
+ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, c.ctime DESC
+LIMIT $2 OFFSET $3;
+-- name: CreatePostLike :execrows
+INSERT INTO "like_dislike" (user_id, post_id, type, ctime, utime)
+VALUES ($1, $2, 'like', $3, $3)
+ON CONFLICT (user_id, post_id) DO NOTHING;
+
+
+-- name: DeletePostLike :execrows
+DELETE FROM "like_dislike"
+WHERE user_id = $1 AND post_id = $2 AND type = 'like';
+
+-- name: IncPostLikeCount :execrows
+UPDATE "post"
+SET like_count = like_count + 1
+WHERE post_id = $1 AND status = 'published';
+
+-- name: DecPostLikeCount :execrows
+UPDATE "post"
+SET like_count = GREATEST(like_count - 1, 0)
+WHERE post_id = $1;
+
+-- admin
+-- name: CreateTag :one
+INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
+VALUES ($1, $2, $3, $4, $4)
+RETURNING tag_id::text AS tag_id, tag_name, COALESCE(description, '') AS description;
+
+-- admin
+-- name: DeletePostTagsByTagID :execrows
+DELETE FROM "post_tag" WHERE tag_id = $1;
+
+-- admin
+-- name: DeleteTagByID :execrows
+DELETE FROM "tag" WHERE tag_id = $1;
+
+-- admin
+-- name: ListTags :many
+SELECT 
+  tag_id::text AS tag_id,
+  tag_name,
+  COALESCE(description, '') AS description
+FROM "tag"
+WHERE ($1 = '' OR tag_name ILIKE '%' || $1 || '%')
+ORDER BY ctime DESC
+LIMIT $2 OFFSET $3;

@@ -31,6 +31,9 @@ type IUserLogic interface {
 	Unfollow(ctx context.Context, userID string, uri dto.FollowReq) (dto.FollowResp, error)
 	ListFollowing(ctx context.Context, userID string, req dto.FollowingListReq) (dto.FollowingListResp, error)
 	ListFollowers(ctx context.Context, userID string, req dto.FollowersListReq) (dto.FollowersListResp, error)
+	// admin
+	AdminListUsers(ctx context.Context, req dto.AdminListUsersReq) (dto.AdminListUsersResp, error)
+	AdminPromoteToAdmin(ctx context.Context, userID string) (string, error)
 }
 type UserLogic struct {
 	userRepo *repo.UserRepo
@@ -293,6 +296,7 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 		return resp, ErrDefault
 	}
 	resp.PartnerID = ub.UserID.String()
+	resp.PartnerUsername = ub.Username
 	return resp, nil
 }
 
@@ -304,6 +308,17 @@ func (ul *UserLogic) GetPartner(ctx context.Context, userID string) (dto.Partner
 		return resp, ErrDefault
 	}
 	resp.PartnerID = pid
+	if pid != "" {
+		u, e := ul.userRepo.GetUserByID(ctx, pid)
+		if e != nil {
+			if errors.Is(e, repo.ErrUserNotExist) {
+				return resp, ErrUserNotExist
+			}
+			global.Log.Error(e)
+			return resp, ErrDefault
+		}
+		resp.PartnerUsername = u.Username
+	}
 	return resp, nil
 }
 
@@ -441,4 +456,46 @@ func (ul *UserLogic) ListFollowers(ctx context.Context, userID string, req dto.F
 	resp.List = items
 	resp.HasMore = hasMore
 	return resp, nil
+}
+
+// admin
+func (ul *UserLogic) AdminListUsers(ctx context.Context, req dto.AdminListUsersReq) (dto.AdminListUsersResp, error) {
+	var resp dto.AdminListUsersResp
+	page := req.Page
+	pageSize := req.PageSize
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > 50 {
+		pageSize = 10
+	}
+	rows, hasMore, err := ul.userRepo.AdminListUsers(ctx, req.Keyword, page, pageSize)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	items := make([]dto.AdminUserItem, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, dto.AdminUserItem{
+			UserID:   r.UserID,
+			Username: r.Username,
+			Avatar:   r.Avatar,
+		})
+	}
+	resp.List = items
+	resp.HasMore = hasMore
+	return resp, nil
+}
+
+// admin
+func (ul *UserLogic) AdminPromoteToAdmin(ctx context.Context, userID string) (string, error) {
+	err := ul.userRepo.AdminUpdateUserRole(ctx, userID, int16(jwtx.ADMIN))
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return "", ErrUserNotExist
+		}
+		global.Log.Error(err)
+		return "", ErrDefault
+	}
+	return "OK", nil
 }

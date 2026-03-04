@@ -27,6 +27,28 @@ const (
 	AI_CONTEXT_MESSAGES = 6             // AI 上下文：最近 3 轮问答（6 条消息）
 	HISTORY_TTL         = 7 * 24 * 3600 // 7 天（秒）
 
+	// 用户缓存 Key
+	USER_PROFILE_KEY   = "user:profile:%s"
+	USER_PARTNER_KEY   = "user:partner:%s"
+	USER_FOLLOWING_KEY = "user:following:%s:%d:%d"
+	USER_FOLLOWERS_KEY = "user:followers:%s:%d:%d"
+	// 用户缓存 TTL（秒）
+	USER_PROFILE_TTL = 10 * 60
+	USER_PARTNER_TTL = 24 * 3600
+	USER_LIST_TTL    = 5 * 60
+
+	// 帖子缓存 Key
+	POST_HOT_LIST_KEY       = "post:list:hot:%d:%d"
+	POST_HOT_LIST_BY_TAG    = "post:list:hot:tag:%s:%d:%d"
+	POST_HOT_DETAIL_KEY     = "post:detail:hot:%s"
+	POST_HOT_COMMENTS_KEY   = "post:comments:hot:%s:%s:%d:%d"
+	COMMENT_HOT_REPLIES_KEY = "comment:replies:hot:%s:%s:%d:%d"
+	// 帖子缓存 TTL（秒）
+	POST_HOT_LIST_TTL       = 2 * 60
+	POST_HOT_DETAIL_TTL     = 10 * 60
+	POST_HOT_COMMENTS_TTL   = 2 * 60
+	COMMENT_HOT_REPLIES_TTL = 2 * 60
+
 	// SSE 事件类型
 	SSE_TYPE_CONTENT = "content"
 	SSE_TYPE_ERROR   = "error"

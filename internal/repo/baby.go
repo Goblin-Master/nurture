@@ -6,6 +6,7 @@ import (
 	"nurture/internal/repo/baby"
 
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -55,6 +56,17 @@ func NewBabyRepo() *BabyRepo {
 }
 
 var _ IBabyRepo = (*BabyRepo)(nil)
+
+type DoseSpec struct {
+	DoseNumber       int32
+	RecommendAgeDays int32
+}
+
+type CreatedDose struct {
+	DoseID           string
+	DoseNumber       int32
+	RecommendAgeDays int32
+}
 
 func (r *BabyRepo) ListMyBabies(ctx context.Context, userID string) ([]baby.ListBabiesByUserIDRow, error) {
 	var uid pgtype.UUID
@@ -243,6 +255,70 @@ func (r *BabyRepo) GetLatestGrowthByBabyIDAndUser(ctx context.Context, babyID, u
 		return baby.BabyGrowthRecord{}, ErrDefault
 	}
 	return gr, nil
+}
+
+// 管理员：创建疫苗 + 多个剂次，并为所有宝宝初始化接种记录
+func (r *BabyRepo) AdminCreateVaccine(ctx context.Context, vaccineID, name, disease, link string, doses []DoseSpec) (string, []CreatedDose, error) {
+	tx, err := global.DB.Begin(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	qtx := r.babyDao.WithTx(tx)
+	var vid pgtype.UUID
+	if err := vid.Scan(vaccineID); err != nil {
+		_ = tx.Rollback(ctx)
+		return "", nil, err
+	}
+	now := time.Now().UnixMilli()
+	vret, err := qtx.CreateVaccine(ctx, baby.CreateVaccineParams{
+		VaccineID: vid,
+		Name:      name,
+		Disease:   disease,
+		Link:      link,
+		Ctime:     now,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		_ = tx.Rollback(ctx)
+		return "", nil, ErrDefault
+	}
+	created := make([]CreatedDose, 0, len(doses))
+	for _, d := range doses {
+		var did pgtype.UUID
+		if err := did.Scan(uuid.NewString()); err != nil {
+			_ = tx.Rollback(ctx)
+			return "", nil, err
+		}
+		dr, err := qtx.CreateVaccineDose(ctx, baby.CreateVaccineDoseParams{
+			DoseID:           did,
+			VaccineID:        vid,
+			DoseNumber:       d.DoseNumber,
+			RecommendAgeDays: d.RecommendAgeDays,
+			Ctime:            now,
+		})
+		if err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return "", nil, ErrDefault
+		}
+		if _, err := qtx.InitBabyVaccineRecordsForDose(ctx, baby.InitBabyVaccineRecordsForDoseParams{
+			DoseID: did,
+			Ctime:  now,
+		}); err != nil {
+			global.Log.Error(err)
+			_ = tx.Rollback(ctx)
+			return "", nil, ErrDefault
+		}
+		created = append(created, CreatedDose{
+			DoseID:           dr.DoseID,
+			DoseNumber:       dr.DoseNumber,
+			RecommendAgeDays: dr.RecommendAgeDays,
+		})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", nil, err
+	}
+	return vret, created, nil
 }
 
 func (r *BabyRepo) GetLatestGrowthByBabyID(ctx context.Context, babyID string) (baby.BabyGrowthRecord, error) {
@@ -608,6 +684,22 @@ func (r *BabyRepo) StopSleep(ctx context.Context, sessionID string) (string, int
 		return "", 0, 0, 0, err
 	}
 	row, err := r.babyDao.StopSleep(ctx, sid)
+	if err != nil {
+		global.Log.Error(err)
+		return "", 0, 0, 0, ErrDefault
+	}
+	return row.SleepID, row.StartTime, row.EndTime.Int64, row.Duration.Int64, nil
+}
+
+func (r *BabyRepo) ForceStopSleepWithCap(ctx context.Context, sessionID string, capMs int64) (string, int64, int64, int64, error) {
+	var sid pgtype.UUID
+	if err := sid.Scan(sessionID); err != nil {
+		return "", 0, 0, 0, err
+	}
+	row, err := r.babyDao.ForceStopSleepWithCap(ctx, baby.ForceStopSleepWithCapParams{
+		SleepID:  sid,
+		Duration: pgtype.Int8{Int64: capMs, Valid: true},
+	})
 	if err != nil {
 		global.Log.Error(err)
 		return "", 0, 0, 0, ErrDefault

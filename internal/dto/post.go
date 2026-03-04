@@ -121,6 +121,37 @@ type (
 )
 
 type (
+	AdminTagCreateReq struct {
+		Name        string `json:"name" binding:"required"`
+		Description string `json:"description"`
+	}
+	AdminTagCreateResp struct {
+		TagID       string `json:"tag_id"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	AdminTagDeleteUri struct {
+		TagID string `uri:"tag_id" binding:"required"`
+	}
+	TagListReq struct {
+		Keyword  string `form:"keyword"`
+		Page     int    `form:"page"`
+		PageSize int    `form:"page_size"`
+	}
+	TagItem struct {
+		TagID       string `json:"tag_id"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	TagListResp struct {
+		Items    []TagItem `json:"items"`
+		Page     int       `json:"page"`
+		PageSize int       `json:"page_size"`
+		HasMore  bool      `json:"has_more"`
+	}
+)
+
+type (
 	UpdateCommentReq struct {
 		Content string `json:"content" binding:"required"`
 	}
@@ -185,5 +216,11 @@ type (
 		Page     int        `json:"page"`
 		PageSize int        `json:"page_size"`
 		HasMore  bool       `json:"has_more"`
+	}
+)
+type (
+	CollectResp struct {
+		CollectionID string `json:"collection_id"`
+		Message      string `json:"message"`
 	}
 )

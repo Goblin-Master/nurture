@@ -22,6 +22,7 @@ type RouteManager struct {
 	PostRoutes   *gin.RouterGroup //帖子相关的路由组
 	DailyRoutes  *gin.RouterGroup //日常记录相关的路由组
 	WSRoutes     *gin.RouterGroup //WebSocket相关的路由组
+	AdminRoutes  *gin.RouterGroup //管理员相关的路由组
 }
 
 // NewRouteManager 创建一个新的 RouteManager 实例，包含各业务功能的路由组
@@ -33,6 +34,7 @@ func NewRouteManager(router *gin.Engine) *RouteManager {
 		PostRoutes:   router.Group("/api/post"),   //帖子相关的路由组
 		DailyRoutes:  router.Group("/api/daily"),  //日常记录相关的路由组
 		WSRoutes:     router.Group("/ws"),         //WebSocket相关的路由组
+		AdminRoutes:  router.Group("/api/admin"),  //管理员相关的路由组
 	}
 }
 
@@ -66,6 +68,10 @@ func (rm *RouteManager) RegisterWSRoutes(handler PathHandler) {
 	handler(rm.WSRoutes)
 }
 
+// RegisterAdminRoutes 管理员相关的路由组
+func (rm *RouteManager) RegisterAdminRoutes(handler PathHandler) {
+	handler(rm.AdminRoutes)
+}
 // RegisterMiddleware 根据组名为对应的路由组注册中间件
 func (rm *RouteManager) RegisterMiddleware(group string, middleware Middleware) {
 	switch group {
@@ -81,6 +87,8 @@ func (rm *RouteManager) RegisterMiddleware(group string, middleware Middleware) 
 		rm.DailyRoutes.Use(middleware())
 	case "ws":
 		rm.WSRoutes.Use(middleware())
+	case "admin":
+		rm.AdminRoutes.Use(middleware())
 	default:
 		// 处理未知的组名
 		panic("unknown group name")
