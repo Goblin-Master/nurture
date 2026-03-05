@@ -1481,7 +1481,34 @@ func (r *PostRepo) CreateComment(ctx context.Context, commentID, postID, userID 
 			return ErrDefault
 		}
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	// 缓存失效与重建
+	if global.RDB != nil {
+		// 1) 帖子详情：当前查看者
+		_ = global.RDB.Del(ctx, fmt.Sprintf(constant.POST_HOT_DETAIL_KEY, postID)+":"+userID).Err()
+		// 2) 评论列表：该帖子、当前查看者的所有页
+		iter := global.RDB.Scan(ctx, 0, fmt.Sprintf("post:comments:hot:%s:%s:*:*", postID, userID), 100).Iterator()
+		for iter.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter.Val()).Err()
+		}
+		// 3) 回复列表：若为回复，清理父评论对应缓存
+		if parentID != nil && strings.TrimSpace(*parentID) != "" {
+			iter2 := global.RDB.Scan(ctx, 0, fmt.Sprintf("comment:replies:hot:%s:%s:*:*", *parentID, userID), 100).Iterator()
+			for iter2.Next(ctx) {
+				_ = global.RDB.Del(ctx, iter2.Val()).Err()
+			}
+		}
+		// 4) 首页/标签热榜列表：当前查看者缓存
+		iter3 := global.RDB.Scan(ctx, 0, fmt.Sprintf("post:list:hot:*:*:%s", userID), 100).Iterator()
+		for iter3.Next(ctx) {
+			_ = global.RDB.Del(ctx, iter3.Val()).Err()
+		}
+		// 5) 详情重建（可选）：读一次详情以写入新缓存
+		_, _ = r.GetDetail(ctx, userID, postID)
+	}
+	return nil
 }
 
 type CommentRow struct {
