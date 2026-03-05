@@ -2,7 +2,7 @@ app:
   host: 0.0.0.0  #  0.0.0.0 监听所有接口
   port: 8080
   env: dev
-  log: logs
+  log: logs/   # 日志文件路径，要加个 /
 auth:
   access_secret: nurture
   access_expire: 86400
