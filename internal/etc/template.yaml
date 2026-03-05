@@ -1,19 +1,19 @@
 app:
-  host: 127.0.0.1
+  host: 0.0.0.0  #  0.0.0.0 监听所有接口
   port: 8080
-  env : dev
-  log : logs
+  env: dev
+  log: logs
 auth:
   access_secret: nurture
   access_expire: 86400
 db:
-  host: 127.0.0.1
+  host: nurture-pg  # 数据库容器名
   port: 5432
   username: nurture
   password: 123456
   dbname: nurture
 redis:
-  host: 127.0.0.1
+  host: nurture-redis  # 缓存容器名
   port: 6379
   password:
   db: 0
