@@ -295,7 +295,9 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 	if existingPID != "" {
 		if existingPID == ub.UserID.String() {
 			resp.PartnerID = ub.UserID.String()
-			resp.PartnerUsername = ub.Username
+			profile, _ := ul.userRepo.GetMyProfile(ctx, ub.UserID.String())
+			resp.PartnerUsername = profile.Username
+			resp.PartnerAvatar = profile.Avatar
 			return resp, nil
 		}
 		return resp, ErrPartnerAlreadyBound
@@ -310,7 +312,9 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 		return resp, ErrDefault
 	}
 	resp.PartnerID = ub.UserID.String()
-	resp.PartnerUsername = ub.Username
+	profile, _ := ul.userRepo.GetMyProfile(ctx, ub.UserID.String())
+	resp.PartnerUsername = profile.Username
+	resp.PartnerAvatar = profile.Avatar
 	return resp, nil
 }
 
@@ -323,7 +327,7 @@ func (ul *UserLogic) GetPartner(ctx context.Context, userID string) (dto.Partner
 	}
 	resp.PartnerID = pid
 	if pid != "" {
-		u, e := ul.userRepo.GetUserByID(ctx, pid)
+		row, e := ul.userRepo.GetMyProfile(ctx, pid)
 		if e != nil {
 			if errors.Is(e, repo.ErrUserNotExist) {
 				return resp, ErrUserNotExist
@@ -331,7 +335,8 @@ func (ul *UserLogic) GetPartner(ctx context.Context, userID string) (dto.Partner
 			global.Log.Error(e)
 			return resp, ErrDefault
 		}
-		resp.PartnerUsername = u.Username
+		resp.PartnerUsername = row.Username
+		resp.PartnerAvatar = row.Avatar
 	}
 	return resp, nil
 }
