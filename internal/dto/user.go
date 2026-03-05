@@ -78,10 +78,12 @@ type (
 	PartnerBindResp struct {
 		PartnerID       string `json:"partner_id"`
 		PartnerUsername string `json:"partner_username"`
+		PartnerAvatar   string `json:"partner_avatar"`
 	}
 	PartnerGetResp struct {
 		PartnerID       string `json:"partner_id"`
 		PartnerUsername string `json:"partner_username"`
+		PartnerAvatar   string `json:"partner_avatar"`
 	}
 	MyProfileResp struct {
 		UserID     string `json:"user_id"`
