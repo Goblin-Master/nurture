@@ -2,15 +2,20 @@ package constant
 
 // 所有常量文件读取位置
 const (
-	TOKEN_USER_ID      = "UserID"
-	TOKEN_ROLE         = "Role"
-	LOGIN_WITH_ACCOUNT = "account"
-	LOGIN_WITH_EMAIL   = "email"
-	DEFAULT_NODE_ID    = 1
-	FILE_MAX_SIZE      = 1024 * 1024 * 10
-	LOGIN_CODE_KEY     = "login_code:%s"
-	RESET_PWD_CODE_KEY = "reset_pwd_code:%s"
-	REGISTER_CODE_KEY  = "register_code:%s"
+	TOKEN_USER_ID         = "UserID"
+	TOKEN_ROLE            = "Role"
+	LOGIN_WITH_ACCOUNT    = "account"
+	LOGIN_WITH_EMAIL      = "email"
+	DEFAULT_NODE_ID       = 1
+	FILE_MAX_SIZE         = 1024 * 1024 * 10
+	LOGIN_CODE_KEY        = "login_code:%s"
+	RESET_PWD_CODE_KEY    = "reset_pwd_code:%s"
+	REGISTER_CODE_KEY     = "register_code:%s"
+	REGISTER_SMS_CODE_KEY = "register_sms_code:%s"
+	BIND_PHONE_CODE_KEY   = "bind_phone_code:%s"
+	BIND_EMAIL_CODE_KEY   = "bind_email_code:%s"
+	REBIND_PHONE_CODE_KEY = "rebind_phone_code:%s"
+	REBIND_EMAIL_CODE_KEY = "rebind_email_code:%s"
 
 	// 知识空间类型
 	SPACE_TYPE_PRIVATE = "private"
@@ -48,6 +53,15 @@ const (
 	POST_HOT_DETAIL_TTL     = 10 * 60
 	POST_HOT_COMMENTS_TTL   = 2 * 60
 	COMMENT_HOT_REPLIES_TTL = 2 * 60
+
+	// 宝宝缓存 Key
+	BABY_INFO_KEY          = "baby:info:%s:%s"
+	BABY_VACCINE_LIST_KEY  = "baby:vaccine:list:%s"
+	BABY_LATEST_GROWTH_KEY = "baby:growth:latest:%s"
+	// 宝宝缓存 TTL（秒）
+	BABY_INFO_TTL          = 30 * 60
+	BABY_VACCINE_LIST_TTL  = 30 * 60
+	BABY_LATEST_GROWTH_TTL = 5 * 60
 
 	// SSE 事件类型
 	SSE_TYPE_CONTENT = "content"

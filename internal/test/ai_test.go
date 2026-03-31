@@ -11,6 +11,7 @@ import (
 	"nurture/internal/pkg/aix"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/repo"
+	"os"
 	"testing"
 	"time"
 )
@@ -21,6 +22,9 @@ func init() {
 }
 
 func TestStreamChat(t *testing.T) {
+	if os.Getenv("NURTURE_RUN_AI_TESTS") != "1" {
+		t.Skip("skip ai integration test: set NURTURE_RUN_AI_TESTS=1 to run")
+	}
 	// 1. 生成测试 Token (虽然这个测试是直接调用 pkg 方法不涉及 Handler，但为了符合规范演示 Token 生成)
 	token, err := jwtx.GenTestToken("test_user_id", jwtx.COMMON_USER)
 	if err != nil {
@@ -67,6 +71,9 @@ func TestStreamChat(t *testing.T) {
 }
 
 func TestEmbedding(t *testing.T) {
+	if os.Getenv("NURTURE_RUN_AI_TESTS") != "1" {
+		t.Skip("skip ai integration test: set NURTURE_RUN_AI_TESTS=1 to run")
+	}
 	// 1. 初始化 AIX
 	ai, err := aix.NewAIX(config.Conf.AI, nil, "")
 	if err != nil {
@@ -94,6 +101,9 @@ func TestEmbedding(t *testing.T) {
 }
 
 func TestSimilaritySearch(t *testing.T) {
+	if os.Getenv("NURTURE_RUN_AI_TESTS") != "1" {
+		t.Skip("skip ai integration test: set NURTURE_RUN_AI_TESTS=1 to run")
+	}
 	// 1. 初始化 (确保 Global AIX 被正确初始化，且包含 DB 连接)
 	var err error
 	// 必须传入有效的 DSN，否则无法连接向量库

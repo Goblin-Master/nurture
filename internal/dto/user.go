@@ -20,6 +20,9 @@ type (
 	GetCodeResp struct {
 		Code string `json:"code"`
 	}
+	GetSMSCodeReq struct {
+		Phone string `json:"phone"`
+	}
 )
 
 type (
@@ -29,6 +32,13 @@ type (
 		Username string `json:"username"`
 		Gender   string `json:"gender"`
 		Email    string `json:"email"`
+		Code     string `json:"code"`
+	}
+	RegisterSMSReq struct {
+		Password string `json:"password"`
+		Username string `json:"username"`
+		Gender   string `json:"gender"`
+		Phone    string `json:"phone"`
 		Code     string `json:"code"`
 	}
 	RegisterResp struct {
@@ -49,7 +59,6 @@ type (
 
 type (
 	UpdateUserAdditionReq struct {
-		Phone      *string `json:"phone"`
 		Occupation *string `json:"occupation"`
 		Gender     *string `json:"gender"`
 		Province   *string `json:"province"`
@@ -66,6 +75,20 @@ type (
 		Avatar string `json:"avatar"`
 	}
 	UpdateAvatarResp struct {
+		Message string `json:"message"`
+	}
+)
+
+type (
+	BindPhoneReq struct {
+		Phone string `json:"phone"`
+		Code  string `json:"code"`
+	}
+	BindEmailReq struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+	BindContactResp struct {
 		Message string `json:"message"`
 	}
 )

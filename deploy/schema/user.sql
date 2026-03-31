@@ -6,8 +6,8 @@ CREATE TABLE IF NOT EXISTS "user_base" (
   id        BIGSERIAL PRIMARY KEY,
   user_id   UUID UNIQUE NOT NULL, -- 直接用github.com/google/uuid生成的字符串
   account   VARCHAR(20) UNIQUE NOT NULL,
-  password  VARCHAR(20) NOT NULL,
-  email     VARCHAR(20) UNIQUE NOT NULL,
+  password  VARCHAR(255) NOT NULL,
+  email     VARCHAR(255) UNIQUE,
   username  VARCHAR(20) NOT NULL,
   gender    VARCHAR(10) NOT NULL CHECK (gender IN ('male','female')),
   role      SMALLINT NOT NULL DEFAULT 1,

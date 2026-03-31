@@ -27,17 +27,6 @@ func (q *Queries) AddPostTag(ctx context.Context, arg AddPostTagParams) error {
 	return err
 }
 
-const tagExists = `-- name: TagExists :one
-SELECT EXISTS(SELECT 1 FROM "tag" WHERE tag_id = $1)
-`
-
-func (q *Queries) TagExists(ctx context.Context, tagID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, tagExists, tagID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const createCollection = `-- name: CreateCollection :execrows
 INSERT INTO "collection" (collection_id, user_id, post_id, ctime, utime)
 VALUES ($1, $2, $3, $4, $4)
@@ -1283,13 +1272,7 @@ FROM "post" p
 JOIN "user_follow" f ON f.followee = p.author_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE f.follower = NULLIF($1, '')::uuid AND p.status = 'published'
-ORDER BY (
-  (p.like_count*3 + p.comment_count*5 + p.collect_count*4)
-  + (
-    (('x' || substr(md5(p.post_id::text || ':' || COALESCE(NULLIF($1, ''), '')), 1, 16))::bit(64)::bigint % 1000000)::double precision
-    / 1000000.0
-  )
-) DESC, p.ctime DESC
+ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -1519,13 +1502,7 @@ SELECT
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = 'published'
-ORDER BY (
-  (p.like_count*3 + p.comment_count*5 + p.collect_count*4)
-  + (
-    (('x' || substr(md5(p.post_id::text || ':' || COALESCE(NULLIF($3, ''), '')), 1, 16))::bit(64)::bigint % 1000000)::double precision
-    / 1000000.0
-  )
-) DESC, p.ctime DESC
+ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -2272,13 +2249,7 @@ SELECT
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.author_id = NULLIF($1::text, '')::uuid AND p.status = 'published'
-ORDER BY (
-  (p.like_count*3 + p.comment_count*5 + p.collect_count*4)
-  + (
-    (('x' || substr(md5(p.post_id::text || ':' || COALESCE(NULLIF($1::text, ''), '')), 1, 16))::bit(64)::bigint % 1000000)::double precision
-    / 1000000.0
-  )
-) DESC, p.ctime DESC
+ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -2518,13 +2489,7 @@ FROM "post" p
 JOIN "post_tag" pt ON pt.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE pt.tag_id = $1 AND p.status = 'published'
-ORDER BY (
-  (p.like_count*3 + p.comment_count*5 + p.collect_count*4)
-  + (
-    (('x' || substr(md5(p.post_id::text || ':' || COALESCE(NULLIF($4, ''), '')), 1, 16))::bit(64)::bigint % 1000000)::double precision
-    / 1000000.0
-  )
-) DESC, p.ctime DESC
+ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -2957,13 +2922,7 @@ FROM "post" p
 JOIN "post_tag" pt2 ON pt2.post_id = p.post_id
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.title ILIKE $1 AND pt2.tag_id = $2 AND p.status = 'published'
-ORDER BY (
-  (p.like_count*3 + p.comment_count*5 + p.collect_count*4)
-  + (
-    (('x' || substr(md5(p.post_id::text || ':' || COALESCE(NULLIF($5, ''), '')), 1, 16))::bit(64)::bigint % 1000000)::double precision
-    / 1000000.0
-  )
-) DESC, p.ctime DESC
+ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $3 OFFSET $4
 `
 
@@ -3086,13 +3045,7 @@ SELECT
 FROM "post" p
 LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.title ILIKE $1 AND p.status = 'published'
-ORDER BY (
-  (p.like_count*3 + p.comment_count*5 + p.collect_count*4)
-  + (
-    (('x' || substr(md5(p.post_id::text || ':' || COALESCE(NULLIF($4, ''), '')), 1, 16))::bit(64)::bigint % 1000000)::double precision
-    / 1000000.0
-  )
-) DESC, p.ctime DESC
+ORDER BY (p.like_count*3 + p.comment_count*5 + p.collect_count*4) DESC, p.ctime DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -3172,6 +3125,17 @@ func (q *Queries) SearchPostsByTitleHot(ctx context.Context, arg SearchPostsByTi
 		return nil, err
 	}
 	return items, nil
+}
+
+const tagExists = `-- name: TagExists :one
+SELECT EXISTS(SELECT 1 FROM "tag" WHERE tag_id = $1) AS exists
+`
+
+func (q *Queries) TagExists(ctx context.Context, tagID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, tagExists, tagID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const updateCommentContentByOwner = `-- name: UpdateCommentContentByOwner :execrows

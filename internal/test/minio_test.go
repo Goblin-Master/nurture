@@ -4,6 +4,7 @@ import (
 	"context"
 	"nurture/internal/config"
 	"nurture/internal/global"
+	"os"
 	"testing"
 
 	"github.com/minio/minio-go/v7"
@@ -11,6 +12,9 @@ import (
 )
 
 func TestMinio(t *testing.T) {
+	if os.Getenv("NURTURE_RUN_INTEGRATION_TESTS") != "1" {
+		t.Skip("skip integration test: set NURTURE_RUN_INTEGRATION_TESTS=1 to run")
+	}
 	// 加载配置
 	config.LoadConfig()
 	// 初始化全局配置

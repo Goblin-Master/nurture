@@ -23,21 +23,24 @@ func NewUserHandler() *UserHandler {
 
 func (uh *UserHandler) Login(c *gin.Context) {
 	cr := middleware.GetBind[dto.LoginReq](c)
-	global.Log.Info(cr)
 	resp, err := uh.userLogic.Login(c.Request.Context(), cr)
 	response.Response(c, resp, err)
 }
 
 func (uh *UserHandler) Register(c *gin.Context) {
 	cr := middleware.GetBind[dto.RegisterReq](c)
-	global.Log.Info(cr)
 	resp, err := uh.userLogic.Register(c.Request.Context(), cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) RegisterSMS(c *gin.Context) {
+	cr := middleware.GetBind[dto.RegisterSMSReq](c)
+	resp, err := uh.userLogic.RegisterSMS(c.Request.Context(), cr)
 	response.Response(c, resp, err)
 }
 
 func (uh *UserHandler) ResetPassword(c *gin.Context) {
 	cr := middleware.GetBind[dto.ResetPasswordReq](c)
-	global.Log.Info(cr)
 	resp, err := uh.userLogic.ResetPassword(c.Request.Context(), cr)
 	response.Response(c, resp, err)
 }
@@ -56,10 +59,80 @@ func (uh *UserHandler) GetRegisterCode(c *gin.Context) {
 	response.Response(c, resp, err)
 }
 
+func (uh *UserHandler) GetRegisterSMSCode(c *gin.Context) {
+	cr := middleware.GetBind[dto.GetSMSCodeReq](c)
+	global.Log.Info(cr)
+	resp, err := uh.userLogic.GetRegisterSMSCode(c.Request.Context(), cr)
+	response.Response(c, resp, err)
+}
+
 func (uh *UserHandler) GetResetCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetCodeReq](c)
 	global.Log.Info(cr)
 	resp, err := uh.userLogic.GetResetCode(c.Request.Context(), cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) GetBindPhoneCode(c *gin.Context) {
+	cr := middleware.GetBind[dto.GetSMSCodeReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.GetBindPhoneCode(c.Request.Context(), userID, cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) BindPhone(c *gin.Context) {
+	cr := middleware.GetBind[dto.BindPhoneReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.BindPhone(c.Request.Context(), userID, cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) GetBindEmailCode(c *gin.Context) {
+	cr := middleware.GetBind[dto.GetCodeReq](c)
+	global.Log.Info(cr)
+	resp, err := uh.userLogic.GetBindEmailCode(c.Request.Context(), cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) BindEmail(c *gin.Context) {
+	cr := middleware.GetBind[dto.BindEmailReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.BindEmail(c.Request.Context(), userID, cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) GetRebindPhoneCode(c *gin.Context) {
+	cr := middleware.GetBind[dto.GetSMSCodeReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.GetRebindPhoneCode(c.Request.Context(), userID, cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) RebindPhone(c *gin.Context) {
+	cr := middleware.GetBind[dto.BindPhoneReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.RebindPhone(c.Request.Context(), userID, cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) GetRebindEmailCode(c *gin.Context) {
+	cr := middleware.GetBind[dto.GetCodeReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.GetRebindEmailCode(c.Request.Context(), userID, cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) RebindEmail(c *gin.Context) {
+	cr := middleware.GetBind[dto.BindEmailReq](c)
+	global.Log.Info(cr)
+	userID := jwtx.GetUserID(c)
+	resp, err := uh.userLogic.RebindEmail(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
 }
 
@@ -81,7 +154,6 @@ func (uh *UserHandler) UpdateAvatar(c *gin.Context) {
 
 func (uh *UserHandler) BindPartner(c *gin.Context) {
 	cr := middleware.GetBind[dto.PartnerBindReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.BindPartner(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)

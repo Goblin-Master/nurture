@@ -5,12 +5,16 @@ import (
 	"nurture/internal/config"
 	"nurture/internal/global"
 	"nurture/internal/pkg/emailx"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestEmailSend(t *testing.T) {
+	if os.Getenv("NURTURE_RUN_INTEGRATION_TESTS") != "1" {
+		t.Skip("skip integration test: set NURTURE_RUN_INTEGRATION_TESTS=1 to run")
+	}
 	// 加载配置
 	config.LoadConfig()
 	// 初始化全局配置

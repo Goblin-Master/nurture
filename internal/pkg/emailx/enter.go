@@ -64,6 +64,24 @@ func (ex *EmailX) SendRegisterCode(ctx context.Context, to string, code string) 
 	return ex.rdb.Set(ctx, fmt.Sprintf(constant.REGISTER_CODE_KEY, to), code, ex.ttl).Err()
 }
 
+func (ex *EmailX) SendBindEmailCode(ctx context.Context, to string, code string) error {
+	subject := fmt.Sprintf("[%s]绑定邮箱", ex.config.Subject)
+	text := fmt.Sprintf("你正在进行邮箱绑定，验证码是：%s，十分钟内有效", code)
+	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
+		return err
+	}
+	return ex.rdb.Set(ctx, fmt.Sprintf(constant.BIND_EMAIL_CODE_KEY, to), code, ex.ttl).Err()
+}
+
+func (ex *EmailX) SendRebindEmailCode(ctx context.Context, to string, code string) error {
+	subject := fmt.Sprintf("[%s]换绑邮箱", ex.config.Subject)
+	text := fmt.Sprintf("你正在进行邮箱换绑，验证码是：%s，十分钟内有效", code)
+	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
+		return err
+	}
+	return ex.rdb.Set(ctx, fmt.Sprintf(constant.REBIND_EMAIL_CODE_KEY, to), code, ex.ttl).Err()
+}
+
 func (ex *EmailX) sendEmail(ctx context.Context, to, subject, text string) error {
 	e := email.NewEmail()
 	e.From = fmt.Sprintf("%s <%s>", ex.config.SendNickname, ex.config.SendEmail)

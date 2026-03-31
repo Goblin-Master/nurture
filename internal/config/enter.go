@@ -12,6 +12,7 @@ type Config struct {
 	Redis Redis `mapstructure:"redis"`
 	Auth  Auth  `mapstructure:"auth"`
 	Email Email `mapstructure:"email"`
+	SMS   SMS   `mapstructure:"sms"`
 	Minio Minio `mapstructure:"minio"`
 	AI    AI    `mapstructure:"ai"`
 }
@@ -116,4 +117,10 @@ type Email struct {
 	Subject      string `mapstructure:"subject"`
 	SSL          bool   `mapstructure:"ssl"`
 	TLS          bool   `mapstructure:"tls"`
+}
+
+type SMS struct {
+	Key      string `mapstructure:"key"`
+	Endpoint string `mapstructure:"endpoint"`
+	Name     string `mapstructure:"name"`
 }

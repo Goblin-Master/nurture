@@ -86,10 +86,14 @@ func registerRoutes(routeManager *manager.RouteManager) {
 		rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
 		// 注册
 		rg.POST("/register", middleware.BindJsonMiddleware[dto.RegisterReq], userHandler.Register)
+		// 手机号注册
+		rg.POST("/register/sms", middleware.BindJsonMiddleware[dto.RegisterSMSReq], userHandler.RegisterSMS)
 		// 登录验证码
 		rg.POST("/code/login", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetLoginCode)
 		// 注册验证码
 		rg.POST("/code/register", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetRegisterCode)
+		// 手机号注册验证码
+		rg.POST("/code/register/sms", middleware.BindJsonMiddleware[dto.GetSMSCodeReq], userHandler.GetRegisterSMSCode)
 		// 重置密码验证码
 		rg.POST("/code/reset", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetResetCode)
 		// 重置密码
@@ -98,6 +102,16 @@ func registerRoutes(routeManager *manager.RouteManager) {
 		rg.PUT("/profile", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateUserAdditionReq], userHandler.UpdateProfile)
 		// 更新头像
 		rg.PUT("/avatar", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateAvatarReq], userHandler.UpdateAvatar)
+		// 绑定手机号/邮箱（需要验证码）
+		rg.POST("/code/bind/phone", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.GetSMSCodeReq], userHandler.GetBindPhoneCode)
+		rg.POST("/bind/phone", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.BindPhoneReq], userHandler.BindPhone)
+		rg.POST("/code/bind/email", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetBindEmailCode)
+		rg.POST("/bind/email", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.BindEmailReq], userHandler.BindEmail)
+		// 换绑手机号/邮箱（需要验证码）
+		rg.POST("/code/rebind/phone", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.GetSMSCodeReq], userHandler.GetRebindPhoneCode)
+		rg.POST("/rebind/phone", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.BindPhoneReq], userHandler.RebindPhone)
+		rg.POST("/code/rebind/email", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetRebindEmailCode)
+		rg.POST("/rebind/email", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.BindEmailReq], userHandler.RebindEmail)
 		// 我的资料
 		rg.GET("/me", middleware.Authentication(jwtx.COMMON_USER), userHandler.MyProfile)
 		// 另一半关系

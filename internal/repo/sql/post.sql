@@ -54,6 +54,9 @@ INSERT INTO "post_tag" (post_id, tag_id)
 VALUES ($1, $2)
 ON CONFLICT DO NOTHING;
 
+-- name: TagExists :one
+SELECT EXISTS(SELECT 1 FROM "tag" WHERE tag_id = $1) AS exists;
+
 -- name: ListHomePosts :many
 SELECT
   p.post_id::text AS post_id,

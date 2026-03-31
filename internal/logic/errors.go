@@ -33,7 +33,15 @@ var (
 	ErrCodeVerify         = errors.New("验证码错误")
 	ErrEmailIsUsed        = errors.New("邮箱已经被使用")
 	ErrAccountIsUsed      = errors.New("账号已经被使用")
+	ErrPhoneIsUsed        = errors.New("手机号已经被使用")
 	ErrUserNotExist       = errors.New("用户不存在")
+)
+
+var (
+	ErrPasswordEmpty    = errors.New("密码不能为空")
+	ErrPasswordTooShort = errors.New("密码长度过短")
+	ErrPasswordTooLong  = errors.New("密码长度过长")
+	ErrPasswordTooWeak  = errors.New("密码强度过低")
 )
 
 var (
