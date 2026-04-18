@@ -2,17 +2,18 @@ package passwordx
 
 import (
 	"errors"
+	"strings"
 	"unicode"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrPasswordEmpty    = errors.New("password is empty")
-	ErrPasswordTooShort = errors.New("password is too short")
-	ErrPasswordTooWeak  = errors.New("password is too weak")
-	ErrPasswordTooLong  = errors.New("password is too long")
-	ErrPasswordMismatch = errors.New("password mismatch")
+	ErrPasswordEmpty    = errors.New("密码不能为空")
+	ErrPasswordTooShort = errors.New("密码长度过短")
+	ErrPasswordTooWeak  = errors.New("密码强度过低")
+	ErrPasswordTooLong  = errors.New("密码长度过长")
+	ErrPasswordMismatch = errors.New("密码错误")
 )
 
 const (
@@ -63,6 +64,17 @@ func ValidatePasswordStrength(password string) error {
 	return nil
 }
 
+func HashAnyPassword(password string) (string, error) {
+	if password == "" {
+		return "", ErrPasswordEmpty
+	}
+	b, err := bcrypt.GenerateFromPassword([]byte(password), defaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func HashPassword(password string) (string, error) {
 	if err := ValidatePasswordStrength(password); err != nil {
 		return "", err
@@ -86,4 +98,8 @@ func ComparePassword(hashed string, plain string) error {
 		return err
 	}
 	return nil
+}
+
+func IsBcryptHash(s string) bool {
+	return strings.HasPrefix(s, "$2a$") || strings.HasPrefix(s, "$2b$") || strings.HasPrefix(s, "$2y$")
 }

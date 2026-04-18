@@ -171,7 +171,7 @@ type (
 	PostHomeListReq struct {
 		Page     int    `form:"page"`
 		PageSize int    `form:"page_size"`
-		Strategy string `form:"strategy"` // hot/ctime
+		Strategy string `form:"strategy"` // hot/ctime/random/recommend
 	}
 	// 按标签列表
 	PostTagListReq struct {

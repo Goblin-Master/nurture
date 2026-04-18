@@ -133,7 +133,7 @@ type CreateUserParams struct {
 	Utime    int64
 	Account  string
 	Password string
-	Email    string
+	Email    pgtype.Text
 	Username string
 	Gender   string
 }
@@ -174,7 +174,7 @@ const getMyProfile = `-- name: GetMyProfile :one
 SELECT 
   ub.user_id::text AS user_id,
   ub.account,
-  ub.email,
+  COALESCE(ub.email, '') AS email,
   ub.username,
   ub.gender,
   ua.avatar,
@@ -247,18 +247,14 @@ func (q *Queries) GetPartnerByUserID(ctx context.Context, father pgtype.UUID) (G
 	return i, err
 }
 
-const getUserByAccountAndPassword = `-- name: GetUserByAccountAndPassword :one
+const getUserByAccount = `-- name: GetUserByAccount :one
 SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base"
-WHERE account = $1 AND password = $2 LIMIT 1
+WHERE account = $1
+LIMIT 1
 `
 
-type GetUserByAccountAndPasswordParams struct {
-	Account  string
-	Password string
-}
-
-func (q *Queries) GetUserByAccountAndPassword(ctx context.Context, arg GetUserByAccountAndPasswordParams) (UserBase, error) {
-	row := q.db.QueryRow(ctx, getUserByAccountAndPassword, arg.Account, arg.Password)
+func (q *Queries) GetUserByAccount(ctx context.Context, account string) (UserBase, error) {
+	row := q.db.QueryRow(ctx, getUserByAccount, account)
 	var i UserBase
 	err := row.Scan(
 		&i.ID,
@@ -277,11 +273,12 @@ func (q *Queries) GetUserByAccountAndPassword(ctx context.Context, arg GetUserBy
 
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base"
-WHERE email = $1 LIMIT 1
+WHERE email = $1::varchar
+LIMIT 1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (UserBase, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, email)
+func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (UserBase, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, dollar_1)
 	var i UserBase
 	err := row.Scan(
 		&i.ID,
@@ -299,7 +296,9 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (UserBase, e
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base" WHERE user_id = $1 LIMIT 1
+SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base"
+WHERE user_id = $1
+LIMIT 1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, userID pgtype.UUID) (UserBase, error) {
@@ -318,6 +317,25 @@ func (q *Queries) GetUserByID(ctx context.Context, userID pgtype.UUID) (UserBase
 		&i.Utime,
 	)
 	return i, err
+}
+
+const isFollowing = `-- name: IsFollowing :one
+SELECT EXISTS(
+  SELECT 1 FROM "user_follow"
+  WHERE follower = $1 AND followee = $2
+) AS is_following
+`
+
+type IsFollowingParams struct {
+	Follower pgtype.UUID
+	Followee pgtype.UUID
+}
+
+func (q *Queries) IsFollowing(ctx context.Context, arg IsFollowingParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isFollowing, arg.Follower, arg.Followee)
+	var is_following bool
+	err := row.Scan(&is_following)
+	return is_following, err
 }
 
 const listFollowersByUserID = `-- name: ListFollowersByUserID :many
@@ -471,12 +489,32 @@ WHERE email = $1
 `
 
 type UpdatePasswordByEmailParams struct {
-	Email    string
+	Email    pgtype.Text
 	Password string
 }
 
 func (q *Queries) UpdatePasswordByEmail(ctx context.Context, arg UpdatePasswordByEmailParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updatePasswordByEmail, arg.Email, arg.Password)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updatePasswordByUserID = `-- name: UpdatePasswordByUserID :execrows
+UPDATE "user_base"
+SET password = $2, utime = $3
+WHERE user_id = $1
+`
+
+type UpdatePasswordByUserIDParams struct {
+	UserID   pgtype.UUID
+	Password string
+	Utime    int64
+}
+
+func (q *Queries) UpdatePasswordByUserID(ctx context.Context, arg UpdatePasswordByUserIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updatePasswordByUserID, arg.UserID, arg.Password, arg.Utime)
 	if err != nil {
 		return 0, err
 	}

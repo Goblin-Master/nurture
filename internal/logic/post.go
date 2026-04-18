@@ -28,6 +28,7 @@ type IPostLogic interface {
 	Publish(ctx context.Context, userID string, req dto.PublishPostReq) (dto.PublishPostResp, error)
 	UpdateDraft(ctx context.Context, userID string, uri dto.PostDetailReq, req dto.UpdateDraftReq) (dto.UpdateDraftResp, error)
 	DeleteDraft(ctx context.Context, userID string, uri dto.PostDetailReq) error
+	DeletePost(ctx context.Context, userID string, uri dto.PostDetailReq) error
 	CreateComment(ctx context.Context, userID string, postID string, req dto.CreateCommentReq) (dto.CreateCommentResp, error)
 	LikePost(ctx context.Context, userID string, uri dto.PostDetailReq) error
 	UnlikePost(ctx context.Context, userID string, uri dto.PostDetailReq) error
@@ -207,6 +208,12 @@ func (l *PostLogic) LikePost(ctx context.Context, userID string, uri dto.PostDet
 		global.Log.Error(err)
 		return ErrDefault
 	}
+	if err := l.postRepo.TouchUserRecommendProfile(ctx, userID, uri.PostID); err != nil {
+		global.Log.Error(err)
+	}
+	if err := l.postRepo.TouchUserTagPref(ctx, userID, uri.PostID, 3); err != nil {
+		global.Log.Error(err)
+	}
 	return nil
 }
 func (l *PostLogic) UnlikePost(ctx context.Context, userID string, uri dto.PostDetailReq) error {
@@ -216,6 +223,9 @@ func (l *PostLogic) UnlikePost(ctx context.Context, userID string, uri dto.PostD
 	if err := l.postRepo.UnlikePost(ctx, uri.PostID, userID); err != nil {
 		global.Log.Error(err)
 		return ErrDefault
+	}
+	if err := l.postRepo.TouchUserTagPref(ctx, userID, uri.PostID, -3); err != nil {
+		global.Log.Error(err)
 	}
 	return nil
 }
@@ -232,6 +242,12 @@ func (l *PostLogic) CollectPost(ctx context.Context, userID string, uri dto.Post
 		}
 		global.Log.Error(err)
 		return resp, ErrDefault
+	}
+	if err := l.postRepo.TouchUserRecommendProfile(ctx, userID, uri.PostID); err != nil {
+		global.Log.Error(err)
+	}
+	if err := l.postRepo.TouchUserTagPref(ctx, userID, uri.PostID, 4); err != nil {
+		global.Log.Error(err)
 	}
 	resp.CollectionID = cid
 	resp.Message = "OK"
@@ -312,6 +328,9 @@ func (l *PostLogic) UncollectPost(ctx context.Context, userID string, uri dto.Po
 	if err := l.postRepo.UncollectPost(ctx, uri.PostID, userID); err != nil {
 		global.Log.Error(err)
 		return resp, ErrDefault
+	}
+	if err := l.postRepo.TouchUserTagPref(ctx, userID, uri.PostID, -4); err != nil {
+		global.Log.Error(err)
 	}
 	resp.Message = "OK"
 	return resp, nil
@@ -705,6 +724,9 @@ func (l *PostLogic) Publish(ctx context.Context, userID string, req dto.PublishP
 		global.Log.Error(err)
 		return resp, ErrDefault
 	}
+	if err := l.postRepo.IndexPostForRecommend(ctx, req.PostID); err != nil {
+		global.Log.Error(err)
+	}
 	resp.PostID = req.PostID
 	resp.Status = "published"
 	resp.Message = "发布成功"
@@ -752,6 +774,25 @@ func (l *PostLogic) DeleteDraft(ctx context.Context, userID string, uri dto.Post
 	}
 	return nil
 }
+
+func (l *PostLogic) DeletePost(ctx context.Context, userID string, uri dto.PostDetailReq) error {
+	if strings.TrimSpace(uri.PostID) == "" {
+		return ErrParamsType
+	}
+	err := l.postRepo.DeletePost(ctx, uri.PostID, userID)
+	if err != nil {
+		if errors.Is(err, repo.ErrPostNotExist) {
+			return ErrPostNotExist
+		}
+		if errors.Is(err, repo.ErrInvalidPostStatus) {
+			return ErrInvalidPostStatus
+		}
+		global.Log.Error(err)
+		return ErrDefault
+	}
+	return nil
+}
+
 func (l *PostLogic) NewPost(ctx context.Context, userID string, req dto.CreatePostReq) (dto.CreatePostResp, error) {
 	var resp dto.CreatePostResp
 	title := strings.TrimSpace(req.Title)
@@ -771,6 +812,11 @@ func (l *PostLogic) NewPost(ctx context.Context, userID string, req dto.CreatePo
 		}
 		global.Log.Error(err)
 		return resp, ErrDefault
+	}
+	if status == "published" || status == "milestone" {
+		if err := l.postRepo.IndexPostForRecommend(ctx, postID); err != nil {
+			global.Log.Error(err)
+		}
 	}
 	resp.PostID = postID
 	resp.Status = status
@@ -813,6 +859,12 @@ func (l *PostLogic) CreateComment(ctx context.Context, userID string, postID str
 	if err := l.postRepo.CreateComment(ctx, commentID, postID, userID, ifNonEmptyPtr(parentID), string(req.Content), now); err != nil {
 		global.Log.Error(err)
 		return resp, ErrDefault
+	}
+	if err := l.postRepo.TouchUserRecommendProfile(ctx, userID, postID); err != nil {
+		global.Log.Error(err)
+	}
+	if err := l.postRepo.TouchUserTagPref(ctx, userID, postID, 5); err != nil {
+		global.Log.Error(err)
 	}
 	resp.CommentID = commentID
 	resp.Message = "创建成功"

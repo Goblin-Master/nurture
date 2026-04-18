@@ -1,10 +1,12 @@
--- name: GetUserByAccountAndPassword :one
+-- name: GetUserByAccount :one
 SELECT * FROM "user_base"
-WHERE account = $1 AND password = $2 LIMIT 1;
+WHERE account = $1
+LIMIT 1;
 
 -- name: GetUserByEmail :one
 SELECT * FROM "user_base"
-WHERE email = $1 LIMIT 1;
+WHERE email = $1::varchar
+LIMIT 1;
 
 -- name: CreateUser :exec
 WITH ins AS (
@@ -26,15 +28,16 @@ UPDATE "user_base"
 SET password = $2
 WHERE email = $1;
 
-UPDATE "user_addition"
-SET avatar = $2
+-- name: UpdatePasswordByUserID :execrows
+UPDATE "user_base"
+SET password = $2, utime = $3
 WHERE user_id = $1;
 
 -- name: GetMyProfile :one
 SELECT 
   ub.user_id::text AS user_id,
   ub.account,
-  ub.email,
+  COALESCE(ub.email, '') AS email,
   ub.username,
   ub.gender,
   ua.avatar,
@@ -58,6 +61,12 @@ ON CONFLICT (follower, followee) DO NOTHING;
 -- name: DeleteFollow :execrows
 DELETE FROM "user_follow"
 WHERE follower = $1 AND followee = $2;
+
+-- name: IsFollowing :one
+SELECT EXISTS(
+  SELECT 1 FROM "user_follow"
+  WHERE follower = $1 AND followee = $2
+) AS is_following;
 
 -- name: ListFollowingByUserID :many
 SELECT 
@@ -107,7 +116,9 @@ WHERE father = $1 OR mother = $1
 LIMIT 1;
 
 -- name: GetUserByID :one
-SELECT * FROM "user_base" WHERE user_id = $1 LIMIT 1;
+SELECT * FROM "user_base"
+WHERE user_id = $1
+LIMIT 1;
 
 -- name: UpdateUserAdditionByUserID :execrows
 UPDATE "user_addition"

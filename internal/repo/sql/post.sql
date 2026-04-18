@@ -54,6 +54,9 @@ INSERT INTO "post_tag" (post_id, tag_id)
 VALUES ($1, $2)
 ON CONFLICT DO NOTHING;
 
+-- name: TagExists :one
+SELECT EXISTS(SELECT 1 FROM "tag" WHERE tag_id = $1) AS exists;
+
 -- name: ListHomePosts :many
 SELECT
   p.post_id::text AS post_id,
@@ -223,6 +226,85 @@ LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
 WHERE p.status = 'published'
 ORDER BY md5(p.post_id::text || ($1)::text)
 LIMIT $2 OFFSET $3;
+
+-- name: GetPostRecommendDoc :one
+SELECT
+  p.post_id::text AS post_id,
+  p.title,
+  LEFT(p.content, 1200) AS content,
+  COALESCE((
+    SELECT string_agg(t.tag_name, ' ' ORDER BY t.tag_name)
+    FROM "post_tag" pt
+    JOIN "tag" t ON t.tag_id = pt.tag_id
+    WHERE pt.post_id = p.post_id
+  ), '') AS tags
+FROM "post" p
+WHERE p.post_id = $1 AND p.status = 'published'
+LIMIT 1;
+
+-- name: GetUserRecommendProfile :one
+SELECT profile_text
+FROM "user_recommend_profile"
+WHERE user_id = $1
+LIMIT 1;
+
+-- name: UpsertUserRecommendProfile :exec
+INSERT INTO "user_recommend_profile"(user_id, profile_text, utime)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id) DO UPDATE
+SET
+  profile_text = LEFT(EXCLUDED.profile_text || E'\n' || "user_recommend_profile".profile_text, 4000),
+  utime = EXCLUDED.utime;
+
+-- name: ListPostsByIDs :many
+SELECT
+  p.post_id::text AS post_id,
+  p.author_id::text AS author_id,
+  COALESCE(ua.username, '') AS author_name,
+  COALESCE(ua.avatar, '') AS author_avatar,
+  COALESCE(ua.province, '') AS author_province,
+  COALESCE(ua.city, '') AS author_city,
+  p.title, p.content, p.status,
+  p.like_count, p.dislike_count, p.collect_count, p.comment_count,
+  p.cover, p.ctime, p.utime,
+  COALESCE((
+    SELECT b.birthday
+    FROM "baby" b
+    WHERE b.user_id = p.author_id
+    ORDER BY b.ctime DESC
+    LIMIT 1
+  ), 0) AS birthday,
+  COALESCE((
+    SELECT array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL)
+    FROM "post_tag" pt2
+    JOIN "tag" t ON t.tag_id = pt2.tag_id
+    WHERE pt2.post_id = p.post_id
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($2, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($2, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($2, '')::uuid
+  ) AS is_collect
+FROM unnest($1::uuid[]) WITH ORDINALITY AS x(pid, ord)
+JOIN "post" p ON p.post_id = x.pid
+LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
+WHERE p.status = 'published'
+ORDER BY x.ord;
+
+-- name: ListTagNamesByPost :many
+SELECT t.tag_name
+FROM "post_tag" pt
+JOIN "tag" t ON t.tag_id = pt.tag_id
+WHERE pt.post_id = $1
+ORDER BY t.tag_name;
+
 -- name: ListPostsByTag :many
 SELECT
   p.post_id::text AS post_id,
@@ -748,6 +830,30 @@ DELETE FROM "post_tag" WHERE post_id = $1;
 -- name: DeleteDraftByOwner :execrows
 DELETE FROM "post"
 WHERE post_id = $1 AND author_id = $2 AND status = 'draft';
+
+-- name: DeletePostByOwner :execrows
+DELETE FROM "post"
+WHERE post_id = $1 AND author_id = $2 AND status IN ('published', 'milestone');
+
+-- name: DeletePostLikesByPost :exec
+DELETE FROM "like_dislike" WHERE post_id = $1;
+
+-- name: DeleteCollectionsByPost :exec
+DELETE FROM "collection" WHERE post_id = $1;
+
+-- name: DeleteCommentLikesByPost :exec
+DELETE FROM "comment_like"
+WHERE comment_id IN (
+  SELECT c.comment_id FROM "comment" c WHERE c.post_id = $1
+);
+
+-- name: DeleteCommentClosuresByPost :exec
+DELETE FROM "comment_closure"
+WHERE ancestor IN (SELECT c.comment_id FROM "comment" c WHERE c.post_id = $1)
+   OR descendant IN (SELECT c.comment_id FROM "comment" c WHERE c.post_id = $1);
+
+-- name: DeleteCommentsByPost :exec
+DELETE FROM "comment" WHERE "comment".post_id = $1;
 
 -- name: GetPostStatusByID :one
 SELECT status FROM "post" WHERE post_id = $1;

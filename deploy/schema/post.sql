@@ -161,6 +161,17 @@ COMMENT ON COLUMN "collection".post_id IS '帖子ID';
 COMMENT ON COLUMN "collection".ctime IS '创建时间戳';
 COMMENT ON COLUMN "collection".utime IS '更新时间戳';
 
+CREATE TABLE IF NOT EXISTS "user_recommend_profile" (
+  user_id      UUID PRIMARY KEY,
+  profile_text TEXT NOT NULL DEFAULT '',
+  utime        BIGINT NOT NULL
+);
+
+COMMENT ON TABLE "user_recommend_profile" IS '用户推荐画像（文本），用于向量检索召回';
+COMMENT ON COLUMN "user_recommend_profile".user_id IS '用户 user_id(UUID)';
+COMMENT ON COLUMN "user_recommend_profile".profile_text IS '画像文本';
+COMMENT ON COLUMN "user_recommend_profile".utime IS '更新时间戳';
+
 INSERT INTO "tag"(tag_id, tag_name, description, ctime, utime)
 VALUES (gen_random_uuid(), '产后恢复', '产后科学恢复', EXTRACT(EPOCH FROM NOW())*1000, EXTRACT(EPOCH FROM NOW())*1000)
 ON CONFLICT (tag_name) DO NOTHING;

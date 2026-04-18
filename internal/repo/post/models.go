@@ -353,7 +353,7 @@ type UserBase struct {
 	// 密码
 	Password string
 	// 邮箱
-	Email string
+	Email pgtype.Text
 	// 用户名
 	Username string
 	// 性别:male/female
@@ -390,6 +390,16 @@ type UserPartner struct {
 	Mother pgtype.UUID
 	// 创建时间戳
 	Ctime int64
+	// 更新时间戳
+	Utime int64
+}
+
+// 用户推荐画像（文本），用于向量检索召回
+type UserRecommendProfile struct {
+	// 用户 user_id(UUID)
+	UserID pgtype.UUID
+	// 画像文本
+	ProfileText string
 	// 更新时间戳
 	Utime int64
 }

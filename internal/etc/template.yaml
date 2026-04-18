@@ -33,6 +33,11 @@ email:
   subject: "稚慧云"
   ssl: false
   tls: false
+
+sms:
+  key: "xxxxxx"
+  endpoint: "https://push.spug.cc/send/%s"
+
 ai:
   chat:
     provider: openai

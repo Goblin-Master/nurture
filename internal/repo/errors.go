@@ -16,6 +16,8 @@ var (
 	ErrUserNotExist  = errors.New("用户不存在")
 	ErrAccountIsUsed = errors.New("账号已经被使用")
 	ErrEmailIsUsed   = errors.New("邮箱已经被使用")
+	ErrPhoneIsUsed   = errors.New("手机号已经被使用")
+	ErrAccountOrPwd  = errors.New("账号或密码错误")
 
 	// Baby related errors restored
 	ErrBabyNotExist        = errors.New("宝宝不存在")
@@ -26,4 +28,11 @@ var (
 	ErrPostNotExist      = errors.New("帖子不存在")
 	ErrInvalidPostStatus = errors.New("帖子状态非法")
 	ErrPostNotDraft      = errors.New("帖子不是草稿，无法发布")
+
+	// Chat related errors
+	ErrChatGroupNotExist          = errors.New("群不存在")
+	ErrChatGroupFull              = errors.New("群人数已满")
+	ErrChatNotMember              = errors.New("不是群成员")
+	ErrChatPermissionDenied       = errors.New("无权限")
+	ErrChatOwnerMustTransferFirst = errors.New("群主需要先转让再退出")
 )

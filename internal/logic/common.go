@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -27,15 +29,18 @@ type ICommonLogic interface {
 	UploadKnowledge(ctx context.Context, userID string, req dto.KnowledgeUploadReq) error
 	GetChatHistory(ctx context.Context, userID string, req dto.ChatHistoryReq) (dto.ChatHistoryResp, error)
 	GrowthAnalysisStream(ctx context.Context, userID string, req dto.GrowthAnalysisReq, streamFunc func(event dto.SSEEvent)) error
+	GrowthReport(ctx context.Context, userID string, req dto.GrowthReportReq) (dto.GrowthReportResp, error)
 }
 
 type CommonLogic struct {
-	aiRepo *repo.AIRepo
+	aiRepo   *repo.AIRepo
+	babyRepo *repo.BabyRepo
 }
 
 func NewCommonLogic() *CommonLogic {
 	return &CommonLogic{
-		aiRepo: repo.NewAIRepo(),
+		aiRepo:   repo.NewAIRepo(),
+		babyRepo: repo.NewBabyRepo(),
 	}
 }
 
@@ -229,6 +234,7 @@ func (l *CommonLogic) buildCollections(userID string, cfg dto.KBConfig) []string
 // GrowthAnalysisStream 成长曲线分析
 func (l *CommonLogic) GrowthAnalysisStream(ctx context.Context, userID string, req dto.GrowthAnalysisReq, streamFunc func(event dto.SSEEvent)) error {
 	// 1. 验证单位
+	// 1. 验证单位
 	switch req.Metric {
 	case "height", "head_circumference":
 		if req.Unit != "cm" {
@@ -297,4 +303,240 @@ func (l *CommonLogic) GrowthAnalysisStream(ctx context.Context, userID string, r
 	})
 
 	return nil
+}
+
+func (l *CommonLogic) GrowthReport(ctx context.Context, userID string, req dto.GrowthReportReq) (dto.GrowthReportResp, error) {
+	var resp dto.GrowthReportResp
+	if strings.TrimSpace(req.BabyID) == "" {
+		return resp, ErrParamsType
+	}
+	days := req.RangeDays
+	if days <= 0 || days > 365 {
+		days = 90
+	}
+	to := time.Now().UnixMilli()
+	from := time.Now().AddDate(0, 0, -days).UnixMilli()
+
+	b, err := l.babyRepo.GetBabyByIDAndUser(ctx, req.BabyID, userID)
+	if err != nil {
+		if errors.Is(err, repo.ErrBabyNotExist) {
+			return resp, ErrBabyNotExist
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	rows, err := l.babyRepo.ListGrowthRecordsByBabyIDBetween(ctx, req.BabyID, from, to)
+	if err != nil {
+		if errors.Is(err, repo.ErrDefault) {
+			global.Log.Error(err)
+		}
+		return resp, ErrDefault
+	}
+
+	items := make([]dto.GrowthReportGrowthItem, 0, len(rows))
+	for _, r := range rows {
+		var h *float64
+		if r.Height.Valid {
+			v := r.Height.Float64
+			h = &v
+		}
+		var w *float64
+		if r.Weight.Valid {
+			v := r.Weight.Float64
+			w = &v
+		}
+		var hc *float64
+		if r.HeadCircumference.Valid {
+			v := r.HeadCircumference.Float64
+			hc = &v
+		}
+		remark := ""
+		if r.Remark.Valid {
+			remark = r.Remark.String
+		}
+		items = append(items, dto.GrowthReportGrowthItem{
+			Time:              r.RecordTime,
+			Height:            h,
+			Weight:            w,
+			HeadCircumference: hc,
+			Remark:            remark,
+		})
+	}
+
+	resp.Markdown = ""
+	resp.Data = dto.GrowthReportData{
+		Baby: dto.GrowthReportBaby{
+			BabyID:   b.BabyID.String(),
+			Name:     b.Name,
+			Gender:   b.Gender,
+			Birthday: b.Birthday,
+			Avatar:   b.Avatar,
+		},
+		Range: dto.GrowthReportRange{
+			From: from,
+			To:   to,
+			Days: days,
+		},
+		Growth: dto.GrowthReportGrowth{
+			Items: items,
+		},
+		Analysis: dto.GrowthReportAnalysis{
+			Height:            analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.Height }),
+			Weight:            analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.Weight }),
+			HeadCircumference: analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.HeadCircumference }),
+		},
+	}
+
+	systemPrompt, userPrompt := buildGrowthReportPrompts(resp.Data, req.Language)
+	messages := []llms.MessageContent{
+		llms.TextParts(llms.ChatMessageTypeSystem, systemPrompt),
+		llms.TextParts(llms.ChatMessageTypeHuman, userPrompt),
+	}
+	md, err := global.AIX.StreamChat(ctx, messages, func(chunk string) {})
+	if err != nil {
+		global.Log.Error(err)
+		resp.Markdown = buildGrowthReportFallbackMarkdown(resp.Data, req.Language)
+		return resp, nil
+	}
+	resp.Markdown = strings.TrimSpace(md)
+	if resp.Markdown == "" {
+		resp.Markdown = buildGrowthReportFallbackMarkdown(resp.Data, req.Language)
+	}
+	return resp, nil
+}
+
+func buildGrowthReportPrompts(data dto.GrowthReportData, language string) (string, string) {
+	lang := strings.TrimSpace(strings.ToLower(language))
+	if lang == "" {
+		lang = "zh"
+	}
+	systemPrompt := "你是一个专业的儿科医生助手，擅长分析婴幼儿身高、体重、头围的变化趋势，并给出可执行的喂养与护理建议。请用中文输出。"
+	if lang == "en" {
+		systemPrompt = "You are a professional pediatric assistant. You analyze infant growth data (height, weight, head circumference), provide clear trend interpretation and actionable care/feeding suggestions. Output in English."
+	}
+
+	b, _ := json.Marshal(data)
+	userPrompt := fmt.Sprintf(
+		`请根据以下 JSON 数据生成一份“宝宝发育诊断与趋势预测报告”，输出 Markdown。
+
+要求：
+1) 不要臆测未提供的数据；若数据不足，请明确说明“数据不足以判断”，并给出补充记录建议。
+2) 先给结论摘要（3-6 条要点），再给详细分析。
+3) 分别对 身高/体重/头围 给出：最近变化、增长速度（周/月）、未来 30 天趋势预测（仅作参考）。
+4) 给出 5-8 条可执行建议（喂养、作息、记录习惯），以及 3 道高营养辅食建议（用列表）。
+5) 语言友好，避免制造焦虑。
+
+JSON：
+%s`, string(b),
+	)
+	if lang == "en" {
+		userPrompt = fmt.Sprintf(
+			`Generate a "Growth Assessment & 30-Day Trend Forecast Report" in Markdown based on the JSON below.
+
+Requirements:
+1) Do not invent missing data. If insufficient, explicitly say so and suggest what to record.
+2) Provide a short summary (3-6 bullets), then details.
+3) For height/weight/head circumference: recent change, growth rate (per week/month), and a 30-day forecast (informational only).
+4) Provide 5-8 actionable suggestions and 3 nutrient-dense complementary food ideas.
+5) Keep the tone supportive and non-alarming.
+
+JSON:
+%s`, string(b),
+		)
+	}
+	return systemPrompt, userPrompt
+}
+
+func buildGrowthReportFallbackMarkdown(data dto.GrowthReportData, language string) string {
+	lang := strings.TrimSpace(strings.ToLower(language))
+	if lang == "" {
+		lang = "zh"
+	}
+	if lang == "en" {
+		return fmt.Sprintf(
+			"# Growth Assessment Report\n\n## Baby\n- Name: %s\n- Gender: %s\n\n## Data Range\n- Days: %d\n\n## Summary\n- This report is generated without LLM due to a temporary AI error.\n\n## Trend (Informational)\n- Height: points=%d, delta=%s, per_week=%s, per_month=%s, predict_30=%s\n- Weight: points=%d, delta=%s, per_week=%s, per_month=%s, predict_30=%s\n- Head circumference: points=%d, delta=%s, per_week=%s, per_month=%s, predict_30=%s\n",
+			data.Baby.Name,
+			data.Baby.Gender,
+			data.Range.Days,
+			data.Analysis.Height.Points, fmtFloatPtr(data.Analysis.Height.Delta), fmtFloatPtr(data.Analysis.Height.PerWeek), fmtFloatPtr(data.Analysis.Height.PerMonth), fmtFloatPtr(data.Analysis.Height.Predict30),
+			data.Analysis.Weight.Points, fmtFloatPtr(data.Analysis.Weight.Delta), fmtFloatPtr(data.Analysis.Weight.PerWeek), fmtFloatPtr(data.Analysis.Weight.PerMonth), fmtFloatPtr(data.Analysis.Weight.Predict30),
+			data.Analysis.HeadCircumference.Points, fmtFloatPtr(data.Analysis.HeadCircumference.Delta), fmtFloatPtr(data.Analysis.HeadCircumference.PerWeek), fmtFloatPtr(data.Analysis.HeadCircumference.PerMonth), fmtFloatPtr(data.Analysis.HeadCircumference.Predict30),
+		)
+	}
+	return fmt.Sprintf(
+		"# 宝宝发育诊断与趋势预测报告\n\n## 宝宝信息\n- 名称：%s\n- 性别：%s\n\n## 数据范围\n- 天数：%d\n\n## 摘要\n- 当前报告为系统基础版（AI 暂不可用时生成）。\n\n## 趋势（仅供参考）\n- 身高：点数=%d，增量=%s，周增速=%s，月增速=%s，30天预测=%s\n- 体重：点数=%d，增量=%s，周增速=%s，月增速=%s，30天预测=%s\n- 头围：点数=%d，增量=%s，周增速=%s，月增速=%s，30天预测=%s\n",
+		data.Baby.Name,
+		data.Baby.Gender,
+		data.Range.Days,
+		data.Analysis.Height.Points, fmtFloatPtr(data.Analysis.Height.Delta), fmtFloatPtr(data.Analysis.Height.PerWeek), fmtFloatPtr(data.Analysis.Height.PerMonth), fmtFloatPtr(data.Analysis.Height.Predict30),
+		data.Analysis.Weight.Points, fmtFloatPtr(data.Analysis.Weight.Delta), fmtFloatPtr(data.Analysis.Weight.PerWeek), fmtFloatPtr(data.Analysis.Weight.PerMonth), fmtFloatPtr(data.Analysis.Weight.Predict30),
+		data.Analysis.HeadCircumference.Points, fmtFloatPtr(data.Analysis.HeadCircumference.Delta), fmtFloatPtr(data.Analysis.HeadCircumference.PerWeek), fmtFloatPtr(data.Analysis.HeadCircumference.PerMonth), fmtFloatPtr(data.Analysis.HeadCircumference.Predict30),
+	)
+}
+
+func fmtFloatPtr(v *float64) string {
+	if v == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%.2f", *v)
+}
+
+func analyzeGrowthMetric(items []dto.GrowthReportGrowthItem, pick func(it dto.GrowthReportGrowthItem) *float64) dto.GrowthMetricAnalysis {
+	var firstTime int64
+	var lastTime int64
+	var firstVal float64
+	var lastVal float64
+	points := 0
+	hasFirst := false
+	hasLast := false
+
+	for _, it := range items {
+		v := pick(it)
+		if v == nil {
+			continue
+		}
+		points++
+		if !hasFirst {
+			firstTime = it.Time
+			firstVal = *v
+			hasFirst = true
+		}
+		lastTime = it.Time
+		lastVal = *v
+		hasLast = true
+	}
+
+	a := dto.GrowthMetricAnalysis{
+		Points:    points,
+		FirstTime: firstTime,
+		LastTime:  lastTime,
+	}
+	if !hasFirst || !hasLast {
+		return a
+	}
+	a.First = ptrFloat64(firstVal)
+	a.Last = ptrFloat64(lastVal)
+
+	if points < 2 {
+		return a
+	}
+	deltaT := lastTime - firstTime
+	if deltaT <= 0 {
+		return a
+	}
+	days := float64(deltaT) / 86400000.0
+	if days <= 0 {
+		return a
+	}
+	delta := lastVal - firstVal
+	perDay := delta / days
+	a.Delta = ptrFloat64(delta)
+	a.PerWeek = ptrFloat64(perDay * 7.0)
+	a.PerMonth = ptrFloat64(perDay * 30.0)
+	a.Predict30 = ptrFloat64(lastVal + perDay*30.0)
+	return a
+}
+
+func ptrFloat64(v float64) *float64 {
+	return &v
 }

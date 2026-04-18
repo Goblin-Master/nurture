@@ -9,7 +9,11 @@ import (
 	"nurture/internal/global"
 	"nurture/internal/pkg/emailx"
 	"nurture/internal/pkg/jwtx"
+	"nurture/internal/pkg/passwordx"
+	"nurture/internal/pkg/smsx"
 	"nurture/internal/repo"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,12 +22,22 @@ import (
 type IUserLogic interface {
 	Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error)
 	Register(ctx context.Context, req dto.RegisterReq) (dto.RegisterResp, error)
+	RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (dto.RegisterResp, error)
 	GetLoginCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error)
 	GetRegisterCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error)
+	GetRegisterSMSCode(ctx context.Context, req dto.GetSMSCodeReq) (dto.GetCodeResp, error)
 	GetResetCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error)
 	ResetPassword(ctx context.Context, req dto.ResetPasswordReq) (dto.ResetPasswordResp, error)
 	UpdateProfile(ctx context.Context, userID string, req dto.UpdateUserAdditionReq) (dto.UpdateUserAdditionResp, error)
 	UpdateAvatar(ctx context.Context, userID string, req dto.UpdateAvatarReq) (dto.UpdateAvatarResp, error)
+	GetBindPhoneCode(ctx context.Context, userID string, req dto.GetSMSCodeReq) (dto.GetCodeResp, error)
+	BindPhone(ctx context.Context, userID string, req dto.BindPhoneReq) (dto.BindContactResp, error)
+	GetBindEmailCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error)
+	BindEmail(ctx context.Context, userID string, req dto.BindEmailReq) (dto.BindContactResp, error)
+	GetRebindPhoneCode(ctx context.Context, userID string, req dto.GetSMSCodeReq) (dto.GetCodeResp, error)
+	RebindPhone(ctx context.Context, userID string, req dto.BindPhoneReq) (dto.BindContactResp, error)
+	GetRebindEmailCode(ctx context.Context, userID string, req dto.GetCodeReq) (dto.GetCodeResp, error)
+	RebindEmail(ctx context.Context, userID string, req dto.BindEmailReq) (dto.BindContactResp, error)
 	BindPartner(ctx context.Context, userID string, req dto.PartnerBindReq) (dto.PartnerBindResp, error)
 	GetPartner(ctx context.Context, userID string) (dto.PartnerGetResp, error)
 	MyProfile(ctx context.Context, userID string) (dto.MyProfileResp, error)
@@ -38,12 +52,14 @@ type IUserLogic interface {
 type UserLogic struct {
 	userRepo *repo.UserRepo
 	email    *emailx.EmailX
+	sms      *smsx.SmsX
 }
 
 func NewUserLogic() *UserLogic {
 	return &UserLogic{
 		userRepo: repo.NewUserRepo(),
 		email:    emailx.NewEmailX(),
+		sms:      smsx.NewSmsX(),
 	}
 }
 
@@ -106,8 +122,18 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
 	if !ok {
 		return resp, ErrCodeVerify
 	}
-	err = ul.userRepo.Register(ctx, uuid.NewString(), req.Username, req.Email, req.Account, req.Password, req.Gender)
+	email := req.Email
+	err = ul.userRepo.Register(ctx, uuid.NewString(), req.Username, &email, req.Account, req.Password, req.Gender)
 	if err != nil {
+		if errors.Is(err, passwordx.ErrPasswordEmpty) {
+			return resp, ErrPasswordEmpty
+		} else if errors.Is(err, passwordx.ErrPasswordTooShort) {
+			return resp, ErrPasswordTooShort
+		} else if errors.Is(err, passwordx.ErrPasswordTooLong) {
+			return resp, ErrPasswordTooLong
+		} else if errors.Is(err, passwordx.ErrPasswordTooWeak) {
+			return resp, ErrPasswordTooWeak
+		}
 		if errors.Is(err, repo.ErrEmailIsUsed) {
 			return resp, ErrEmailIsUsed
 		} else if errors.Is(err, repo.ErrAccountIsUsed) {
@@ -117,6 +143,50 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
 			return resp, ErrDefault
 		}
 	}
+	resp.Message = "用户注册成功！"
+	return resp, nil
+}
+
+func (ul *UserLogic) RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (dto.RegisterResp, error) {
+	var resp dto.RegisterResp
+	if req.Gender != "male" && req.Gender != "female" {
+		return resp, ErrInvalidGender
+	}
+	phone := strings.TrimSpace(req.Phone)
+	if !isValidPhone(phone) {
+		return resp, ErrInvalidPhone
+	}
+	account := strings.TrimSpace(req.Account)
+	if account == "" {
+		account = phone
+	}
+	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(constant.REGISTER_SMS_CODE_KEY, phone), req.Code)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeVerify
+	}
+	if !ok {
+		return resp, ErrCodeVerify
+	}
+	userID := uuid.NewString()
+	err = ul.userRepo.Register(ctx, userID, req.Username, nil, account, req.Password, req.Gender)
+	if err != nil {
+		if errors.Is(err, passwordx.ErrPasswordEmpty) {
+			return resp, ErrPasswordEmpty
+		} else if errors.Is(err, passwordx.ErrPasswordTooShort) {
+			return resp, ErrPasswordTooShort
+		} else if errors.Is(err, passwordx.ErrPasswordTooLong) {
+			return resp, ErrPasswordTooLong
+		} else if errors.Is(err, passwordx.ErrPasswordTooWeak) {
+			return resp, ErrPasswordTooWeak
+		}
+		if errors.Is(err, repo.ErrAccountIsUsed) {
+			return resp, ErrAccountIsUsed
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	_ = ul.userRepo.UpdateAdditionByID(ctx, userID, nil, &phone, nil, nil, nil, nil)
 	resp.Message = "用户注册成功！"
 	return resp, nil
 }
@@ -133,6 +203,15 @@ func (ul *UserLogic) ResetPassword(ctx context.Context, req dto.ResetPasswordReq
 	}
 	err = ul.userRepo.ResetPassword(ctx, req.Email, req.NewPassword)
 	if err != nil {
+		if errors.Is(err, passwordx.ErrPasswordEmpty) {
+			return resp, ErrPasswordEmpty
+		} else if errors.Is(err, passwordx.ErrPasswordTooShort) {
+			return resp, ErrPasswordTooShort
+		} else if errors.Is(err, passwordx.ErrPasswordTooLong) {
+			return resp, ErrPasswordTooLong
+		} else if errors.Is(err, passwordx.ErrPasswordTooWeak) {
+			return resp, ErrPasswordTooWeak
+		}
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
 		}
@@ -159,6 +238,22 @@ func (ul *UserLogic) GetRegisterCode(ctx context.Context, req dto.GetCodeReq) (d
 	var resp dto.GetCodeResp
 	c := emailx.GenCode()
 	err := ul.email.SendRegisterCode(ctx, req.Email, c)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeGet
+	}
+	resp.Code = c
+	return resp, nil
+}
+
+func (ul *UserLogic) GetRegisterSMSCode(ctx context.Context, req dto.GetSMSCodeReq) (dto.GetCodeResp, error) {
+	var resp dto.GetCodeResp
+	phone := strings.TrimSpace(req.Phone)
+	if !isValidPhone(phone) {
+		return resp, ErrInvalidPhone
+	}
+	c := smsx.GenCode()
+	err := ul.sms.SendRegisterCode(ctx, phone, c)
 	if err != nil {
 		global.Log.Error(err)
 		return resp, ErrCodeGet
@@ -197,24 +292,13 @@ func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.U
 			return resp, ErrDefault
 		}
 	}
+	var phone *string
 	if req.Phone != nil && *req.Phone != "" {
-		// 简单手机号正则：可选+，6-20位数字
-		phone := *req.Phone
-		valid := false
-		for i := 0; i < len(phone); i++ {
-			c := phone[i]
-			if i == 0 && c == '+' {
-				continue
-			}
-			if c < '0' || c > '9' {
-				valid = false
-				break
-			}
-			valid = true
-		}
-		if !valid || len(phone) < 6 || len(phone) > 20 {
+		p := strings.TrimSpace(*req.Phone)
+		if !isValidLoosePhone(p) {
 			return resp, ErrInvalidPhone
 		}
+		phone = &p
 	}
 	var birthday *int64
 	if req.Birthday != nil && *req.Birthday != "" {
@@ -225,7 +309,7 @@ func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.U
 		ms := t.UnixMilli()
 		birthday = &ms
 	}
-	err := ul.userRepo.UpdateAdditionByID(ctx, userID, req.Occupation, req.Phone, req.Province, req.City, nil, birthday)
+	err := ul.userRepo.UpdateAdditionByID(ctx, userID, req.Occupation, phone, req.Province, req.City, nil, birthday)
 	if err != nil {
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
@@ -238,6 +322,215 @@ func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.U
 	}
 	resp.Message = "OK"
 	return resp, nil
+}
+
+func (ul *UserLogic) GetBindPhoneCode(ctx context.Context, userID string, req dto.GetSMSCodeReq) (dto.GetCodeResp, error) {
+	var resp dto.GetCodeResp
+	phone := strings.TrimSpace(req.Phone)
+	if !isValidPhone(phone) {
+		return resp, ErrInvalidPhone
+	}
+	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	if used {
+		return resp, ErrPhoneIsUsed
+	}
+	c := smsx.GenCode()
+	err = ul.sms.SendBindPhoneCode(ctx, phone, c)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeGet
+	}
+	resp.Code = c
+	return resp, nil
+}
+
+func (ul *UserLogic) BindPhone(ctx context.Context, userID string, req dto.BindPhoneReq) (dto.BindContactResp, error) {
+	var resp dto.BindContactResp
+	phone := strings.TrimSpace(req.Phone)
+	if !isValidPhone(phone) {
+		return resp, ErrInvalidPhone
+	}
+	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(constant.BIND_PHONE_CODE_KEY, phone), req.Code)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeVerify
+	}
+	if !ok {
+		return resp, ErrCodeVerify
+	}
+	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	if used {
+		return resp, ErrPhoneIsUsed
+	}
+	err = ul.userRepo.UpdateAdditionByID(ctx, userID, nil, &phone, nil, nil, nil, nil)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		if errors.Is(err, repo.ErrUserUpdateFailed) {
+			return resp, ErrProfileUpdateFailed
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Message = "OK"
+	return resp, nil
+}
+
+func (ul *UserLogic) GetBindEmailCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error) {
+	var resp dto.GetCodeResp
+	c := emailx.GenCode()
+	err := ul.email.SendBindEmailCode(ctx, req.Email, c)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeGet
+	}
+	resp.Code = c
+	return resp, nil
+}
+
+func (ul *UserLogic) BindEmail(ctx context.Context, userID string, req dto.BindEmailReq) (dto.BindContactResp, error) {
+	var resp dto.BindContactResp
+	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.BIND_EMAIL_CODE_KEY, req.Email), req.Code)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeVerify
+	}
+	if !ok {
+		return resp, ErrCodeVerify
+	}
+	err = ul.userRepo.BindEmail(ctx, userID, req.Email)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		if errors.Is(err, repo.ErrEmailIsUsed) {
+			return resp, ErrEmailIsUsed
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Message = "OK"
+	return resp, nil
+}
+
+func (ul *UserLogic) GetRebindPhoneCode(ctx context.Context, userID string, req dto.GetSMSCodeReq) (dto.GetCodeResp, error) {
+	var resp dto.GetCodeResp
+	phone := strings.TrimSpace(req.Phone)
+	if !isValidPhone(phone) {
+		return resp, ErrInvalidPhone
+	}
+	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	if used {
+		return resp, ErrPhoneIsUsed
+	}
+	c := smsx.GenCode()
+	err = ul.sms.SendRebindPhoneCode(ctx, phone, c)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeGet
+	}
+	resp.Code = c
+	return resp, nil
+}
+
+func (ul *UserLogic) RebindPhone(ctx context.Context, userID string, req dto.BindPhoneReq) (dto.BindContactResp, error) {
+	var resp dto.BindContactResp
+	phone := strings.TrimSpace(req.Phone)
+	if !isValidPhone(phone) {
+		return resp, ErrInvalidPhone
+	}
+	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(constant.REBIND_PHONE_CODE_KEY, phone), req.Code)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeVerify
+	}
+	if !ok {
+		return resp, ErrCodeVerify
+	}
+	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	if used {
+		return resp, ErrPhoneIsUsed
+	}
+	err = ul.userRepo.UpdateAdditionByID(ctx, userID, nil, &phone, nil, nil, nil, nil)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		if errors.Is(err, repo.ErrUserUpdateFailed) {
+			return resp, ErrProfileUpdateFailed
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Message = "OK"
+	return resp, nil
+}
+
+func (ul *UserLogic) GetRebindEmailCode(ctx context.Context, userID string, req dto.GetCodeReq) (dto.GetCodeResp, error) {
+	var resp dto.GetCodeResp
+	c := emailx.GenCode()
+	err := ul.email.SendRebindEmailCode(ctx, req.Email, c)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeGet
+	}
+	resp.Code = c
+	return resp, nil
+}
+
+func (ul *UserLogic) RebindEmail(ctx context.Context, userID string, req dto.BindEmailReq) (dto.BindContactResp, error) {
+	var resp dto.BindContactResp
+	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.REBIND_EMAIL_CODE_KEY, req.Email), req.Code)
+	if err != nil {
+		global.Log.Error(err)
+		return resp, ErrCodeVerify
+	}
+	if !ok {
+		return resp, ErrCodeVerify
+	}
+	err = ul.userRepo.BindEmail(ctx, userID, req.Email)
+	if err != nil {
+		if errors.Is(err, repo.ErrUserNotExist) {
+			return resp, ErrUserNotExist
+		}
+		if errors.Is(err, repo.ErrEmailIsUsed) {
+			return resp, ErrEmailIsUsed
+		}
+		global.Log.Error(err)
+		return resp, ErrDefault
+	}
+	resp.Message = "OK"
+	return resp, nil
+}
+
+var loosePhoneRe = regexp.MustCompile(`^\+?\d{6,20}$`)
+var cnPhoneRe = regexp.MustCompile(`^(?:\+?86)?1[3-9]\d{9}$`)
+
+func isValidLoosePhone(phone string) bool {
+	p := strings.TrimSpace(phone)
+	return loosePhoneRe.MatchString(p)
+}
+
+func isValidPhone(phone string) bool {
+	p := strings.TrimSpace(phone)
+	return cnPhoneRe.MatchString(p)
 }
 
 func (ul *UserLogic) UpdateAvatar(ctx context.Context, userID string, req dto.UpdateAvatarReq) (dto.UpdateAvatarResp, error) {
@@ -265,11 +558,11 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 	var resp dto.PartnerBindResp
 	ub, err := ul.userRepo.LoginWithAccount(ctx, req.Account, req.Password)
 	if err != nil {
-		if errors.Is(err, repo.ErrUserNotExist) {
-			return resp, ErrUserNotExist
+		if errors.Is(err, repo.ErrUserNotExist) || errors.Is(err, repo.ErrAccountOrPwd) {
+			return resp, ErrAccountOrPassword
 		}
 		global.Log.Error(err)
-		return resp, ErrAccountOrPassword
+		return resp, ErrDefault
 	}
 	if ub.UserID.String() == userID {
 		return resp, ErrParamsType

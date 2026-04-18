@@ -32,7 +32,9 @@ var _ IAIRepo = (*AIRepo)(nil)
 func (r *AIRepo) AddDocument(ctx context.Context, collectionName, content string) error {
 	err := global.AIX.AddDocument(ctx, collectionName, content)
 	if err != nil {
-		global.Log.Error(err)
+		if global.Log != nil {
+			global.Log.Error(err)
+		}
 		return ErrDocumentAdd
 	}
 	return nil
@@ -42,7 +44,9 @@ func (r *AIRepo) SimilaritySearch(ctx context.Context, query string,
 	collections []string, topK int) ([]schema.Document, error) {
 	docs, err := global.AIX.SimilaritySearch(ctx, query, collections, config.Conf.AI.Retrieval.DefaultTopK)
 	if err != nil {
-		global.Log.Error(err)
+		if global.Log != nil {
+			global.Log.Error(err)
+		}
 		return nil, ErrDocumentSearch
 	}
 	return docs, nil
@@ -65,7 +69,9 @@ func (r *AIRepo) GetFullHistory(ctx context.Context, userID, sessionID string) (
 	for _, item := range result {
 		var msg aix.ChatMessage
 		if err := json.Unmarshal([]byte(item), &msg); err != nil {
-			global.Log.Errorf("Unmarshal message failed: %v", err)
+			if global.Log != nil {
+				global.Log.Errorf("Unmarshal message failed: %v", err)
+			}
 			continue
 		}
 		messages = append(messages, msg)
@@ -92,7 +98,9 @@ func (r *AIRepo) GetRecentHistory(ctx context.Context, userID, sessionID string,
 	for _, item := range result {
 		var msg aix.ChatMessage
 		if err := json.Unmarshal([]byte(item), &msg); err != nil {
-			global.Log.Errorf("Unmarshal message failed: %v", err)
+			if global.Log != nil {
+				global.Log.Errorf("Unmarshal message failed: %v", err)
+			}
 			continue
 		}
 		messages = append(messages, msg)
