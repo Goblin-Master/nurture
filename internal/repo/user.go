@@ -517,7 +517,7 @@ func (ur *UserRepo) ResetPassword(ctx context.Context, email, newPassword string
 		return err
 	}
 	count, err := ur.userDao.UpdatePasswordByEmail(ctx, user.UpdatePasswordByEmailParams{
-		Email:    email,
+		Email:    pgtype.Text{String: email, Valid: true},
 		Password: hashed,
 	})
 	if err != nil {

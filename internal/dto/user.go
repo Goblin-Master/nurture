@@ -35,6 +35,7 @@ type (
 		Code     string `json:"code"`
 	}
 	RegisterSMSReq struct {
+		Account  string `json:"account"`
 		Password string `json:"password"`
 		Username string `json:"username"`
 		Gender   string `json:"gender"`
@@ -59,6 +60,7 @@ type (
 
 type (
 	UpdateUserAdditionReq struct {
+		Phone      *string `json:"phone"`
 		Occupation *string `json:"occupation"`
 		Gender     *string `json:"gender"`
 		Province   *string `json:"province"`

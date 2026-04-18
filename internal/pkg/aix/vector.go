@@ -9,34 +9,43 @@ import (
 	"github.com/tmc/langchaingo/vectorstores/pgvector"
 )
 
-// AddDocument 添加文档到知识库
 func (a *AIX) AddDocument(ctx context.Context, collectionName string, content string) error {
-	// 1. 文本分块
-	splitter := textsplitter.NewRecursiveCharacter(
-		textsplitter.WithChunkSize(a.config.Chunking.ChunkSize),
-		textsplitter.WithChunkOverlap(a.config.Chunking.ChunkOverlap),
-	)
-	chunks, err := splitter.SplitText(content)
-	if err != nil {
-		return err
-	}
+	return a.AddDocumentWithMetadata(ctx, collectionName, content, nil, true)
+}
 
-	// 2. 转换为 Document
+func (a *AIX) AddDocumentWithMetadata(ctx context.Context, collectionName string, content string, metadata map[string]any, split bool) error {
+	m := metadata
+	if m == nil {
+		m = map[string]any{}
+	}
+	chunks := []string{content}
+	// 1. 文本分块
+	if split {
+		splitter := textsplitter.NewRecursiveCharacter(
+			textsplitter.WithChunkSize(a.config.Chunking.ChunkSize),
+			textsplitter.WithChunkOverlap(a.config.Chunking.ChunkOverlap),
+		)
+		parts, err := splitter.SplitText(content)
+		if err != nil {
+			return err
+		}
+		chunks = parts
+	}
+	// 2. 文本分块为文档
 	docs := make([]schema.Document, len(chunks))
 	for i, chunk := range chunks {
 		docs[i] = schema.Document{
 			PageContent: chunk,
-			Metadata:    map[string]any{},
+			Metadata:    m,
 		}
 	}
-
 	// 3. 创建向量存储
 	store, err := a.newVectorStore(ctx, collectionName)
 	if err != nil {
 		return err
 	}
 
-	// 4. 添加文档
+	// 5. 添加文档
 	_, err = store.AddDocuments(ctx, docs)
 	return err
 }

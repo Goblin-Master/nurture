@@ -1,10 +1,12 @@
 -- name: GetUserByAccount :one
-SELECT id, user_id, account, password, COALESCE(email, '') AS email, username, gender, role, ctime, utime FROM "user_base"
-WHERE account = $1 LIMIT 1;
+SELECT * FROM "user_base"
+WHERE account = $1
+LIMIT 1;
 
 -- name: GetUserByEmail :one
-SELECT id, user_id, account, password, COALESCE(email, '') AS email, username, gender, role, ctime, utime FROM "user_base"
-WHERE email = $1 LIMIT 1;
+SELECT * FROM "user_base"
+WHERE email = $1::varchar
+LIMIT 1;
 
 -- name: CreateUser :exec
 WITH ins AS (
@@ -114,7 +116,9 @@ WHERE father = $1 OR mother = $1
 LIMIT 1;
 
 -- name: GetUserByID :one
-SELECT id, user_id, account, password, COALESCE(email, '') AS email, username, gender, role, ctime, utime FROM "user_base" WHERE user_id = $1 LIMIT 1;
+SELECT * FROM "user_base"
+WHERE user_id = $1
+LIMIT 1;
 
 -- name: UpdateUserAdditionByUserID :execrows
 UPDATE "user_addition"

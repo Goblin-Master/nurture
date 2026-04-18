@@ -22,8 +22,9 @@ const (
 	SPACE_TYPE_PUBLIC  = "public"
 
 	// CollectionName 模板
-	COLLECTION_USER_PREFIX = "knowledge_user_%s" //user_id
-	COLLECTION_PUBLIC      = "knowledge_public"
+	COLLECTION_USER_PREFIX    = "knowledge_user_%s" //user_id
+	COLLECTION_PUBLIC         = "knowledge_public"
+	COLLECTION_POST_RECOMMEND = "post_recommend"
 
 	// Redis Key
 	CHAT_HISTORY_KEY = "chat:history:%s:%s" // user_id:session_id
@@ -41,6 +42,9 @@ const (
 	USER_PROFILE_TTL = 10 * 60
 	USER_PARTNER_TTL = 24 * 3600
 	USER_LIST_TTL    = 5 * 60
+
+	USER_TAG_PREF_KEY = "user:tag_pref:%s"
+	USER_TAG_PREF_TTL = 30 * 24 * 3600
 
 	// 帖子缓存 Key
 	POST_HOT_LIST_KEY       = "post:list:hot:%d:%d"

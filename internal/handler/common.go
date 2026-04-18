@@ -114,3 +114,11 @@ func (h *CommonHandler) GrowthAnalysis(c *gin.Context) {
 	// 执行分析
 	_ = h.commonLogic.GrowthAnalysisStream(c.Request.Context(), userID, req, streamFunc)
 }
+
+func (h *CommonHandler) GrowthReport(c *gin.Context) {
+	req := middleware.GetBind[dto.GrowthReportReq](c)
+	userID := jwtx.GetUserID(c)
+	global.Log.Infof("GrowthReport %s: %v", userID, req)
+	resp, err := h.commonLogic.GrowthReport(c.Request.Context(), userID, req)
+	response.Response(c, resp, err)
+}

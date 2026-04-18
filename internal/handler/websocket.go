@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"nurture/internal/global"
+	"nurture/internal/logic"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/wsx"
 
@@ -57,6 +59,40 @@ func (h *WebSocketHandler) Connect(c *gin.Context) {
 
 	client.Hub.RegisterClient(client)
 
+	go client.WritePump()
+	go client.ReadPump()
+}
+
+func (h *WebSocketHandler) ConnectGroups(c *gin.Context) {
+	tokenStr := c.Query("token")
+	if tokenStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing token"})
+		return
+	}
+	claims, err := jwtx.ParseTokenString(tokenStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	userID := claims.UserID
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		return
+	}
+	chatLogic := logic.NewChatLogic()
+	client := &wsx.GroupClient{
+		Hub:    global.GWS,
+		Conn:   conn,
+		Send:   make(chan []byte, 256),
+		UserID: userID,
+		OnSubscribe: func(ctx context.Context, groupID string) error {
+			return chatLogic.CheckMember(ctx, userID, groupID)
+		},
+		OnSend: func(ctx context.Context, groupID, messageID, msgType, content string, now int64) error {
+			return chatLogic.SaveMessage(ctx, userID, groupID, messageID, msgType, content, now)
+		},
+	}
+	client.Hub.RegisterClient(client)
 	go client.WritePump()
 	go client.ReadPump()
 }

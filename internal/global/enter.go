@@ -22,6 +22,7 @@ var (
 	MIO *minio.Client
 	AIX *aix.AIX // AI 功能实例
 	WS  *wsx.Hub // WebSocket Hub
+	GWS *wsx.GroupHub
 )
 
 func Init() {
@@ -34,6 +35,8 @@ func Init() {
 	wsx.Log = Log // 注入 Logger
 	WS = wsx.NewHub()
 	go WS.Run()
+	GWS = wsx.NewGroupHub()
+	go GWS.Run()
 
 	// 初始化 AIX
 	var err error

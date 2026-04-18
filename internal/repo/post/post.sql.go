@@ -283,6 +283,26 @@ func (q *Queries) DeleteCollection(ctx context.Context, arg DeleteCollectionPara
 	return result.RowsAffected(), nil
 }
 
+const deleteCollectionsByPost = `-- name: DeleteCollectionsByPost :exec
+DELETE FROM "collection" WHERE post_id = $1
+`
+
+func (q *Queries) DeleteCollectionsByPost(ctx context.Context, postID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCollectionsByPost, postID)
+	return err
+}
+
+const deleteCommentClosuresByPost = `-- name: DeleteCommentClosuresByPost :exec
+DELETE FROM "comment_closure"
+WHERE ancestor IN (SELECT c.comment_id FROM "comment" c WHERE c.post_id = $1)
+   OR descendant IN (SELECT c.comment_id FROM "comment" c WHERE c.post_id = $1)
+`
+
+func (q *Queries) DeleteCommentClosuresByPost(ctx context.Context, postID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCommentClosuresByPost, postID)
+	return err
+}
+
 const deleteCommentLike = `-- name: DeleteCommentLike :execrows
 DELETE FROM "comment_like"
 WHERE user_id = $1 AND comment_id = $2
@@ -299,6 +319,18 @@ func (q *Queries) DeleteCommentLike(ctx context.Context, arg DeleteCommentLikePa
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteCommentLikesByPost = `-- name: DeleteCommentLikesByPost :exec
+DELETE FROM "comment_like"
+WHERE comment_id IN (
+  SELECT c.comment_id FROM "comment" c WHERE c.post_id = $1
+)
+`
+
+func (q *Queries) DeleteCommentLikesByPost(ctx context.Context, postID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCommentLikesByPost, postID)
+	return err
 }
 
 const deleteCommentVisibleByOwner = `-- name: DeleteCommentVisibleByOwner :execrows
@@ -321,6 +353,15 @@ func (q *Queries) DeleteCommentVisibleByOwner(ctx context.Context, arg DeleteCom
 	return result.RowsAffected(), nil
 }
 
+const deleteCommentsByPost = `-- name: DeleteCommentsByPost :exec
+DELETE FROM "comment" WHERE "comment".post_id = $1
+`
+
+func (q *Queries) DeleteCommentsByPost(ctx context.Context, postID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCommentsByPost, postID)
+	return err
+}
+
 const deleteDraftByOwner = `-- name: DeleteDraftByOwner :execrows
 DELETE FROM "post"
 WHERE post_id = $1 AND author_id = $2 AND status = 'draft'
@@ -333,6 +374,24 @@ type DeleteDraftByOwnerParams struct {
 
 func (q *Queries) DeleteDraftByOwner(ctx context.Context, arg DeleteDraftByOwnerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteDraftByOwner, arg.PostID, arg.AuthorID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deletePostByOwner = `-- name: DeletePostByOwner :execrows
+DELETE FROM "post"
+WHERE post_id = $1 AND author_id = $2 AND status IN ('published', 'milestone')
+`
+
+type DeletePostByOwnerParams struct {
+	PostID   pgtype.UUID
+	AuthorID pgtype.UUID
+}
+
+func (q *Queries) DeletePostByOwner(ctx context.Context, arg DeletePostByOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePostByOwner, arg.PostID, arg.AuthorID)
 	if err != nil {
 		return 0, err
 	}
@@ -355,6 +414,15 @@ func (q *Queries) DeletePostLike(ctx context.Context, arg DeletePostLikeParams) 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deletePostLikesByPost = `-- name: DeletePostLikesByPost :exec
+DELETE FROM "like_dislike" WHERE post_id = $1
+`
+
+func (q *Queries) DeletePostLikesByPost(ctx context.Context, postID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deletePostLikesByPost, postID)
+	return err
 }
 
 const deletePostTagsByPost = `-- name: DeletePostTagsByPost :exec
@@ -538,6 +606,41 @@ func (q *Queries) GetPostDetail(ctx context.Context, arg GetPostDetailParams) (G
 	return i, err
 }
 
+const getPostRecommendDoc = `-- name: GetPostRecommendDoc :one
+SELECT
+  p.post_id::text AS post_id,
+  p.title,
+  LEFT(p.content, 1200) AS content,
+  COALESCE((
+    SELECT string_agg(t.tag_name, ' ' ORDER BY t.tag_name)
+    FROM "post_tag" pt
+    JOIN "tag" t ON t.tag_id = pt.tag_id
+    WHERE pt.post_id = p.post_id
+  ), '') AS tags
+FROM "post" p
+WHERE p.post_id = $1 AND p.status = 'published'
+LIMIT 1
+`
+
+type GetPostRecommendDocRow struct {
+	PostID  string
+	Title   string
+	Content string
+	Tags    interface{}
+}
+
+func (q *Queries) GetPostRecommendDoc(ctx context.Context, postID pgtype.UUID) (GetPostRecommendDocRow, error) {
+	row := q.db.QueryRow(ctx, getPostRecommendDoc, postID)
+	var i GetPostRecommendDocRow
+	err := row.Scan(
+		&i.PostID,
+		&i.Title,
+		&i.Content,
+		&i.Tags,
+	)
+	return i, err
+}
+
 const getPostStatusByID = `-- name: GetPostStatusByID :one
 SELECT status FROM "post" WHERE post_id = $1
 `
@@ -547,6 +650,20 @@ func (q *Queries) GetPostStatusByID(ctx context.Context, postID pgtype.UUID) (st
 	var status string
 	err := row.Scan(&status)
 	return status, err
+}
+
+const getUserRecommendProfile = `-- name: GetUserRecommendProfile :one
+SELECT profile_text
+FROM "user_recommend_profile"
+WHERE user_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetUserRecommendProfile(ctx context.Context, userID pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserRecommendProfile, userID)
+	var profile_text string
+	err := row.Scan(&profile_text)
+	return profile_text, err
 }
 
 const incCommentLikeCount = `-- name: IncCommentLikeCount :execrows
@@ -2325,6 +2442,120 @@ func (q *Queries) ListPostsByAuthorHot(ctx context.Context, arg ListPostsByAutho
 	return items, nil
 }
 
+const listPostsByIDs = `-- name: ListPostsByIDs :many
+SELECT
+  p.post_id::text AS post_id,
+  p.author_id::text AS author_id,
+  COALESCE(ua.username, '') AS author_name,
+  COALESCE(ua.avatar, '') AS author_avatar,
+  COALESCE(ua.province, '') AS author_province,
+  COALESCE(ua.city, '') AS author_city,
+  p.title, p.content, p.status,
+  p.like_count, p.dislike_count, p.collect_count, p.comment_count,
+  p.cover, p.ctime, p.utime,
+  COALESCE((
+    SELECT b.birthday
+    FROM "baby" b
+    WHERE b.user_id = p.author_id
+    ORDER BY b.ctime DESC
+    LIMIT 1
+  ), 0) AS birthday,
+  COALESCE((
+    SELECT array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL)
+    FROM "post_tag" pt2
+    JOIN "tag" t ON t.tag_id = pt2.tag_id
+    WHERE pt2.post_id = p.post_id
+  ), '{}') AS tags,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld
+    WHERE ld.post_id = p.post_id AND ld.user_id = NULLIF($2, '')::uuid AND ld.type = 'like'
+  ) AS is_like,
+  EXISTS(
+    SELECT 1 FROM "like_dislike" ld2
+    WHERE ld2.post_id = p.post_id AND ld2.user_id = NULLIF($2, '')::uuid AND ld2.type = 'dislike'
+  ) AS is_dislike,
+  EXISTS(
+    SELECT 1 FROM "collection" c2
+    WHERE c2.post_id = p.post_id AND c2.user_id = NULLIF($2, '')::uuid
+  ) AS is_collect
+FROM unnest($1::uuid[]) WITH ORDINALITY AS x(pid, ord)
+JOIN "post" p ON p.post_id = x.pid
+LEFT JOIN "user_addition" ua ON ua.user_id = p.author_id
+WHERE p.status = 'published'
+ORDER BY x.ord
+`
+
+type ListPostsByIDsParams struct {
+	Column1 []pgtype.UUID
+	Column2 interface{}
+}
+
+type ListPostsByIDsRow struct {
+	PostID         string
+	AuthorID       string
+	AuthorName     string
+	AuthorAvatar   string
+	AuthorProvince string
+	AuthorCity     string
+	Title          string
+	Content        string
+	Status         string
+	LikeCount      int32
+	DislikeCount   int32
+	CollectCount   int32
+	CommentCount   int32
+	Cover          string
+	Ctime          int64
+	Utime          int64
+	Birthday       interface{}
+	Tags           interface{}
+	IsLike         bool
+	IsDislike      bool
+	IsCollect      bool
+}
+
+func (q *Queries) ListPostsByIDs(ctx context.Context, arg ListPostsByIDsParams) ([]ListPostsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listPostsByIDs, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPostsByIDsRow
+	for rows.Next() {
+		var i ListPostsByIDsRow
+		if err := rows.Scan(
+			&i.PostID,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.AuthorAvatar,
+			&i.AuthorProvince,
+			&i.AuthorCity,
+			&i.Title,
+			&i.Content,
+			&i.Status,
+			&i.LikeCount,
+			&i.DislikeCount,
+			&i.CollectCount,
+			&i.CommentCount,
+			&i.Cover,
+			&i.Ctime,
+			&i.Utime,
+			&i.Birthday,
+			&i.Tags,
+			&i.IsLike,
+			&i.IsDislike,
+			&i.IsCollect,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPostsByTag = `-- name: ListPostsByTag :many
 SELECT
   p.post_id::text AS post_id,
@@ -2564,6 +2795,34 @@ func (q *Queries) ListPostsByTagHot(ctx context.Context, arg ListPostsByTagHotPa
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTagNamesByPost = `-- name: ListTagNamesByPost :many
+SELECT t.tag_name
+FROM "post_tag" pt
+JOIN "tag" t ON t.tag_id = pt.tag_id
+WHERE pt.post_id = $1
+ORDER BY t.tag_name
+`
+
+func (q *Queries) ListTagNamesByPost(ctx context.Context, postID pgtype.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listTagNamesByPost, postID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var tag_name string
+		if err := rows.Scan(&tag_name); err != nil {
+			return nil, err
+		}
+		items = append(items, tag_name)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -3190,4 +3449,24 @@ func (q *Queries) UpdateDraftByOwner(ctx context.Context, arg UpdateDraftByOwner
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertUserRecommendProfile = `-- name: UpsertUserRecommendProfile :exec
+INSERT INTO "user_recommend_profile"(user_id, profile_text, utime)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id) DO UPDATE
+SET
+  profile_text = LEFT(EXCLUDED.profile_text || E'\n' || "user_recommend_profile".profile_text, 4000),
+  utime = EXCLUDED.utime
+`
+
+type UpsertUserRecommendProfileParams struct {
+	UserID      pgtype.UUID
+	ProfileText string
+	Utime       int64
+}
+
+func (q *Queries) UpsertUserRecommendProfile(ctx context.Context, arg UpsertUserRecommendProfileParams) error {
+	_, err := q.db.Exec(ctx, upsertUserRecommendProfile, arg.UserID, arg.ProfileText, arg.Utime)
+	return err
 }

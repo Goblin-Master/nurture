@@ -119,6 +119,12 @@ WHERE baby_id = $1 AND record_time BETWEEN $2 AND $3
 ORDER BY record_time DESC
 LIMIT 1;
 
+-- name: ListGrowthRecordsByBabyIDBetween :many
+SELECT *
+FROM "baby_growth_record"
+WHERE baby_id = $1 AND record_time BETWEEN $2 AND $3
+ORDER BY record_time ASC;
+
 -- name: ListHeightCurveByBabyIDBetween :many
 SELECT record_time, height
 FROM "baby_growth_record"

@@ -2,11 +2,73 @@
 // versions:
 //   sqlc v1.30.0
 
-package user
+package chat
 
 import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+// 群聊-群表
+type ChatGroup struct {
+	// 主键ID
+	ID int64
+	// 群ID
+	GroupID pgtype.UUID
+	// 群主用户ID(UUID)
+	OwnerID pgtype.UUID
+	// 群名称
+	Name string
+	// 群头像URL
+	Avatar string
+	// 群描述
+	Description string
+	// 成员人数上限
+	MemberLimit int32
+	// 成员人数(冗余计数)
+	MemberCount int32
+	// 创建时间戳(毫秒)
+	Ctime int64
+	// 更新时间戳(毫秒)
+	Utime int64
+}
+
+// 群聊-群成员表
+type ChatGroupMember struct {
+	// 主键ID
+	ID int64
+	// 群ID
+	GroupID pgtype.UUID
+	// 用户ID(UUID)
+	UserID pgtype.UUID
+	// 成员角色(owner/admin/member)
+	Role string
+	// 最后一次离开群详情页时间(毫秒,用于未读统计)
+	LastSeenTime int64
+	// 创建时间戳(毫秒)
+	Ctime int64
+	// 更新时间戳(毫秒)
+	Utime int64
+}
+
+// 群聊-群消息表
+type ChatGroupMessage struct {
+	// 主键ID
+	ID int64
+	// 消息ID(UUID,幂等)
+	MessageID pgtype.UUID
+	// 群ID
+	GroupID pgtype.UUID
+	// 发送者用户ID(UUID)
+	FromUserID pgtype.UUID
+	// 消息类型(text/image/system)
+	Type string
+	// 消息内容(文本或图片URL)
+	Content string
+	// 创建时间戳(毫秒)
+	Ctime int64
+	// 更新时间戳(毫秒)
+	Utime int64
+}
 
 // 用户扩展信息（冗余用户名、头像、地区）
 type UserAddition struct {

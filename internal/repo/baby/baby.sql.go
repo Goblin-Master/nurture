@@ -780,6 +780,52 @@ func (q *Queries) ListFeedingByBabyBetween(ctx context.Context, arg ListFeedingB
 	return items, nil
 }
 
+const listGrowthRecordsByBabyIDBetween = `-- name: ListGrowthRecordsByBabyIDBetween :many
+SELECT id, record_id, baby_id, created_by, record_time, height, weight, head_circumference, remark, ctime, updated_by, utime
+FROM "baby_growth_record"
+WHERE baby_id = $1 AND record_time BETWEEN $2 AND $3
+ORDER BY record_time ASC
+`
+
+type ListGrowthRecordsByBabyIDBetweenParams struct {
+	BabyID       pgtype.UUID
+	RecordTime   int64
+	RecordTime_2 int64
+}
+
+func (q *Queries) ListGrowthRecordsByBabyIDBetween(ctx context.Context, arg ListGrowthRecordsByBabyIDBetweenParams) ([]BabyGrowthRecord, error) {
+	rows, err := q.db.Query(ctx, listGrowthRecordsByBabyIDBetween, arg.BabyID, arg.RecordTime, arg.RecordTime_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BabyGrowthRecord
+	for rows.Next() {
+		var i BabyGrowthRecord
+		if err := rows.Scan(
+			&i.ID,
+			&i.RecordID,
+			&i.BabyID,
+			&i.CreatedBy,
+			&i.RecordTime,
+			&i.Height,
+			&i.Weight,
+			&i.HeadCircumference,
+			&i.Remark,
+			&i.Ctime,
+			&i.UpdatedBy,
+			&i.Utime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHeadCircumferenceCurveByBabyIDBetween = `-- name: ListHeadCircumferenceCurveByBabyIDBetween :many
 SELECT record_time, head_circumference
 FROM "baby_growth_record"

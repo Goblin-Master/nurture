@@ -28,4 +28,11 @@ var (
 	ErrPostNotExist      = errors.New("帖子不存在")
 	ErrInvalidPostStatus = errors.New("帖子状态非法")
 	ErrPostNotDraft      = errors.New("帖子不是草稿，无法发布")
+
+	// Chat related errors
+	ErrChatGroupNotExist          = errors.New("群不存在")
+	ErrChatGroupFull              = errors.New("群人数已满")
+	ErrChatNotMember              = errors.New("不是群成员")
+	ErrChatPermissionDenied       = errors.New("无权限")
+	ErrChatOwnerMustTransferFirst = errors.New("群主需要先转让再退出")
 )

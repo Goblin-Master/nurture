@@ -27,3 +27,13 @@ sql:
         package: "post"
         out: "post"
         sql_package: "pgx/v5"
+  - engine: "postgresql"
+    queries: "sql/chat.sql"
+    schema:
+      - "../../deploy/schema/chat.sql"
+      - "../../deploy/schema/user.sql"
+    gen:
+      go:
+        package: "chat"
+        out: "chat"
+        sql_package: "pgx/v5"

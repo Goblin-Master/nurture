@@ -156,6 +156,10 @@ func (ul *UserLogic) RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (d
 	if !isValidPhone(phone) {
 		return resp, ErrInvalidPhone
 	}
+	account := strings.TrimSpace(req.Account)
+	if account == "" {
+		account = phone
+	}
 	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(constant.REGISTER_SMS_CODE_KEY, phone), req.Code)
 	if err != nil {
 		global.Log.Error(err)
@@ -165,7 +169,7 @@ func (ul *UserLogic) RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (d
 		return resp, ErrCodeVerify
 	}
 	userID := uuid.NewString()
-	err = ul.userRepo.Register(ctx, userID, req.Username, nil, phone, req.Password, req.Gender)
+	err = ul.userRepo.Register(ctx, userID, req.Username, nil, account, req.Password, req.Gender)
 	if err != nil {
 		if errors.Is(err, passwordx.ErrPasswordEmpty) {
 			return resp, ErrPasswordEmpty
@@ -288,6 +292,14 @@ func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.U
 			return resp, ErrDefault
 		}
 	}
+	var phone *string
+	if req.Phone != nil && *req.Phone != "" {
+		p := strings.TrimSpace(*req.Phone)
+		if !isValidLoosePhone(p) {
+			return resp, ErrInvalidPhone
+		}
+		phone = &p
+	}
 	var birthday *int64
 	if req.Birthday != nil && *req.Birthday != "" {
 		t, err := time.Parse("20060102", *req.Birthday)
@@ -297,7 +309,7 @@ func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.U
 		ms := t.UnixMilli()
 		birthday = &ms
 	}
-	err := ul.userRepo.UpdateAdditionByID(ctx, userID, req.Occupation, nil, req.Province, req.City, nil, birthday)
+	err := ul.userRepo.UpdateAdditionByID(ctx, userID, req.Occupation, phone, req.Province, req.City, nil, birthday)
 	if err != nil {
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
@@ -508,7 +520,13 @@ func (ul *UserLogic) RebindEmail(ctx context.Context, userID string, req dto.Bin
 	return resp, nil
 }
 
+var loosePhoneRe = regexp.MustCompile(`^\+?\d{6,20}$`)
 var cnPhoneRe = regexp.MustCompile(`^(?:\+?86)?1[3-9]\d{9}$`)
+
+func isValidLoosePhone(phone string) bool {
+	p := strings.TrimSpace(phone)
+	return loosePhoneRe.MatchString(p)
+}
 
 func isValidPhone(phone string) bool {
 	p := strings.TrimSpace(phone)

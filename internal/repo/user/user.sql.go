@@ -248,8 +248,9 @@ func (q *Queries) GetPartnerByUserID(ctx context.Context, father pgtype.UUID) (G
 }
 
 const getUserByAccount = `-- name: GetUserByAccount :one
-SELECT id, user_id, account, password, COALESCE(email, '') AS email, username, gender, role, ctime, utime FROM "user_base"
-WHERE account = $1 LIMIT 1
+SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base"
+WHERE account = $1
+LIMIT 1
 `
 
 func (q *Queries) GetUserByAccount(ctx context.Context, account string) (UserBase, error) {
@@ -271,12 +272,13 @@ func (q *Queries) GetUserByAccount(ctx context.Context, account string) (UserBas
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, user_id, account, password, COALESCE(email, '') AS email, username, gender, role, ctime, utime FROM "user_base"
-WHERE email = $1 LIMIT 1
+SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base"
+WHERE email = $1::varchar
+LIMIT 1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (UserBase, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, email)
+func (q *Queries) GetUserByEmail(ctx context.Context, dollar_1 string) (UserBase, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, dollar_1)
 	var i UserBase
 	err := row.Scan(
 		&i.ID,
@@ -294,7 +296,9 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (UserBase, e
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, user_id, account, password, COALESCE(email, '') AS email, username, gender, role, ctime, utime FROM "user_base" WHERE user_id = $1 LIMIT 1
+SELECT id, user_id, account, password, email, username, gender, role, ctime, utime FROM "user_base"
+WHERE user_id = $1
+LIMIT 1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, userID pgtype.UUID) (UserBase, error) {
@@ -485,7 +489,7 @@ WHERE email = $1
 `
 
 type UpdatePasswordByEmailParams struct {
-	Email    string
+	Email    pgtype.Text
 	Password string
 }
 

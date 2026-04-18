@@ -66,3 +66,65 @@ type (
 		Value float64 `json:"value" binding:"required"`
 	}
 )
+
+type (
+	GrowthReportReq struct {
+		BabyID    string `json:"baby_id" binding:"required"`
+		RangeDays int    `json:"range_days"`
+		Language  string `json:"language"`
+	}
+	GrowthReportResp struct {
+		Markdown string           `json:"markdown"`
+		Data     GrowthReportData `json:"data"`
+	}
+)
+
+type (
+	GrowthReportData struct {
+		Baby     GrowthReportBaby     `json:"baby"`
+		Range    GrowthReportRange    `json:"range"`
+		Growth   GrowthReportGrowth   `json:"growth"`
+		Analysis GrowthReportAnalysis `json:"analysis"`
+	}
+	GrowthReportBaby struct {
+		BabyID   string `json:"baby_id"`
+		Name     string `json:"name"`
+		Gender   string `json:"gender"`
+		Birthday int64  `json:"birthday"`
+		Avatar   string `json:"avatar"`
+	}
+	GrowthReportRange struct {
+		From int64 `json:"from"`
+		To   int64 `json:"to"`
+		Days int   `json:"days"`
+	}
+	GrowthReportGrowth struct {
+		Items []GrowthReportGrowthItem `json:"items"`
+	}
+	GrowthReportGrowthItem struct {
+		Time              int64    `json:"time"`
+		Height            *float64 `json:"height,omitempty"`
+		Weight            *float64 `json:"weight,omitempty"`
+		HeadCircumference *float64 `json:"head_circumference,omitempty"`
+		Remark            string   `json:"remark,omitempty"`
+	}
+)
+
+type (
+	GrowthReportAnalysis struct {
+		Height            GrowthMetricAnalysis `json:"height"`
+		Weight            GrowthMetricAnalysis `json:"weight"`
+		HeadCircumference GrowthMetricAnalysis `json:"head_circumference"`
+	}
+	GrowthMetricAnalysis struct {
+		Points    int      `json:"points"`
+		FirstTime int64    `json:"first_time,omitempty"`
+		LastTime  int64    `json:"last_time,omitempty"`
+		First     *float64 `json:"first,omitempty"`
+		Last      *float64 `json:"last,omitempty"`
+		Delta     *float64 `json:"delta,omitempty"`
+		PerWeek   *float64 `json:"per_week,omitempty"`
+		PerMonth  *float64 `json:"per_month,omitempty"`
+		Predict30 *float64 `json:"predict_30,omitempty"`
+	}
+)

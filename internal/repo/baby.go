@@ -24,6 +24,7 @@ type IBabyRepo interface {
 	GetLatestGrowthByBabyIDAndUser(ctx context.Context, babyID, userID string) (baby.BabyGrowthRecord, error)
 	GetLatestGrowthByBabyID(ctx context.Context, babyID string) (baby.BabyGrowthRecord, error)
 	GetGrowthByBabyIDBetween(ctx context.Context, babyID string, start, end int64) (baby.BabyGrowthRecord, error)
+	ListGrowthRecordsByBabyIDBetween(ctx context.Context, babyID string, start, end int64) ([]baby.BabyGrowthRecord, error)
 	UpdateGrowthByRecordID(ctx context.Context, recordID string, recordTime int64, height, weight, headCircumference float64, remark string, updatedBy string) error
 	CreateGrowthRecord(ctx context.Context, babyID, userID string, recordTime int64, height, weight, headCircumference float64, remark string) (string, error)
 	ListVaccineRecordsByBaby(ctx context.Context, babyID string) ([]baby.ListVaccineRecordsByBabyIDRow, error)
@@ -366,6 +367,23 @@ func (r *BabyRepo) GetGrowthByBabyIDBetween(ctx context.Context, babyID string, 
 		return baby.BabyGrowthRecord{}, ErrDefault
 	}
 	return gr, nil
+}
+
+func (r *BabyRepo) ListGrowthRecordsByBabyIDBetween(ctx context.Context, babyID string, start, end int64) ([]baby.BabyGrowthRecord, error) {
+	var bid pgtype.UUID
+	if err := bid.Scan(babyID); err != nil {
+		return nil, err
+	}
+	rows, err := r.babyDao.ListGrowthRecordsByBabyIDBetween(ctx, baby.ListGrowthRecordsByBabyIDBetweenParams{
+		BabyID:       bid,
+		RecordTime:   start,
+		RecordTime_2: end,
+	})
+	if err != nil {
+		global.Log.Error(err)
+		return nil, ErrDefault
+	}
+	return rows, nil
 }
 
 func (r *BabyRepo) UpdateGrowthByRecordID(ctx context.Context, recordID string, recordTime int64, height, weight, headCircumference float64, remark string, updatedBy string) error {

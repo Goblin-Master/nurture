@@ -93,6 +93,14 @@ func (h *PostHandler) DeleteDraft(c *gin.Context) {
 	response.Response(c, nil, err)
 }
 
+func (h *PostHandler) DeletePost(c *gin.Context) {
+	uri := middleware.GetBind[dto.PostDetailReq](c)
+	global.Log.Info(uri)
+	userID := jwtx.GetUserID(c)
+	err := h.postLogic.DeletePost(c.Request.Context(), userID, uri)
+	response.Response(c, nil, err)
+}
+
 func (h *PostHandler) CreateComment(c *gin.Context) {
 	uri := middleware.GetBind[dto.PublishPostReq](c)
 	body := middleware.GetBind[dto.CreateCommentReq](c)
