@@ -20,7 +20,6 @@ func BindJsonMiddleware[T any](c *gin.Context) {
 		c.Abort()
 		return
 	}
-	c.Set("request", cr)
 	c.Set(typeKey[T](), cr)
 }
 func BindQueryMiddleware[T any](c *gin.Context) {
@@ -31,7 +30,6 @@ func BindQueryMiddleware[T any](c *gin.Context) {
 		c.Abort()
 		return
 	}
-	c.Set("request", cr)
 	c.Set(typeKey[T](), cr)
 }
 func BindUriMiddleware[T any](c *gin.Context) {
@@ -42,12 +40,8 @@ func BindUriMiddleware[T any](c *gin.Context) {
 		c.Abort()
 		return
 	}
-	c.Set("request", cr)
 	c.Set(typeKey[T](), cr)
 }
 func GetBind[T any](c *gin.Context) T {
-	if v, ok := c.Get(typeKey[T]()); ok {
-		return v.(T)
-	}
-	return c.MustGet("request").(T)
+	return c.MustGet(typeKey[T]()).(T)
 }
