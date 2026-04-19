@@ -102,6 +102,88 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 		history = []aix.ChatMessage{}
 	}
 
+	var extraContext string
+	if req.AutoContext && strings.TrimSpace(req.BabyID) != "" {
+		days := req.ContextDays
+		if days <= 0 || days > 180 {
+			days = 30
+		}
+		b, err := l.babyRepo.GetBabyByIDAndUser(ctx, req.BabyID, userID)
+		if err != nil {
+			if errors.Is(err, repo.ErrBabyNotExist) {
+				return ErrBabyNotExist
+			}
+			global.Log.Error(err)
+			return ErrDefault
+		}
+		to := time.Now().UnixMilli()
+		from := to - int64(days)*24*60*60*1000
+		rows, err := l.babyRepo.ListGrowthRecordsByBabyIDBetween(ctx, req.BabyID, from, to)
+		if err != nil {
+			global.Log.Error(err)
+			return ErrDefault
+		}
+		items := make([]dto.GrowthReportGrowthItem, 0, len(rows))
+		for _, r := range rows {
+			it := dto.GrowthReportGrowthItem{Time: r.RecordTime}
+			if r.Height.Valid {
+				v := r.Height.Float64
+				it.Height = &v
+			}
+			if r.Weight.Valid {
+				v := r.Weight.Float64
+				it.Weight = &v
+			}
+			if r.HeadCircumference.Valid {
+				v := r.HeadCircumference.Float64
+				it.HeadCircumference = &v
+			}
+			items = append(items, it)
+		}
+		totalPoints := len(items)
+		truncated := false
+		if len(items) > 60 {
+			items = items[len(items)-60:]
+			truncated = true
+		}
+		data := dto.GrowthReportData{
+			Baby: dto.GrowthReportBaby{
+				BabyID:   b.BabyID.String(),
+				Name:     b.Name,
+				Gender:   b.Gender,
+				Birthday: b.Birthday,
+				Avatar:   b.Avatar,
+			},
+			Range: dto.GrowthReportRange{
+				From: from,
+				To:   to,
+				Days: days,
+			},
+			Growth: dto.GrowthReportGrowth{
+				Items: items,
+			},
+			Analysis: dto.GrowthReportAnalysis{
+				Height:            analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.Height }),
+				Weight:            analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.Weight }),
+				HeadCircumference: analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.HeadCircumference }),
+			},
+		}
+		payload := struct {
+			Data        dto.GrowthReportData `json:"data"`
+			TotalPoints int                 `json:"total_points"`
+			Truncated   bool                `json:"truncated"`
+		}{
+			Data:        data,
+			TotalPoints: totalPoints,
+			Truncated:   truncated,
+		}
+		if bts, e := json.Marshal(payload); e == nil {
+			extraContext = string(bts)
+		} else {
+			global.Log.Error(e)
+		}
+	}
+
 	// 2. RAG 检索
 	var ragContext string
 	// 构建需要检索的知识库集合
@@ -131,7 +213,7 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 	}
 
 	// 3. 构建消息
-	messages := global.AIX.BuildMessages(history, req.Message, req.Images, ragContext)
+	messages := global.AIX.BuildMessages(history, req.Message, req.Images, ragContext, extraContext)
 
 	// 4. 流式对话
 	fullResponse, err := global.AIX.StreamChat(ctx, messages, func(chunk string) {
