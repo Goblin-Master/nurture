@@ -50,12 +50,16 @@ func (a *AIX) StreamChat(ctx context.Context, messages []llms.MessageContent,
 
 // BuildMessages 构建消息（含历史 + RAG 上下文）
 func (a *AIX) BuildMessages(history []ChatMessage, userMessage string,
-	images []string, ragContext string) []llms.MessageContent {
+	images []string, ragContext string, extraContext string) []llms.MessageContent {
 
 	var messages []llms.MessageContent
 
 	// 系统提示词
 	systemPrompt := "你是一个稚慧云小助手。"
+	if extraContext != "" {
+		systemPrompt += "\n\n以下是宝宝相关系统数据：\n" + extraContext +
+			"\n\n请结合以上数据回答用户问题。"
+	}
 	if ragContext != "" {
 		systemPrompt += "\n\n以下是相关参考资料：\n" + ragContext +
 			"\n\n请基于以上资料回答用户问题。"
