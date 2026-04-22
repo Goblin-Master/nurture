@@ -40,3 +40,6 @@ seed_users.jsonl
 
 # docs not for upload
 /backend-develop-guide/reference/third-party-libraries.md
+
+# mermaid
+**/mermaid.md
