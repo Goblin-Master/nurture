@@ -30,7 +30,7 @@ email:
   send_email: "xxxxxx" # 发送邮箱
   auth_code: "xxxxxx" # 发送邮箱的授权码
   send_nickname: "孕育拓扑队"
-  subject: "稚慧云"
+  subject: "稚慧灵"
   ssl: false
   tls: false
 
