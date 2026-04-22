@@ -31,6 +31,6 @@ COPY --from=builder /app/nurture-api .
 COPY internal/etc/local.yaml internal/etc/local.yaml
 
 # 暴露端口
-EXPOSE 9000
+EXPOSE 8080
 
 CMD ["./nurture-api"]

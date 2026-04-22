@@ -6,7 +6,7 @@ services:
       dockerfile: deploy/Dockerfile
     container_name: nurture-api
     ports:
-      - "9000:9000"
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -26,8 +26,6 @@ services:
       - POSTGRES_USER=nurture
       - POSTGRES_PASSWORD=123456
       - POSTGRES_DB=nurture
-    ports:
-      - "5432:5432"
     restart: always
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -44,8 +42,6 @@ services:
   redis:
     container_name: nurture-redis
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     restart: always
     networks:
       - nurture-net
