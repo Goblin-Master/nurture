@@ -374,6 +374,19 @@ func (q *Queries) GetBabyByIDAndUser(ctx context.Context, arg GetBabyByIDAndUser
 	return i, err
 }
 
+const getBabyIDByGrowthRecordID = `-- name: GetBabyIDByGrowthRecordID :one
+SELECT baby_id::text
+FROM "baby_growth_record"
+WHERE record_id = $1
+`
+
+func (q *Queries) GetBabyIDByGrowthRecordID(ctx context.Context, recordID pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getBabyIDByGrowthRecordID, recordID)
+	var baby_id string
+	err := row.Scan(&baby_id)
+	return baby_id, err
+}
+
 const getDailyStatsByBaby = `-- name: GetDailyStatsByBaby :one
 WITH feed_stats AS (
   SELECT COUNT(*) AS c

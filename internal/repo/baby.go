@@ -8,7 +8,6 @@ import (
 	"nurture/internal/repo/cache"
 
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -409,8 +408,7 @@ func (r *BabyRepo) UpdateGrowthByRecordID(ctx context.Context, recordID string, 
 		global.Log.Error(err)
 		return ErrDefault
 	}
-	var babyID string
-	if err := global.DB.QueryRow(ctx, `SELECT baby_id::text FROM "baby_growth_record" WHERE record_id = $1`, rid).Scan(&babyID); err == nil && strings.TrimSpace(babyID) != "" {
+	if babyID, err := r.babyDao.GetBabyIDByGrowthRecordID(ctx, rid); err == nil {
 		_ = cache.Del(ctx, r.rdb, cache.BabyLatestGrowthKey(babyID))
 	}
 	return nil

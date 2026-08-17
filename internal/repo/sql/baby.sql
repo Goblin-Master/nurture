@@ -38,6 +38,11 @@ SET record_time = $2,
     utime = $8
 WHERE record_id = $1;
 
+-- name: GetBabyIDByGrowthRecordID :one
+SELECT baby_id::text
+FROM "baby_growth_record"
+WHERE record_id = $1;
+
 -- 列出所有剂次（用于初始化宝宝疫苗记录）
 -- name: ListAllDoses :many
 SELECT d.dose_id, d.vaccine_id, v.name, v.disease, d.recommend_age_days, v.link, v.ctime, v.utime, d.dose_number
