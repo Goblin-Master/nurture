@@ -3,12 +3,10 @@ package repo
 import (
 	"context"
 	"errors"
-	"fmt"
 	"nurture/internal/constant"
 	"nurture/internal/global"
 	"nurture/internal/pkg/passwordx"
 	"nurture/internal/repo/baby"
-	"nurture/internal/repo/cache"
 	"nurture/internal/repo/user"
 	"time"
 
@@ -89,10 +87,10 @@ func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, passwo
 }
 
 func (ur *UserRepo) GetMyProfile(ctx context.Context, userID string) (user.GetMyProfileRow, error) {
-	key := cache.UserProfileKey(userID)
+	key := user.CacheProfileKey(userID)
 	{
 		var cached user.GetMyProfileRow
-		if ok, _ := cache.GetJSON(ctx, ur.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, ur.rdb, key, &cached); ok {
 			global.Log.Info("user_cache_hit", "type", "profile", "user", userID)
 			return cached, nil
 		}
@@ -109,7 +107,7 @@ func (ur *UserRepo) GetMyProfile(ctx context.Context, userID string) (user.GetMy
 		global.Log.Error(err)
 		return user.GetMyProfileRow{}, ErrDefault
 	}
-	_ = cache.SetJSON(ctx, ur.rdb, key, p, time.Duration(constant.USER_PROFILE_TTL)*time.Second)
+	_ = setCacheJSON(ctx, ur.rdb, key, p, time.Duration(constant.USER_PROFILE_TTL)*time.Second)
 	return p, nil
 }
 
@@ -130,9 +128,9 @@ func (ur *UserRepo) FollowUser(ctx context.Context, followerID, followeeID strin
 		global.Log.Error(err)
 		return ErrDefault
 	}
-	_ = cache.Del(ctx, ur.rdb, cache.UserProfileKey(followerID), cache.UserProfileKey(followeeID))
-	_ = cache.ScanDel(ctx, ur.rdb, cache.UserFollowingKey(followerID, 0, 0), 100)
-	_ = cache.ScanDel(ctx, ur.rdb, cache.UserFollowersKey(followeeID, 0, 0), 100)
+	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(followerID), user.CacheProfileKey(followeeID))
+	_ = scanDelCache(ctx, ur.rdb, user.CacheFollowingKey(followerID, 0, 0), 100)
+	_ = scanDelCache(ctx, ur.rdb, user.CacheFollowersKey(followeeID, 0, 0), 100)
 	return nil
 }
 
@@ -155,9 +153,9 @@ func (ur *UserRepo) UnfollowUser(ctx context.Context, followerID, followeeID str
 	if n == 0 {
 		return nil
 	}
-	_ = cache.Del(ctx, ur.rdb, cache.UserProfileKey(followerID), cache.UserProfileKey(followeeID))
-	_ = cache.ScanDel(ctx, ur.rdb, fmt.Sprintf("user:following:%s:*", followerID), 100)
-	_ = cache.ScanDel(ctx, ur.rdb, fmt.Sprintf("user:followers:%s:*", followeeID), 100)
+	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(followerID), user.CacheProfileKey(followeeID))
+	_ = scanDelCache(ctx, ur.rdb, user.CacheFollowingPattern(followerID), 100)
+	_ = scanDelCache(ctx, ur.rdb, user.CacheFollowersPattern(followeeID), 100)
 	return nil
 }
 
@@ -185,10 +183,10 @@ func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, page
 		Rows    []user.ListFollowingByUserIDRow `json:"rows"`
 		HasMore bool                            `json:"has_more"`
 	}
-	key := cache.UserFollowingKey(userID, page, pageSize)
+	key := user.CacheFollowingKey(userID, page, pageSize)
 	{
 		var cached listCache
-		if ok, _ := cache.GetJSON(ctx, ur.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, ur.rdb, key, &cached); ok {
 			global.Log.Info("user_cache_hit", "type", "following", "user", userID, "page", page, "size", pageSize)
 			return cached.Rows, cached.HasMore, nil
 		}
@@ -208,14 +206,14 @@ func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, page
 		global.Log.Error(err)
 		return nil, false, ErrDefault
 	}
-	_ = cache.Del(ctx, ur.rdb, key)
+	_ = delCache(ctx, ur.rdb, key)
 	hasMore := false
 	if len(rows) > pageSize {
 		hasMore = true
 		rows = rows[:pageSize]
 	}
 	payload := listCache{Rows: rows, HasMore: hasMore}
-	_ = cache.SetJSON(ctx, ur.rdb, key, payload, time.Duration(constant.USER_LIST_TTL)*time.Second)
+	_ = setCacheJSON(ctx, ur.rdb, key, payload, time.Duration(constant.USER_LIST_TTL)*time.Second)
 	return rows, hasMore, nil
 }
 
@@ -224,10 +222,10 @@ func (ur *UserRepo) ListFollowers(ctx context.Context, userID string, page, page
 		Rows    []user.ListFollowersByUserIDRow `json:"rows"`
 		HasMore bool                            `json:"has_more"`
 	}
-	key := cache.UserFollowersKey(userID, page, pageSize)
+	key := user.CacheFollowersKey(userID, page, pageSize)
 	{
 		var cached listCache
-		if ok, _ := cache.GetJSON(ctx, ur.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, ur.rdb, key, &cached); ok {
 			global.Log.Info("user_cache_hit", "type", "followers", "user", userID, "page", page, "size", pageSize)
 			return cached.Rows, cached.HasMore, nil
 		}
@@ -247,14 +245,14 @@ func (ur *UserRepo) ListFollowers(ctx context.Context, userID string, page, page
 		global.Log.Error(err)
 		return nil, false, ErrDefault
 	}
-	_ = cache.Del(ctx, ur.rdb, key)
+	_ = delCache(ctx, ur.rdb, key)
 	hasMore := false
 	if len(rows) > pageSize {
 		hasMore = true
 		rows = rows[:pageSize]
 	}
 	payload := listCache{Rows: rows, HasMore: hasMore}
-	_ = cache.SetJSON(ctx, ur.rdb, key, payload, time.Duration(constant.USER_LIST_TTL)*time.Second)
+	_ = setCacheJSON(ctx, ur.rdb, key, payload, time.Duration(constant.USER_LIST_TTL)*time.Second)
 	return rows, hasMore, nil
 }
 
@@ -367,8 +365,8 @@ func (ur *UserRepo) UpdateGender(ctx context.Context, userID, gender string) err
 
 // GetPartnerByUserID 查询另一半（返回对方ID；没有则返回空字符串）
 func (ur *UserRepo) GetPartnerByUserID(ctx context.Context, userID string) (string, error) {
-	key := cache.UserPartnerKey(userID)
-	if s, ok, _ := cache.GetString(ctx, ur.rdb, key); ok {
+	key := user.CachePartnerKey(userID)
+	if s, ok, _ := getCacheString(ctx, ur.rdb, key); ok {
 		global.Log.Info("user_cache_hit", "type", "partner", "user", userID)
 		return s, nil
 	}
@@ -379,17 +377,17 @@ func (ur *UserRepo) GetPartnerByUserID(ctx context.Context, userID string) (stri
 	row, err := ur.userDao.GetPartnerByUserID(ctx, uid)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			_ = cache.SetEX(ctx, ur.rdb, key, "", time.Duration(constant.USER_PROFILE_TTL)*time.Second)
+			_ = setCacheEX(ctx, ur.rdb, key, "", time.Duration(constant.USER_PROFILE_TTL)*time.Second)
 			return "", nil
 		}
 		global.Log.Error(err)
 		return "", ErrDefault
 	}
 	if row.Father == userID {
-		_ = cache.SetEX(ctx, ur.rdb, key, row.Mother, time.Duration(constant.USER_PARTNER_TTL)*time.Second)
+		_ = setCacheEX(ctx, ur.rdb, key, row.Mother, time.Duration(constant.USER_PARTNER_TTL)*time.Second)
 		return row.Mother, nil
 	}
-	_ = cache.SetEX(ctx, ur.rdb, key, row.Father, time.Duration(constant.USER_PARTNER_TTL)*time.Second)
+	_ = setCacheEX(ctx, ur.rdb, key, row.Father, time.Duration(constant.USER_PARTNER_TTL)*time.Second)
 	return row.Father, nil
 }
 
@@ -503,11 +501,11 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 			return ErrDefault
 		}
 	}
-	_ = cache.Del(ctx, ur.rdb, cache.UserPartnerKey(fatherUserID), cache.UserPartnerKey(motherUserID))
+	_ = delCache(ctx, ur.rdb, user.CachePartnerKey(fatherUserID), user.CachePartnerKey(motherUserID))
 	for _, uid := range []string{fatherUserID, motherUserID} {
-		_ = cache.ScanDel(ctx, ur.rdb, fmt.Sprintf("user:following:%s:*", uid), 100)
-		_ = cache.ScanDel(ctx, ur.rdb, fmt.Sprintf("user:followers:%s:*", uid), 100)
-		_ = cache.Del(ctx, ur.rdb, cache.UserProfileKey(uid))
+		_ = scanDelCache(ctx, ur.rdb, user.CacheFollowingPattern(uid), 100)
+		_ = scanDelCache(ctx, ur.rdb, user.CacheFollowersPattern(uid), 100)
+		_ = delCache(ctx, ur.rdb, user.CacheProfileKey(uid))
 	}
 	return nil
 }
@@ -555,7 +553,7 @@ func (ur *UserRepo) UpdateAvatarByID(ctx context.Context, userID, url string) er
 	if count == 0 {
 		return ErrUserNotExist
 	}
-	_ = cache.Del(ctx, ur.rdb, cache.UserProfileKey(userID))
+	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(userID))
 	return nil
 }
 
@@ -605,7 +603,7 @@ func (ur *UserRepo) UpdateAdditionByID(ctx context.Context, userID string, occup
 	if n == 0 {
 		return ErrUserNotExist
 	}
-	_ = cache.Del(ctx, ur.rdb, cache.UserProfileKey(userID))
+	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(userID))
 	return nil
 }
 
@@ -649,7 +647,7 @@ func (ur *UserRepo) BindEmail(ctx context.Context, userID, email string) error {
 	if count == 0 {
 		return ErrUserNotExist
 	}
-	_ = cache.Del(ctx, ur.rdb, cache.UserProfileKey(userID))
+	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(userID))
 	return nil
 }
 

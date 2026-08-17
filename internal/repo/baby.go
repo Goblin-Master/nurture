@@ -5,7 +5,6 @@ import (
 	"nurture/internal/constant"
 	"nurture/internal/global"
 	"nurture/internal/repo/baby"
-	"nurture/internal/repo/cache"
 
 	"errors"
 	"time"
@@ -223,10 +222,10 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, partnerID, ba
 }
 
 func (r *BabyRepo) GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (baby.Baby, error) {
-	key := cache.BabyInfoKey(babyID, userID)
+	key := baby.CacheInfoKey(babyID, userID)
 	{
 		var cached baby.Baby
-		if ok, _ := cache.GetJSON(ctx, r.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, r.rdb, key, &cached); ok {
 			return cached, nil
 		}
 	}
@@ -248,7 +247,7 @@ func (r *BabyRepo) GetBabyByIDAndUser(ctx context.Context, babyID, userID string
 		global.Log.Error(err)
 		return baby.Baby{}, ErrDefault
 	}
-	_ = cache.SetJSON(ctx, r.rdb, key, b, time.Duration(constant.BABY_INFO_TTL)*time.Second)
+	_ = setCacheJSON(ctx, r.rdb, key, b, time.Duration(constant.BABY_INFO_TTL)*time.Second)
 	return b, nil
 }
 
@@ -325,10 +324,10 @@ func (r *BabyRepo) AdminCreateVaccine(ctx context.Context, vaccineID, name, dise
 }
 
 func (r *BabyRepo) GetLatestGrowthByBabyID(ctx context.Context, babyID string) (baby.BabyGrowthRecord, error) {
-	key := cache.BabyLatestGrowthKey(babyID)
+	key := baby.CacheLatestGrowthKey(babyID)
 	{
 		var cached baby.BabyGrowthRecord
-		if ok, _ := cache.GetJSON(ctx, r.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, r.rdb, key, &cached); ok {
 			return cached, nil
 		}
 	}
@@ -344,7 +343,7 @@ func (r *BabyRepo) GetLatestGrowthByBabyID(ctx context.Context, babyID string) (
 		global.Log.Error(err)
 		return baby.BabyGrowthRecord{}, ErrDefault
 	}
-	_ = cache.SetJSON(ctx, r.rdb, key, gr, time.Duration(constant.BABY_LATEST_GROWTH_TTL)*time.Second)
+	_ = setCacheJSON(ctx, r.rdb, key, gr, time.Duration(constant.BABY_LATEST_GROWTH_TTL)*time.Second)
 	return gr, nil
 }
 
@@ -409,7 +408,7 @@ func (r *BabyRepo) UpdateGrowthByRecordID(ctx context.Context, recordID string, 
 		return ErrDefault
 	}
 	if babyID, err := r.babyDao.GetBabyIDByGrowthRecordID(ctx, rid); err == nil {
-		_ = cache.Del(ctx, r.rdb, cache.BabyLatestGrowthKey(babyID))
+		_ = delCache(ctx, r.rdb, baby.CacheLatestGrowthKey(babyID))
 	}
 	return nil
 }
@@ -446,15 +445,15 @@ func (r *BabyRepo) CreateGrowthRecord(ctx context.Context, babyID, userID string
 		global.Log.Error(err)
 		return "", ErrDefault
 	}
-	_ = cache.Del(ctx, r.rdb, cache.BabyLatestGrowthKey(babyID))
+	_ = delCache(ctx, r.rdb, baby.CacheLatestGrowthKey(babyID))
 	return rid.String(), nil
 }
 
 func (r *BabyRepo) ListVaccineRecordsByBaby(ctx context.Context, babyID string) ([]baby.ListVaccineRecordsByBabyIDRow, error) {
-	key := cache.BabyVaccineListKey(babyID)
+	key := baby.CacheVaccineListKey(babyID)
 	{
 		var cached []baby.ListVaccineRecordsByBabyIDRow
-		if ok, _ := cache.GetJSON(ctx, r.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, r.rdb, key, &cached); ok {
 			return cached, nil
 		}
 	}
@@ -467,7 +466,7 @@ func (r *BabyRepo) ListVaccineRecordsByBaby(ctx context.Context, babyID string) 
 		global.Log.Error(err)
 		return nil, ErrDefault
 	}
-	_ = cache.SetJSON(ctx, r.rdb, key, rows, time.Duration(constant.BABY_VACCINE_LIST_TTL)*time.Second)
+	_ = setCacheJSON(ctx, r.rdb, key, rows, time.Duration(constant.BABY_VACCINE_LIST_TTL)*time.Second)
 	return rows, nil
 }
 
@@ -489,7 +488,7 @@ func (r *BabyRepo) UpdateVaccineStatusGiven(ctx context.Context, babyID, doseID 
 		global.Log.Error(err)
 		return 0, ErrDefault
 	}
-	_ = cache.Del(ctx, r.rdb, cache.BabyVaccineListKey(babyID))
+	_ = delCache(ctx, r.rdb, baby.CacheVaccineListKey(babyID))
 	return n, nil
 }
 
@@ -510,7 +509,7 @@ func (r *BabyRepo) UpdateVaccineStatusNotGiven(ctx context.Context, babyID, dose
 		global.Log.Error(err)
 		return 0, ErrDefault
 	}
-	_ = cache.Del(ctx, r.rdb, cache.BabyVaccineListKey(babyID))
+	_ = delCache(ctx, r.rdb, baby.CacheVaccineListKey(babyID))
 	return n, nil
 }
 

@@ -1,4 +1,4 @@
-package cache
+package repo
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-func GetString(ctx context.Context, rdb redis.Cmdable, key string) (string, bool, error) {
+func getCacheString(ctx context.Context, rdb redis.Cmdable, key string) (string, bool, error) {
 	if rdb == nil {
 		return "", false, nil
 	}
@@ -23,14 +23,14 @@ func GetString(ctx context.Context, rdb redis.Cmdable, key string) (string, bool
 	return v, true, nil
 }
 
-func SetEX(ctx context.Context, rdb redis.Cmdable, key string, value string, ttl time.Duration) error {
+func setCacheEX(ctx context.Context, rdb redis.Cmdable, key string, value string, ttl time.Duration) error {
 	if rdb == nil {
 		return nil
 	}
 	return rdb.SetEX(ctx, key, value, ttl).Err()
 }
 
-func Del(ctx context.Context, rdb redis.Cmdable, keys ...string) error {
+func delCache(ctx context.Context, rdb redis.Cmdable, keys ...string) error {
 	if rdb == nil {
 		return nil
 	}
@@ -40,8 +40,8 @@ func Del(ctx context.Context, rdb redis.Cmdable, keys ...string) error {
 	return rdb.Del(ctx, keys...).Err()
 }
 
-func GetJSON[T any](ctx context.Context, rdb redis.Cmdable, key string, dst *T) (bool, error) {
-	s, ok, err := GetString(ctx, rdb, key)
+func getCacheJSON[T any](ctx context.Context, rdb redis.Cmdable, key string, dst *T) (bool, error) {
+	s, ok, err := getCacheString(ctx, rdb, key)
 	if err != nil || !ok {
 		return ok, err
 	}
@@ -54,7 +54,7 @@ func GetJSON[T any](ctx context.Context, rdb redis.Cmdable, key string, dst *T) 
 	return true, nil
 }
 
-func SetJSON(ctx context.Context, rdb redis.Cmdable, key string, value any, ttl time.Duration) error {
+func setCacheJSON(ctx context.Context, rdb redis.Cmdable, key string, value any, ttl time.Duration) error {
 	if rdb == nil {
 		return nil
 	}
@@ -62,10 +62,10 @@ func SetJSON(ctx context.Context, rdb redis.Cmdable, key string, value any, ttl 
 	if err != nil {
 		return err
 	}
-	return SetEX(ctx, rdb, key, string(b), ttl)
+	return setCacheEX(ctx, rdb, key, string(b), ttl)
 }
 
-func ScanDel(ctx context.Context, rdb redis.Cmdable, pattern string, count int64) error {
+func scanDelCache(ctx context.Context, rdb redis.Cmdable, pattern string, count int64) error {
 	if rdb == nil {
 		return nil
 	}

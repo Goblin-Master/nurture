@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"nurture/internal/constant"
 	"nurture/internal/global"
-	"nurture/internal/repo/cache"
 	"nurture/internal/repo/post"
+	"nurture/internal/repo/user"
 	"strings"
 	"time"
 
@@ -167,10 +167,10 @@ func (r *PostRepo) ListTags(ctx context.Context, keyword string, page, pageSize 
 }
 
 func (r *PostRepo) GetDetail(ctx context.Context, userID, postID string) (PostRow, error) {
-	key := cache.PostHotDetailKey(postID, userID)
+	key := post.CacheHotDetailKey(postID, userID)
 	{
 		var cached PostRow
-		if ok, _ := cache.GetJSON(ctx, r.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, r.rdb, key, &cached); ok {
 			return cached, nil
 		}
 	}
@@ -233,7 +233,7 @@ func (r *PostRepo) GetDetail(ctx context.Context, userID, postID string) (PostRo
 		IsDislike:      row.IsDislike,
 		IsCollect:      row.IsCollect,
 	}
-	_ = cache.SetJSON(ctx, r.rdb, key, ret, time.Duration(constant.POST_HOT_DETAIL_TTL)*time.Second)
+	_ = setCacheJSON(ctx, r.rdb, key, ret, time.Duration(constant.POST_HOT_DETAIL_TTL)*time.Second)
 	return ret, nil
 }
 
@@ -291,10 +291,10 @@ func (r *PostRepo) ListHome(ctx context.Context, userID string, page, pageSize i
 		Rows    []PostRow `json:"rows"`
 		HasMore bool      `json:"has_more"`
 	}
-	key := cache.PostHotListKey(userID, page, pageSize)
+	key := post.CacheHotListKey(userID, page, pageSize)
 	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
 		var cached listCache
-		if ok, _ := cache.GetJSON(ctx, r.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, r.rdb, key, &cached); ok {
 			return cached.Rows, cached.HasMore, nil
 		}
 	}
@@ -363,7 +363,7 @@ func (r *PostRepo) ListHome(ctx context.Context, userID string, page, pageSize i
 	hasMore := int32(len(rows)) >= limit
 	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
 		payload := listCache{Rows: res, HasMore: hasMore}
-		_ = cache.SetJSON(ctx, r.rdb, key, payload, time.Duration(constant.POST_HOT_LIST_TTL)*time.Second)
+		_ = setCacheJSON(ctx, r.rdb, key, payload, time.Duration(constant.POST_HOT_LIST_TTL)*time.Second)
 	}
 	return res, hasMore, nil
 }
@@ -572,7 +572,7 @@ func (r *PostRepo) TouchUserTagPref(ctx context.Context, userID string, postID s
 	if len(tags) == 0 {
 		return nil
 	}
-	key := fmt.Sprintf(constant.USER_TAG_PREF_KEY, userID)
+	key := user.CacheTagPrefKey(userID)
 	pipe := r.rdb.TxPipeline()
 	for _, t := range tags {
 		name := strings.TrimSpace(t)
@@ -819,8 +819,8 @@ func (r *PostRepo) LikePost(ctx context.Context, postID, userID string) error {
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
-	_ = cache.Del(ctx, r.rdb, cache.PostHotDetailKey(postID, userID))
-	_ = cache.ScanDel(ctx, r.rdb, cache.PostHotListPattern(userID), 100)
+	_ = delCache(ctx, r.rdb, post.CacheHotDetailKey(postID, userID))
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotListPattern(userID), 100)
 	return nil
 }
 
@@ -856,8 +856,8 @@ func (r *PostRepo) UnlikePost(ctx context.Context, postID, userID string) error 
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
-	_ = cache.Del(ctx, r.rdb, cache.PostHotDetailKey(postID, userID))
-	_ = cache.ScanDel(ctx, r.rdb, cache.PostHotListPattern(userID), 100)
+	_ = delCache(ctx, r.rdb, post.CacheHotDetailKey(postID, userID))
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotListPattern(userID), 100)
 	return nil
 }
 
@@ -897,10 +897,10 @@ func (r *PostRepo) ListRepliesByComment(ctx context.Context, commentID string, u
 		Rows    []CommentRow `json:"rows"`
 		HasMore bool         `json:"has_more"`
 	}
-	key := cache.CommentHotRepliesKey(commentID, userID, page, pageSize)
+	key := post.CacheCommentHotRepliesKey(commentID, userID, page, pageSize)
 	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
 		var cached listCache
-		if ok, _ := cache.GetJSON(ctx, r.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, r.rdb, key, &cached); ok {
 			return cached.Rows, cached.HasMore, nil
 		}
 	}
@@ -940,7 +940,7 @@ func (r *PostRepo) ListRepliesByComment(ctx context.Context, commentID string, u
 		}
 		hasMore := int32(len(rows)) >= limit
 		payload := listCache{Rows: res, HasMore: hasMore}
-		_ = cache.SetJSON(ctx, r.rdb, key, payload, time.Duration(constant.COMMENT_HOT_REPLIES_TTL)*time.Second)
+		_ = setCacheJSON(ctx, r.rdb, key, payload, time.Duration(constant.COMMENT_HOT_REPLIES_TTL)*time.Second)
 		return res, hasMore, nil
 	}
 	rows, err := r.dao.ListCommentRepliesByCtime(ctx, post.ListCommentRepliesByCtimeParams{
@@ -979,10 +979,10 @@ func (r *PostRepo) ListByTag(ctx context.Context, userID, tagID string, page, pa
 		Rows    []PostRow `json:"rows"`
 		HasMore bool      `json:"has_more"`
 	}
-	key := cache.PostHotListByTagKey(userID, tagID, page, pageSize)
+	key := post.CacheHotListByTagKey(userID, tagID, page, pageSize)
 	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
 		var cached listCache
-		if ok, _ := cache.GetJSON(ctx, r.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, r.rdb, key, &cached); ok {
 			return cached.Rows, cached.HasMore, nil
 		}
 	}
@@ -1053,7 +1053,7 @@ func (r *PostRepo) ListByTag(ctx context.Context, userID, tagID string, page, pa
 	hasMore := int32(realLen) >= limit
 	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
 		payload := listCache{Rows: res, HasMore: hasMore}
-		_ = cache.SetJSON(ctx, r.rdb, key, payload, time.Duration(constant.POST_HOT_LIST_TTL)*time.Second)
+		_ = setCacheJSON(ctx, r.rdb, key, payload, time.Duration(constant.POST_HOT_LIST_TTL)*time.Second)
 	}
 	return res, hasMore, nil
 }
@@ -1377,8 +1377,8 @@ func (r *PostRepo) CollectPost(ctx context.Context, postID, userID, collectionID
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
-	_ = cache.Del(ctx, r.rdb, cache.PostHotDetailKey(postID, userID))
-	_ = cache.ScanDel(ctx, r.rdb, cache.PostHotListPattern(userID), 100)
+	_ = delCache(ctx, r.rdb, post.CacheHotDetailKey(postID, userID))
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotListPattern(userID), 100)
 	return nil
 }
 
@@ -1414,8 +1414,8 @@ func (r *PostRepo) UncollectPost(ctx context.Context, postID, userID string) err
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
-	_ = cache.Del(ctx, r.rdb, cache.PostHotDetailKey(postID, userID))
-	_ = cache.ScanDel(ctx, r.rdb, cache.PostHotListPattern(userID), 100)
+	_ = delCache(ctx, r.rdb, post.CacheHotDetailKey(postID, userID))
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotListPattern(userID), 100)
 	return nil
 }
 
@@ -1523,10 +1523,10 @@ func (r *PostRepo) DeletePost(ctx context.Context, postID, authorID string) erro
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
-	_ = cache.ScanDel(ctx, r.rdb, fmt.Sprintf("post:detail:hot:%s:*", postID), 200)
-	_ = cache.ScanDel(ctx, r.rdb, fmt.Sprintf("post:comments:hot:%s:*", postID), 200)
-	_ = cache.ScanDel(ctx, r.rdb, "post:list:hot:*:*:*", 500)
-	_ = cache.ScanDel(ctx, r.rdb, "post:list:hot:tag:*:*:*:*", 500)
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotDetailPattern(postID), 200)
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotCommentsAllUsersPattern(postID), 200)
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotListAllPattern(), 500)
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotListByTagAllPattern(), 500)
 	return nil
 }
 func (r *PostRepo) ListMyCollections(ctx context.Context, userID string, page, pageSize int, strategy string) ([]PostRow, bool, error) {
@@ -1763,12 +1763,12 @@ func (r *PostRepo) CreateComment(ctx context.Context, commentID, postID, userID 
 		return err
 	}
 	// 缓存失效与重建
-	_ = cache.Del(ctx, r.rdb, cache.PostHotDetailKey(postID, userID))
-	_ = cache.ScanDel(ctx, r.rdb, cache.PostHotCommentsPattern(postID, userID), 100)
+	_ = delCache(ctx, r.rdb, post.CacheHotDetailKey(postID, userID))
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotCommentsPattern(postID, userID), 100)
 	if parentID != nil && strings.TrimSpace(*parentID) != "" {
-		_ = cache.ScanDel(ctx, r.rdb, cache.CommentHotRepliesPattern(*parentID, userID), 100)
+		_ = scanDelCache(ctx, r.rdb, post.CacheCommentHotRepliesPattern(*parentID, userID), 100)
 	}
-	_ = cache.ScanDel(ctx, r.rdb, cache.PostHotListPattern(userID), 100)
+	_ = scanDelCache(ctx, r.rdb, post.CacheHotListPattern(userID), 100)
 	_, _ = r.GetDetail(ctx, userID, postID)
 	return nil
 }
@@ -1791,10 +1791,10 @@ func (r *PostRepo) ListCommentsByPost(ctx context.Context, postID string, userID
 		Rows    []CommentRow `json:"rows"`
 		HasMore bool         `json:"has_more"`
 	}
-	key := cache.PostHotCommentsKey(postID, userID, page, pageSize)
+	key := post.CacheHotCommentsKey(postID, userID, page, pageSize)
 	if strings.ToLower(strings.TrimSpace(strategy)) == "hot" {
 		var cached listCache
-		if ok, _ := cache.GetJSON(ctx, r.rdb, key, &cached); ok {
+		if ok, _ := getCacheJSON(ctx, r.rdb, key, &cached); ok {
 			return cached.Rows, cached.HasMore, nil
 		}
 	}
@@ -1835,7 +1835,7 @@ func (r *PostRepo) ListCommentsByPost(ctx context.Context, postID string, userID
 		}
 		hasMore := int32(len(rows)) >= limit
 		payload := listCache{Rows: res, HasMore: hasMore}
-		_ = cache.SetJSON(ctx, r.rdb, key, payload, time.Duration(constant.POST_HOT_COMMENTS_TTL)*time.Second)
+		_ = setCacheJSON(ctx, r.rdb, key, payload, time.Duration(constant.POST_HOT_COMMENTS_TTL)*time.Second)
 		return res, hasMore, nil
 	}
 	rows, err := r.dao.ListPostCommentsByCtime(ctx, post.ListPostCommentsByCtimeParams{
