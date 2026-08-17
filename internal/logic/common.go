@@ -200,7 +200,7 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 		docs, e := l.aiRepo.SimilaritySearch(ctx, req.Message, collections, topK)
 		if e != nil {
 			// 检索失败记录日志，但不阻断对话，仅降级为普通对话
-			global.Log.Errorf("RAG SimilaritySearch failed: %v", err)
+			global.Log.Errorf("RAG SimilaritySearch failed: %v", e)
 		}
 		if len(docs) > 0 {
 			// 拼接检索结果
