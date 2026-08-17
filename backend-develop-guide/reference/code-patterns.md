@@ -384,53 +384,38 @@ func LoadConfig() {
 }
 ```
 
-## 8. 路由管理模式
-
-### RouteManager 定义
-
-```go
-// manger/enter.go
-type PathHandler func(rg *gin.RouterGroup)
-
-type RouteManager struct {
-    CommonRoutes *gin.RouterGroup
-    UserRoutes   *gin.RouterGroup
-}
-
-func NewRouteManager(router *gin.Engine) *RouteManager {
-    return &RouteManager{
-        CommonRoutes: router.Group("/api/common"),
-        UserRoutes:   router.Group("/api/user"),
-    }
-}
-
-func (rm *RouteManager) RegisterCommonRoutes(handler PathHandler) {
-    handler(rm.CommonRoutes)
-}
-
-func (rm *RouteManager) RegisterUserRoutes(handler PathHandler) {
-    handler(rm.UserRoutes)
-}
-```
-
-### 路由注册
+## 8. 路由注册模式
 
 ```go
 // router/enter.go
-func registerRoutes(routeManager *manager.RouteManager) {
-    routeManager.RegisterCommonRoutes(func(rg *gin.RouterGroup) {
-        rg.GET("/ping", func(c *gin.Context) {
-            response.Response(c, "pong", nil)
-        })
-        commonHandler := handler.NewCommonHandler()
-        rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
-    })
+func registerRoutes(r *gin.Engine) {
+    api := r.Group("/api")
+    registerCommonRoutes(api.Group("/common"))
+    registerUserRoutes(api.Group("/user"))
+}
 
-    routeManager.RegisterUserRoutes(func(rg *gin.RouterGroup) {
-        userHandler := handler.NewUserHandler()
-        rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
-        rg.POST("/register", middleware.BindJsonMiddleware[dto.RegisterReq], userHandler.Register)
+func requestGlobalMiddleware(r *gin.Engine) {
+    r.Use(middleware.Cors())
+}
+```
+
+模块路由按文件拆分在 `internal/router/` 下：
+
+```go
+// router/common.go
+func registerCommonRoutes(rg *gin.RouterGroup) {
+    rg.GET("/ping", func(c *gin.Context) {
+        response.Response(c, "pong", nil)
     })
+    commonHandler := handler.NewCommonHandler()
+    rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
+}
+
+// router/user.go
+func registerUserRoutes(rg *gin.RouterGroup) {
+    userHandler := handler.NewUserHandler()
+    rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
+    rg.POST("/register", middleware.BindJsonMiddleware[dto.RegisterReq], userHandler.Register)
 }
 ```
 

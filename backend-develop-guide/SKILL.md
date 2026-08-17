@@ -69,8 +69,6 @@ internal/
 ├── logic/           # 业务逻辑
 │   ├── errors.go    # Logic 层错误定义
 │   └── user.go
-├── manger/          # 路由管理器
-│   └── enter.go
 ├── middleware/      # 中间件
 │   ├── bind.go      # 参数绑定中间件
 │   ├── cors.go      # CORS 中间件
@@ -88,7 +86,8 @@ internal/
 │   ├── sqlc.yaml    # sqlc 配置
 │   └── user/        # sqlc 生成的代码
 ├── router/          # 路由初始化
-│   └── enter.go
+│   ├── enter.go     # Gin 初始化、全局中间件、顶层路由组
+│   └── user.go      # 模块路由注册
 └── main.go          # 应用入口
 ```
 
@@ -185,12 +184,12 @@ func (uh *UserHandler) UpdateProfile(c *gin.Context) {
 ### 步骤 7：注册路由（`internal/router/`）
 
 ```go
-// internal/router/enter.go
-routeManager.RegisterUserRoutes(func(rg *gin.RouterGroup) {
+// internal/router/user.go
+func registerUserRoutes(rg *gin.RouterGroup) {
     userHandler := handler.NewUserHandler()
     rg.PUT("/profile", middleware.Authentication(jwtx.COMMON_USER), 
         middleware.BindJsonMiddleware[dto.UpdateProfileReq], userHandler.UpdateProfile)
-})
+}
 ```
 
 ## 关键代码模式

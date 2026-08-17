@@ -173,21 +173,30 @@ func (uh *UserHandler) UpdateProfile(c *gin.Context) {
 ```go
 package router
 
-func registerRoutes(routeManager *manager.RouteManager) {
-    routeManager.RegisterUserRoutes(func(rg *gin.RouterGroup) {
-        userHandler := handler.NewUserHandler()
-        
-        // 已有路由
-        rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
-        rg.POST("/register", middleware.BindJsonMiddleware[dto.RegisterReq], userHandler.Register)
-        
-        // 新增路由（需要认证）
-        rg.PUT("/profile", 
-            middleware.Authentication(jwtx.COMMON_USER),           // 认证中间件
-            middleware.BindJsonMiddleware[dto.UpdateProfileReq],   // 参数绑定中间件
-            userHandler.UpdateProfile,                              // Handler
-        )
-    })
+func registerRoutes(r *gin.Engine) {
+    api := r.Group("/api")
+    registerUserRoutes(api.Group("/user"))
+}
+```
+
+**文件**：`internal/router/user.go`
+
+```go
+package router
+
+func registerUserRoutes(rg *gin.RouterGroup) {
+    userHandler := handler.NewUserHandler()
+
+    // 已有路由
+    rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
+    rg.POST("/register", middleware.BindJsonMiddleware[dto.RegisterReq], userHandler.Register)
+
+    // 新增路由（需要认证）
+    rg.PUT("/profile",
+        middleware.Authentication(jwtx.COMMON_USER),           // 认证中间件
+        middleware.BindJsonMiddleware[dto.UpdateProfileReq],   // 参数绑定中间件
+        userHandler.UpdateProfile,                             // Handler
+    )
 }
 ```
 
@@ -201,7 +210,7 @@ func registerRoutes(routeManager *manager.RouteManager) {
 | `internal/repo/user.go` | 更新接口，添加 `UpdateProfile` 方法 |
 | `internal/logic/user.go` | 更新接口，添加 `UpdateProfile` 方法 |
 | `internal/handler/user.go` | 添加 `UpdateProfile` 方法 |
-| `internal/router/enter.go` | 注册新路由 |
+| `internal/router/user.go` | 注册新路由 |
 
 ## 测试
 

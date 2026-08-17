@@ -504,66 +504,46 @@ func (ah *ArticleHandler) ListArticles(c *gin.Context) {
 }
 ```
 
-## 步骤 11：更新路由管理器
-
-**文件**：`internal/manger/enter.go`
-
-```go
-package manager
-
-type RouteManager struct {
-    CommonRoutes  *gin.RouterGroup
-    UserRoutes    *gin.RouterGroup
-    ArticleRoutes *gin.RouterGroup  // 新增
-}
-
-func NewRouteManager(router *gin.Engine) *RouteManager {
-    return &RouteManager{
-        CommonRoutes:  router.Group("/api/common"),
-        UserRoutes:    router.Group("/api/user"),
-        ArticleRoutes: router.Group("/api/article"),  // 新增
-    }
-}
-
-// 新增方法
-func (rm *RouteManager) RegisterArticleRoutes(handler PathHandler) {
-    handler(rm.ArticleRoutes)
-}
-```
-
-## 步骤 12：注册路由
+## 步骤 11：注册路由
 
 **文件**：`internal/router/enter.go`
 
 ```go
 package router
 
-func registerRoutes(routeManager *manager.RouteManager) {
+func registerRoutes(r *gin.Engine) {
+    api := r.Group("/api")
     // ... 已有路由
+    registerArticleRoutes(api.Group("/article"))
+}
+```
 
-    // 新增 Article 路由
-    routeManager.RegisterArticleRoutes(func(rg *gin.RouterGroup) {
-        articleHandler := handler.NewArticleHandler()
-        
-        // 创建文章（需要登录）
-        rg.POST("", 
-            middleware.Authentication(jwtx.COMMON_USER),
-            middleware.BindJsonMiddleware[dto.CreateArticleReq],
-            articleHandler.CreateArticle,
-        )
-        
-        // 获取文章详情（公开）
-        rg.GET("/:article_id", 
-            middleware.BindUriMiddleware[dto.GetArticleReq],
-            articleHandler.GetArticle,
-        )
-        
-        // 获取文章列表（公开）
-        rg.GET("", 
-            middleware.BindQueryMiddleware[dto.ListArticlesReq],
-            articleHandler.ListArticles,
-        )
-    })
+**文件**：`internal/router/article.go`（新建）
+
+```go
+package router
+
+func registerArticleRoutes(rg *gin.RouterGroup) {
+    articleHandler := handler.NewArticleHandler()
+
+    // 创建文章（需要登录）
+    rg.POST("",
+        middleware.Authentication(jwtx.COMMON_USER),
+        middleware.BindJsonMiddleware[dto.CreateArticleReq],
+        articleHandler.CreateArticle,
+    )
+
+    // 获取文章详情（公开）
+    rg.GET("/:article_id",
+        middleware.BindUriMiddleware[dto.GetArticleReq],
+        articleHandler.GetArticle,
+    )
+
+    // 获取文章列表（公开）
+    rg.GET("",
+        middleware.BindQueryMiddleware[dto.ListArticlesReq],
+        articleHandler.ListArticles,
+    )
 }
 ```
 
@@ -588,8 +568,8 @@ func registerRoutes(routeManager *manager.RouteManager) {
 | `internal/repo/sqlc.yaml` | 添加 article 模块配置 |
 | `internal/repo/errors.go` | 添加 `ErrArticleNotExist` |
 | `internal/logic/errors.go` | 添加文章相关错误 |
-| `internal/manger/enter.go` | 添加 `ArticleRoutes` 和注册方法 |
-| `internal/router/enter.go` | 注册 article 路由 |
+| `internal/router/enter.go` | 挂载 article 顶层路由组 |
+| `internal/router/article.go` | 注册 article 模块路由 |
 
 ## 测试
 

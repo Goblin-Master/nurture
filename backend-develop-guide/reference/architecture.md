@@ -11,7 +11,7 @@
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Router (路由层)                              │
-│  internal/router/enter.go + internal/manger/enter.go            │
+│  internal/router/*.go                                           │
 │  职责：路由注册、中间件配置、路由分组                               │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
@@ -319,23 +319,26 @@ func main() {
 
 ## 路由管理
 
-**位置**：`internal/manger/enter.go` + `internal/router/enter.go`
+**位置**：`internal/router/`
 
-路由使用 `RouteManager` 进行分组管理：
+路由在 `router` 包内按业务模块拆分注册，`enter.go` 只负责 Gin 初始化、全局中间件和顶层路由组：
 
 ```go
-// 创建路由管理器
-routeManager := manager.NewRouteManager(r)
+func registerRoutes(r *gin.Engine) {
+    api := r.Group("/api")
 
-// 按业务注册路由
-routeManager.RegisterUserRoutes(func(rg *gin.RouterGroup) {
+    registerUserRoutes(api.Group("/user"))
+    registerCommonRoutes(api.Group("/common"))
+}
+
+func registerUserRoutes(rg *gin.RouterGroup) {
     userHandler := handler.NewUserHandler()
     rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
-})
+}
 
-routeManager.RegisterCommonRoutes(func(rg *gin.RouterGroup) {
+func registerCommonRoutes(rg *gin.RouterGroup) {
     rg.GET("/ping", func(c *gin.Context) {
         response.Response(c, "pong", nil)
     })
-})
+}
 ```

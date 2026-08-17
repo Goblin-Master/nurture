@@ -142,8 +142,8 @@ To add a new API (e.g., `POST /api/user/profile`):
     }
     ```
 
-2.  **Define Route (`internal/router` & `internal/manager`)**:
-    Register the route in `RouteManager`.
+2.  **Define Route (`internal/router`)**:
+    Register the route in the module router file, such as `internal/router/user.go`.
 
 3.  **Implement Logic (`internal/logic`)**:
     Add method to `IUserLogic` interface and implement it.

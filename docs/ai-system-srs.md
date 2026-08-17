@@ -68,11 +68,12 @@ internal/
 ├── logic/               # 业务逻辑
 │   ├── errors.go        # Logic 层错误定义
 │   └── common.go        # CommonLogic（含 AI 逻辑）
-├── manger/              # 路由管理器
-│   └── enter.go
 ├── middleware/          # 中间件
 │   ├── bind.go
 │   └── cors.go
+├── router/              # 路由注册
+│   ├── enter.go
+│   └── common.go
 ├── pkg/                 # 基础设施包
 │   ├── aix/             # AI 功能封装（核心）
 │   │   ├── enter.go     # AIX 结构体和初始化
@@ -1043,23 +1044,33 @@ func (h *CommonHandler) GetChatHistory(c *gin.Context) {
 ```go
 package router
 
-func registerRoutes(routeManager *manager.RouteManager) {
-    routeManager.RegisterCommonRoutes(func(rg *gin.RouterGroup) {
-        commonHandler := handler.NewCommonHandler()
+func registerRoutes(r *gin.Engine) {
+    api := r.Group("/api")
+    registerCommonRoutes(api.Group("/common"))
+}
+```
 
-        // 健康检查
-        rg.GET("/ping", func(c *gin.Context) {
-            response.Response(c, "pong", nil)
-        })
+**文件**：`internal/router/common.go`
 
-        // AI 相关接口
-        ai := rg.Group("/ai")
-        {
-            // 知识库上传
-            ai.POST("/knowledge/upload",
-                middleware.BindJsonMiddleware[dto.KnowledgeUploadReq],
-                commonHandler.UploadKnowledge,
-            )
+```go
+package router
+
+func registerCommonRoutes(rg *gin.RouterGroup) {
+    commonHandler := handler.NewCommonHandler()
+
+    // 健康检查
+    rg.GET("/ping", func(c *gin.Context) {
+        response.Response(c, "pong", nil)
+    })
+
+    // AI 相关接口
+    ai := rg.Group("/ai")
+    {
+        // 知识库上传
+        ai.POST("/knowledge/upload",
+            middleware.BindJsonMiddleware[dto.KnowledgeUploadReq],
+            commonHandler.UploadKnowledge,
+        )
 
             // 流式对话
             ai.POST("/chat/stream",
