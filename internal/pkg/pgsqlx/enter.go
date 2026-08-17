@@ -25,25 +25,5 @@ func InitPgsql() *pgxpool.Pool {
 		panic(fmt.Sprintf("ping pgsql error: %v", err))
 	}
 
-	if err := ensurePasswordSchema(context.Background(), pool); err != nil {
-		fmt.Printf("ensure schema error: %v\n", err)
-	}
-
 	return pool
-}
-
-func ensurePasswordSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	_, err := pool.Exec(ctx, `ALTER TABLE IF EXISTS "user_base" ALTER COLUMN password TYPE VARCHAR(255)`)
-	if err != nil {
-		return err
-	}
-	_, err = pool.Exec(ctx, `ALTER TABLE IF EXISTS "user_base" ALTER COLUMN email TYPE VARCHAR(255)`)
-	if err != nil {
-		return err
-	}
-	_, err = pool.Exec(ctx, `ALTER TABLE IF EXISTS "user_base" ALTER COLUMN email DROP NOT NULL`)
-	if err != nil {
-		return err
-	}
-	return nil
 }
