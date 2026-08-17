@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var rl = ratelimitx.NewWindowLimiter(nil)
+var rl = ratelimitx.NewLimiter(nil)
 
 func RateLimitUser(key string, limit int64, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {

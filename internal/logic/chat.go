@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var wsMsgRL = ratelimitx.NewWindowLimiter(nil)
+var wsMsgRL = ratelimitx.NewLimiter(nil)
 
 type IChatLogic interface {
 	CreateGroup(ctx context.Context, userID string, req dto.CreateChatGroupReq) (dto.CreateChatGroupResp, error)

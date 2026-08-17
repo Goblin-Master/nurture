@@ -8,82 +8,88 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-type WindowLimiter struct {
-	mu  sync.RWMutex
-	rdb redis.Cmdable
-	mem *memWindowLimiter
+type Algorithm string
+
+const (
+	AlgorithmSlidingWindow Algorithm = "sliding_window"
+	AlgorithmTokenBucket   Algorithm = "token_bucket"
+	AlgorithmLeakyBucket   Algorithm = "leaky_bucket"
+)
+
+type Limiter struct {
+	mu        sync.RWMutex
+	rdb       redis.Cmdable
+	algorithm Algorithm
+	mem       *memLimiter
+	seq       uint64
 }
 
-func NewWindowLimiter(rdb redis.Cmdable) *WindowLimiter {
-	return &WindowLimiter{
-		rdb: rdb,
-		mem: newMemWindowLimiter(),
+func NewLimiter(rdb redis.Cmdable) *Limiter {
+	return NewLimiterWithAlgorithm(rdb, AlgorithmSlidingWindow)
+}
+
+func NewLimiterWithAlgorithm(rdb redis.Cmdable, algorithm Algorithm) *Limiter {
+	return &Limiter{
+		rdb:       rdb,
+		algorithm: normalizeAlgorithm(algorithm),
+		mem:       newMemLimiter(),
 	}
 }
 
-func (l *WindowLimiter) SetRedis(rdb redis.Cmdable) {
+func (l *Limiter) SetRedis(rdb redis.Cmdable) {
 	l.mu.Lock()
 	l.rdb = rdb
 	l.mu.Unlock()
 }
 
-func (l *WindowLimiter) Allow(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, error) {
+func (l *Limiter) SetAlgorithm(algorithm Algorithm) {
+	l.mu.Lock()
+	l.algorithm = normalizeAlgorithm(algorithm)
+	l.mu.Unlock()
+}
+
+func (l *Limiter) Allow(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, error) {
+	l.mu.RLock()
+	algorithm := l.algorithm
+	l.mu.RUnlock()
+	return l.AllowWithAlgorithm(ctx, algorithm, key, limit, window)
+}
+
+func (l *Limiter) AllowWithAlgorithm(ctx context.Context, algorithm Algorithm, key string, limit int64, window time.Duration) (bool, int64, error) {
 	if limit <= 0 {
 		return true, 0, nil
 	}
-	if window <= 0 {
-		window = time.Second
-	}
+	window = normalizeWindow(window)
+	algorithm = normalizeAlgorithm(algorithm)
+
 	l.mu.RLock()
 	rdb := l.rdb
 	l.mu.RUnlock()
 	if rdb == nil {
-		return l.mem.allow(key, limit, window), 0, nil
+		allowed, remaining := l.mem.allow(algorithm, key, limit, window)
+		return allowed, remaining, nil
 	}
-	ttl := window
-	n, err := rdb.Incr(ctx, key).Result()
+
+	allowed, remaining, err := l.allowRedis(ctx, rdb, algorithm, key, limit, window)
 	if err != nil {
-		return l.mem.allow(key, limit, window), 0, nil
+		allowed, remaining = l.mem.allow(algorithm, key, limit, window)
+		return allowed, remaining, nil
 	}
-	if n == 1 {
-		_ = rdb.Expire(ctx, key, ttl).Err()
-	}
-	if n > limit {
-		return false, 0, nil
-	}
-	return true, limit - n, nil
+	return allowed, remaining, nil
 }
 
-type memWindowLimiter struct {
-	mu   sync.Mutex
-	data map[string]memWindowItem
-}
-
-type memWindowItem struct {
-	slot  int64
-	count int64
-}
-
-func newMemWindowLimiter() *memWindowLimiter {
-	return &memWindowLimiter{
-		data: make(map[string]memWindowItem),
+func normalizeAlgorithm(algorithm Algorithm) Algorithm {
+	switch algorithm {
+	case AlgorithmTokenBucket, AlgorithmLeakyBucket, AlgorithmSlidingWindow:
+		return algorithm
+	default:
+		return AlgorithmSlidingWindow
 	}
 }
 
-func (m *memWindowLimiter) allow(key string, limit int64, window time.Duration) bool {
-	now := time.Now().UnixNano()
-	slot := now / window.Nanoseconds()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	item, ok := m.data[key]
-	if !ok || item.slot != slot {
-		m.data[key] = memWindowItem{slot: slot, count: 1}
-		return true
+func normalizeWindow(window time.Duration) time.Duration {
+	if window <= 0 {
+		return time.Second
 	}
-	if item.count >= limit {
-		return false
-	}
-	item.count++
-	m.data[key] = item
-	return true
+	return window
 }
