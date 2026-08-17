@@ -187,12 +187,11 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 	// 2. RAG 检索
 	var ragContext string
 	// 构建需要检索的知识库集合
-	collections := l.buildCollections(userID, req.KBConfig)
+	collections := l.buildCollections(userID)
 
 	// 如果有选中的知识库，则进行检索
 	if len(collections) > 0 {
-		// 默认 topK 为 3，可配置，故意不暴露给前端的
-		topK := req.KBConfig.TopK
+		topK := config.Conf.AI.KBConfig.TopK
 		if topK <= 0 {
 			topK = config.Conf.AI.Retrieval.DefaultTopK
 		}
@@ -299,8 +298,9 @@ func (l *CommonLogic) GetChatHistory(ctx context.Context, userID string, req dto
 	return resp, nil
 }
 
-func (l *CommonLogic) buildCollections(userID string, cfg config.KBConfig) []string {
+func (l *CommonLogic) buildCollections(userID string) []string {
 	var collections []string
+	cfg := config.Conf.AI.KBConfig
 	if !cfg.Enable {
 		return collections
 	}

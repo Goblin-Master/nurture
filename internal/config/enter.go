@@ -23,6 +23,7 @@ type AI struct {
 	Embedding EmbeddingModel `mapstructure:"embedding"`
 	Chunking  Chunking       `mapstructure:"chunking"`
 	Retrieval Retrieval      `mapstructure:"retrieval"`
+	KBConfig  KBConfig       `mapstructure:"kb_config"`
 }
 
 type ChatModel struct {
@@ -50,12 +51,11 @@ type Retrieval struct {
 	SimilarityThreshold float32 `mapstructure:"similarity_threshold"`
 }
 
-// KBConfig defines per-request knowledge base search options.
 type KBConfig struct {
-	Enable        bool `json:"enable" default:"false"`
-	SearchPrivate bool `json:"search_private" default:"false"`
-	SearchPublic  bool `json:"search_public" default:"false"`
-	TopK          int  `json:"top_k" default:"3"`
+	Enable        bool `mapstructure:"enable"`
+	SearchPrivate bool `mapstructure:"search_private"`
+	SearchPublic  bool `mapstructure:"search_public"`
+	TopK          int  `mapstructure:"top_k"`
 }
 
 type App struct {
