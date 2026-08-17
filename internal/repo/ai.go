@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"nurture/internal/config"
 	"nurture/internal/constant"
 	"nurture/internal/global"
 	"nurture/internal/pkg/aix"
@@ -42,7 +41,7 @@ func (r *AIRepo) AddDocument(ctx context.Context, collectionName, content string
 
 func (r *AIRepo) SimilaritySearch(ctx context.Context, query string,
 	collections []string, topK int) ([]schema.Document, error) {
-	docs, err := global.AIX.SimilaritySearch(ctx, query, collections, config.Conf.AI.Retrieval.DefaultTopK)
+	docs, err := global.AIX.SimilaritySearch(ctx, query, collections, topK)
 	if err != nil {
 		if global.Log != nil {
 			global.Log.Error(err)
