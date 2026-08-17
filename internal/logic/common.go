@@ -170,8 +170,8 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 		}
 		payload := struct {
 			Data        dto.GrowthReportData `json:"data"`
-			TotalPoints int                 `json:"total_points"`
-			Truncated   bool                `json:"truncated"`
+			TotalPoints int                  `json:"total_points"`
+			Truncated   bool                 `json:"truncated"`
 		}{
 			Data:        data,
 			TotalPoints: totalPoints,
@@ -299,7 +299,7 @@ func (l *CommonLogic) GetChatHistory(ctx context.Context, userID string, req dto
 	return resp, nil
 }
 
-func (l *CommonLogic) buildCollections(userID string, cfg dto.KBConfig) []string {
+func (l *CommonLogic) buildCollections(userID string, cfg config.KBConfig) []string {
 	var collections []string
 	if !cfg.Enable {
 		return collections

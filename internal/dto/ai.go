@@ -1,5 +1,7 @@
 package dto
 
+import "nurture/internal/config"
+
 // 知识库上传
 type (
 	KnowledgeUploadReq struct {
@@ -11,24 +13,16 @@ type (
 	}
 )
 
-// 知识库配置
-type KBConfig struct {
-	Enable        bool `json:"enable" default:"false"`
-	SearchPrivate bool `json:"search_private" default:"false"`
-	SearchPublic  bool `json:"search_public" default:"false"`
-	TopK          int  `json:"top_k" default:"3"`
-}
-
 // AI 对话
 type (
 	ChatStreamReq struct {
-		SessionID   string   `json:"session_id" binding:"required"`
-		Message     string   `json:"message" binding:"required"`
-		Images      []string `json:"images"`
-		KBConfig    KBConfig `json:"kb_config"`
-		AutoContext bool     `json:"auto_context"`
-		BabyID      string   `json:"baby_id"`
-		ContextDays int      `json:"context_days"`
+		SessionID   string          `json:"session_id" binding:"required"`
+		Message     string          `json:"message" binding:"required"`
+		Images      []string        `json:"images"`
+		KBConfig    config.KBConfig `json:"kb_config"`
+		AutoContext bool            `json:"auto_context"`
+		BabyID      string          `json:"baby_id"`
+		ContextDays int             `json:"context_days"`
 	}
 )
 
