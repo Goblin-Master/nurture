@@ -196,16 +196,6 @@ POST /api/common/ai/chat/stream
 | session_id | string   | 是   | 会话ID（前端生成）                 |
 | message    | string   | 是   | 用户消息内容                       |
 | images     | []string | 否   | 图片URL列表                        |
-| kb_config  | object   | 否   | 知识库查询配置                     |
-
-**kb_config 配置**：
-
-| 字段           | 类型 | 默认值 | 说明                 |
-| -------------- | ---- | ------ | -------------------- |
-| enabled        | bool | false  | 是否启用知识库检索   |
-| search_private | bool | false  | 是否搜索私有知识库   |
-| search_public  | bool | false  | 是否搜索公共知识库   |
-| top_k          | int  | 3      | 返回最相关的文档数量 |
 
 **请求示例**：
 
@@ -213,15 +203,11 @@ POST /api/common/ai/chat/stream
 {
   "session_id": "sess_789",
   "message": "请帮我解释一下这个操作步骤",
-  "images": ["https://example.com/screenshot.png"],
-  "kb_config": {
-    "enabled": true,
-    "search_private": true,
-    "search_public": true,
-    "top_k": 3
-  }
+  "images": ["https://example.com/screenshot.png"]
 }
 ```
+
+知识库检索不从请求体读取配置，由后端 `config.Conf.AI.KBConfig` 统一控制。
 
 **响应格式**：Server-Sent Events (SSE)
 
@@ -330,14 +316,6 @@ type (
     }
 )
 
-// 知识库配置
-type KBConfig struct {
-    Enabled       bool `json:"enabled"`
-    SearchPrivate bool `json:"search_private"`
-    SearchPublic  bool `json:"search_public"`
-    TopK          int  `json:"top_k"`
-}
-
 // AI 对话
 type (
     ChatStreamReq struct {
@@ -345,7 +323,6 @@ type (
         SessionID string   `json:"session_id" binding:"required"`
         Message   string   `json:"message" binding:"required"`
         Images    []string `json:"images"`
-        KBConfig  KBConfig `json:"kb_config"`
     }
 )
 
@@ -902,11 +879,11 @@ func (l *CommonLogic) ChatStream(ctx context.Context, req dto.ChatStreamReq,
 
     // 2. RAG 检索（如果启用）
     var ragContext string
-    if req.KBConfig.Enabled {
-        collections := l.buildCollections(req.UserID, req.KBConfig)
-        topK := req.KBConfig.TopK
+    if config.Conf.AI.KBConfig.Enable {
+        collections := l.buildCollections(req.UserID)
+        topK := config.Conf.AI.KBConfig.TopK
         if topK <= 0 {
-            topK = 3
+            topK = config.Conf.AI.Retrieval.DefaultTopK
         }
 
         docs, err := l.aiRepo.SimilaritySearch(ctx, req.Message, collections, topK)
@@ -984,8 +961,9 @@ func (l *CommonLogic) GetChatHistory(ctx context.Context, req dto.ChatHistoryReq
     return resp, nil
 }
 
-func (l *CommonLogic) buildCollections(userID string, cfg dto.KBConfig) []string {
+func (l *CommonLogic) buildCollections(userID string) []string {
     var collections []string
+    cfg := config.Conf.AI.KBConfig
     if cfg.SearchPrivate {
         collections = append(collections, constant.COLLECTION_USER_PREFIX+userID)
     }
@@ -1165,6 +1143,7 @@ type AI struct {
     Embedding EmbeddingModel `mapstructure:"embedding"`
     Chunking  Chunking       `mapstructure:"chunking"`
     Retrieval Retrieval      `mapstructure:"retrieval"`
+    KBConfig  KBConfig       `mapstructure:"kb_config"`
 }
 
 type ChatModel struct {
@@ -1189,6 +1168,13 @@ type Chunking struct {
 type Retrieval struct {
     DefaultTopK         int     `mapstructure:"default_top_k"`
     SimilarityThreshold float32 `mapstructure:"similarity_threshold"`
+}
+
+type KBConfig struct {
+    Enable        bool `mapstructure:"enable"`
+    SearchPrivate bool `mapstructure:"search_private"`
+    SearchPublic  bool `mapstructure:"search_public"`
+    TopK          int  `mapstructure:"top_k"`
 }
 ```
 
@@ -1234,6 +1220,11 @@ ai:
   retrieval:
     default_top_k: 3
     similarity_threshold: 0.7
+  kb_config:
+    enable: false
+    search_private: false
+    search_public: false
+    top_k: 3
 ```
 
 ---

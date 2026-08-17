@@ -16,14 +16,14 @@ flowchart TD
 ```mermaid
 flowchart TD
   U[用户] --> FE[前端]
-  FE -->|POST /api/common/ai/chat/stream<br/>session_id + message + kb_config<br/>可选 auto_context + baby_id + context_days| API[后端 ChatStream]
+  FE -->|POST /api/common/ai/chat/stream<br/>session_id + message<br/>可选 auto_context + baby_id + context_days| API[后端 ChatStream]
 
   API --> AUTH[鉴权 获取 user_id]
 
   API --> H[读取对话历史<br/>session_id 最近N轮]
   H --> API
 
-  API -->|kb_config.enable=true| RAG[向量检索 RAG<br/>private public collections]
+  API -->|config.Conf.AI.KBConfig.Enable=true| RAG[向量检索 RAG<br/>private public collections]
   RAG --> RC[rag_context 文本]
   RC --> API
 
@@ -78,9 +78,9 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  FE[前端] -->|POST /api/common/ai/chat/stream<br/>kb_config.enable=true| API[ChatStream]
+  FE[前端] -->|POST /api/common/ai/chat/stream| API[ChatStream]
   API --> AUTH[鉴权 获取 user_id]
-  API --> COL["根据 kb_config 选择 collections<br/>knowledge_user_USER_ID 或 knowledge_public"]
+  API --> COL["根据 config.Conf.AI.KBConfig 选择 collections<br/>knowledge_user_USER_ID 或 knowledge_public"]
   COL --> QEMB[对 query 做 Embedding]
   QEMB --> SEARCH["向量相似度检索<br/>top_k 和 threshold"]
   SEARCH --> CTX[拼 rag_context 文本]
