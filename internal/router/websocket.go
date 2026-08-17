@@ -8,6 +8,6 @@ import (
 
 func registerWSRoutes(rg *gin.RouterGroup) {
 	wsHandler := handler.NewWebSocketHandler()
-	rg.GET("/chat", wsHandler.Connect)
-	rg.GET("/groups", wsHandler.ConnectGroups)
+	rg.GET("/chat", wsHandler.ConnectDirect)
+	rg.GET("/groups", wsHandler.ConnectGroup)
 }

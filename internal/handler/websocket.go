@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"context"
+	"bytes"
 	"net/http"
 	"nurture/internal/global"
 	"nurture/internal/logic"
 	"nurture/internal/pkg/jwtx"
+	"nurture/internal/pkg/realtimex"
 	"nurture/internal/pkg/response"
-	"nurture/internal/pkg/wsx"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -27,7 +27,12 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (h *WebSocketHandler) Connect(c *gin.Context) {
+var (
+	newline = []byte{'\n'}
+	space   = []byte{' '}
+)
+
+func (h *WebSocketHandler) ConnectDirect(c *gin.Context) {
 	tokenStr := c.Query("token")
 	partnerID := c.Query("user_id")
 
@@ -50,21 +55,17 @@ func (h *WebSocketHandler) Connect(c *gin.Context) {
 		return
 	}
 
-	client := &wsx.Client{
-		Hub:       global.WS,
-		Conn:      conn,
-		Send:      make(chan []byte, 256),
-		UserID:    userID,
-		PartnerID: partnerID,
-	}
-
-	client.Hub.RegisterClient(client)
+	client := realtimex.NewClient(global.Realtime, conn, userID, realtimex.ChannelDirect)
+	client.Hub.Register(client)
 
 	go client.WritePump()
-	go client.ReadPump()
+	go client.ReadPump(func(message []byte) {
+		message = bytes.TrimSpace(bytes.ReplaceAll(message, newline, space))
+		client.Hub.SendToUser(realtimex.ChannelDirect, partnerID, message)
+	})
 }
 
-func (h *WebSocketHandler) ConnectGroups(c *gin.Context) {
+func (h *WebSocketHandler) ConnectGroup(c *gin.Context) {
 	tokenStr := c.Query("token")
 	if tokenStr == "" {
 		response.Response(c, nil, ErrTokenEmpty)
@@ -81,19 +82,10 @@ func (h *WebSocketHandler) ConnectGroups(c *gin.Context) {
 		return
 	}
 	chatLogic := logic.NewChatLogic()
-	client := &wsx.GroupClient{
-		Hub:    global.GWS,
-		Conn:   conn,
-		Send:   make(chan []byte, 256),
-		UserID: userID,
-		OnSubscribe: func(ctx context.Context, groupID string) error {
-			return chatLogic.CheckMember(ctx, userID, groupID)
-		},
-		OnSend: func(ctx context.Context, groupID, messageID, msgType, content string, now int64) error {
-			return chatLogic.SaveMessage(ctx, userID, groupID, messageID, msgType, content, now)
-		},
-	}
-	client.Hub.RegisterClient(client)
+	client := realtimex.NewClient(global.Realtime, conn, userID, realtimex.ChannelGroup)
+	client.Hub.Register(client)
 	go client.WritePump()
-	go client.ReadPump()
+	go client.ReadPump(func(message []byte) {
+		h.handleGroupMessage(client, chatLogic, message)
+	})
 }

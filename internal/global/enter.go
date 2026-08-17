@@ -5,8 +5,8 @@ import (
 	"nurture/internal/pkg/aix"
 	"nurture/internal/pkg/miniox"
 	"nurture/internal/pkg/pgsqlx"
+	"nurture/internal/pkg/realtimex"
 	"nurture/internal/pkg/redisx"
-	"nurture/internal/pkg/wsx"
 	"nurture/internal/pkg/zapx"
 
 	"github.com/go-redis/redis/v8"
@@ -16,13 +16,12 @@ import (
 )
 
 var (
-	Log *zap.SugaredLogger
-	DB  *pgxpool.Pool
-	RDB redis.Cmdable
-	MIO *minio.Client
-	AIX *aix.AIX // AI 功能实例
-	WS  *wsx.Hub // WebSocket Hub
-	GWS *wsx.GroupHub
+	Log      *zap.SugaredLogger
+	DB       *pgxpool.Pool
+	RDB      redis.Cmdable
+	MIO      *minio.Client
+	AIX      *aix.AIX // AI 功能实例
+	Realtime *realtimex.Hub
 )
 
 func Init() {
@@ -31,12 +30,8 @@ func Init() {
 	RDB = redisx.InitRedis()
 	MIO = miniox.InitMinio()
 
-	// 初始化 WebSocket Hub
-	wsx.Log = Log // 注入 Logger
-	WS = wsx.NewHub()
-	go WS.Run()
-	GWS = wsx.NewGroupHub()
-	go GWS.Run()
+	Realtime = realtimex.NewHub()
+	go Realtime.Run()
 
 	// 初始化 AIX
 	var err error
