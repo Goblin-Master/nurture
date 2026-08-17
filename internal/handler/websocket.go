@@ -6,6 +6,7 @@ import (
 	"nurture/internal/global"
 	"nurture/internal/logic"
 	"nurture/internal/pkg/jwtx"
+	"nurture/internal/pkg/response"
 	"nurture/internal/pkg/wsx"
 
 	"github.com/gin-gonic/gin"
@@ -31,14 +32,14 @@ func (h *WebSocketHandler) Connect(c *gin.Context) {
 	partnerID := c.Query("user_id")
 
 	if tokenStr == "" || partnerID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing token or user_id"})
+		response.Response(c, nil, ErrTokenEmpty)
 		return
 	}
 
 	// Verify token
 	claims, err := jwtx.ParseTokenString(tokenStr)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		response.Response(c, nil, ErrTokenInvalid)
 		return
 	}
 
@@ -66,12 +67,12 @@ func (h *WebSocketHandler) Connect(c *gin.Context) {
 func (h *WebSocketHandler) ConnectGroups(c *gin.Context) {
 	tokenStr := c.Query("token")
 	if tokenStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing token"})
+		response.Response(c, nil, ErrTokenEmpty)
 		return
 	}
 	claims, err := jwtx.ParseTokenString(tokenStr)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		response.Response(c, nil, ErrTokenInvalid)
 		return
 	}
 	userID := claims.UserID
