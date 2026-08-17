@@ -614,11 +614,10 @@ func (ur *UserRepo) IsPhoneUsed(ctx context.Context, phone string, excludeUserID
 	if err := exclude.Scan(excludeUserID); err != nil {
 		return false, err
 	}
-	var exists bool
-	err := global.DB.QueryRow(ctx, `SELECT EXISTS(
-		SELECT 1 FROM "user_addition"
-		WHERE phone = $1 AND phone <> '' AND user_id <> $2
-	)`, phone, exclude).Scan(&exists)
+	exists, err := ur.userDao.IsPhoneUsed(ctx, user.IsPhoneUsedParams{
+		Phone:  phone,
+		UserID: exclude,
+	})
 	if err != nil {
 		global.Log.Error(err)
 		return false, ErrDefault
@@ -631,7 +630,11 @@ func (ur *UserRepo) BindEmail(ctx context.Context, userID, email string) error {
 	if err := uid.Scan(userID); err != nil {
 		return err
 	}
-	cmd, err := global.DB.Exec(ctx, `UPDATE "user_base" SET email = $2, utime = $3 WHERE user_id = $1`, uid, email, time.Now().UnixMilli())
+	count, err := ur.userDao.BindEmailByUserID(ctx, user.BindEmailByUserIDParams{
+		UserID: uid,
+		Email:  pgtype.Text{String: email, Valid: true},
+		Utime:  time.Now().UnixMilli(),
+	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -643,7 +646,7 @@ func (ur *UserRepo) BindEmail(ctx context.Context, userID, email string) error {
 		global.Log.Error(err)
 		return ErrUserUpdateFailed
 	}
-	if cmd.RowsAffected() == 0 {
+	if count == 0 {
 		return ErrUserNotExist
 	}
 	_ = cache.Del(ctx, ur.rdb, cache.UserProfileKey(userID))

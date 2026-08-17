@@ -33,6 +33,11 @@ UPDATE "user_base"
 SET password = $2, utime = $3
 WHERE user_id = $1;
 
+-- name: BindEmailByUserID :execrows
+UPDATE "user_base"
+SET email = $2, utime = $3
+WHERE user_id = $1;
+
 -- name: GetMyProfile :one
 SELECT 
   ub.user_id::text AS user_id,
@@ -67,6 +72,12 @@ SELECT EXISTS(
   SELECT 1 FROM "user_follow"
   WHERE follower = $1 AND followee = $2
 ) AS is_following;
+
+-- name: IsPhoneUsed :one
+SELECT EXISTS(
+  SELECT 1 FROM "user_addition"
+  WHERE phone = $1 AND phone <> '' AND user_id <> $2
+) AS is_phone_used;
 
 -- name: ListFollowingByUserID :many
 SELECT 

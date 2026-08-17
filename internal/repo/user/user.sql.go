@@ -77,6 +77,26 @@ func (q *Queries) AdminUpdateUserRole(ctx context.Context, arg AdminUpdateUserRo
 	return result.RowsAffected(), nil
 }
 
+const bindEmailByUserID = `-- name: BindEmailByUserID :execrows
+UPDATE "user_base"
+SET email = $2, utime = $3
+WHERE user_id = $1
+`
+
+type BindEmailByUserIDParams struct {
+	UserID pgtype.UUID
+	Email  pgtype.Text
+	Utime  int64
+}
+
+func (q *Queries) BindEmailByUserID(ctx context.Context, arg BindEmailByUserIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, bindEmailByUserID, arg.UserID, arg.Email, arg.Utime)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createFollow = `-- name: CreateFollow :exec
 INSERT INTO "user_follow"(follower, followee, ctime, utime)
 VALUES ($1, $2, $3, $3)
@@ -336,6 +356,25 @@ func (q *Queries) IsFollowing(ctx context.Context, arg IsFollowingParams) (bool,
 	var is_following bool
 	err := row.Scan(&is_following)
 	return is_following, err
+}
+
+const isPhoneUsed = `-- name: IsPhoneUsed :one
+SELECT EXISTS(
+  SELECT 1 FROM "user_addition"
+  WHERE phone = $1 AND phone <> '' AND user_id <> $2
+) AS is_phone_used
+`
+
+type IsPhoneUsedParams struct {
+	Phone  string
+	UserID pgtype.UUID
+}
+
+func (q *Queries) IsPhoneUsed(ctx context.Context, arg IsPhoneUsedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isPhoneUsed, arg.Phone, arg.UserID)
+	var is_phone_used bool
+	err := row.Scan(&is_phone_used)
+	return is_phone_used, err
 }
 
 const listFollowersByUserID = `-- name: ListFollowersByUserID :many
