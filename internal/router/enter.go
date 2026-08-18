@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"nurture/internal/config"
 	"nurture/internal/middleware"
+	routerchat "nurture/internal/router/chat"
 
 	"github.com/gin-gonic/gin"
 )
@@ -38,10 +39,9 @@ func registerRoutes(r *gin.Engine) {
 	api := r.Group("/api")
 
 	registerCommonRoutes(api.Group("/common"))
-	registerChatRoutes(api.Group("/chat"))
+	routerchat.RegisterRoutes(api.Group("/chat"))
 	registerUserRoutes(api.Group("/user"))
 	registerBabyRoutes(api.Group("/baby"))
 	registerPostRoutes(api.Group("/post"))
 	registerAdminRoutes(api.Group("/admin"))
-	registerWSRoutes(r.Group("/ws"))
 }
