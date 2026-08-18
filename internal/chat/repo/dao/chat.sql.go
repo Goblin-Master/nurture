@@ -3,7 +3,7 @@
 //   sqlc v1.30.0
 // source: chat.sql
 
-package chat
+package dao
 
 import (
 	"context"

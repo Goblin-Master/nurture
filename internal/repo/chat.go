@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"nurture/internal/chat/repo/dao"
 	"nurture/internal/global"
-	"nurture/internal/repo/chat"
 	"strings"
 	"time"
 
@@ -94,12 +94,12 @@ type IChatRepo interface {
 }
 
 type ChatRepo struct {
-	dao *chat.Queries
+	dao *dao.Queries
 }
 
 func NewChatRepo() *ChatRepo {
 	return &ChatRepo{
-		dao: chat.New(global.DB),
+		dao: dao.New(global.DB),
 	}
 }
 
@@ -117,7 +117,7 @@ func (r *ChatRepo) CreateGroup(ctx context.Context, groupID, ownerID, name, avat
 	if memberLimit <= 0 {
 		return ErrParamsType
 	}
-	if err := r.dao.CreateChatGroup(ctx, chat.CreateChatGroupParams{
+	if err := r.dao.CreateChatGroup(ctx, dao.CreateChatGroupParams{
 		GroupID:     gid,
 		OwnerID:     oid,
 		Name:        name,
@@ -158,7 +158,7 @@ func (r *ChatRepo) JoinGroup(ctx context.Context, groupID, userID string, now in
 		return ErrDefault
 	}
 
-	if _, e := qtx.GetChatGroupMemberRole(ctx, chat.GetChatGroupMemberRoleParams{GroupID: gid, UserID: uid}); e == nil {
+	if _, e := qtx.GetChatGroupMemberRole(ctx, dao.GetChatGroupMemberRoleParams{GroupID: gid, UserID: uid}); e == nil {
 		return tx.Commit(ctx)
 	} else if !errors.Is(e, pgx.ErrNoRows) {
 		global.Log.Error(e)
@@ -169,7 +169,7 @@ func (r *ChatRepo) JoinGroup(ctx context.Context, groupID, userID string, now in
 		return ErrChatGroupFull
 	}
 
-	if err := qtx.CreateChatGroupMember(ctx, chat.CreateChatGroupMemberParams{
+	if err := qtx.CreateChatGroupMember(ctx, dao.CreateChatGroupMemberParams{
 		GroupID: gid,
 		UserID:  uid,
 		Role:    "member",
@@ -178,7 +178,7 @@ func (r *ChatRepo) JoinGroup(ctx context.Context, groupID, userID string, now in
 		global.Log.Error(err)
 		return ErrDefault
 	}
-	if _, err := qtx.IncChatGroupMemberCount(ctx, chat.IncChatGroupMemberCountParams{
+	if _, err := qtx.IncChatGroupMemberCount(ctx, dao.IncChatGroupMemberCountParams{
 		GroupID: gid,
 		Utime:   now,
 	}); err != nil {
@@ -212,7 +212,7 @@ func (r *ChatRepo) LeaveGroup(ctx context.Context, groupID, userID string, now i
 		global.Log.Error(err)
 		return ErrDefault
 	}
-	role, err := qtx.GetChatGroupMemberRole(ctx, chat.GetChatGroupMemberRoleParams{GroupID: gid, UserID: uid})
+	role, err := qtx.GetChatGroupMemberRole(ctx, dao.GetChatGroupMemberRoleParams{GroupID: gid, UserID: uid})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrChatNotMember
@@ -223,7 +223,7 @@ func (r *ChatRepo) LeaveGroup(ctx context.Context, groupID, userID string, now i
 	if role == "owner" {
 		return ErrChatOwnerMustTransferFirst
 	}
-	aff, err := qtx.DeleteChatGroupMember(ctx, chat.DeleteChatGroupMemberParams{
+	aff, err := qtx.DeleteChatGroupMember(ctx, dao.DeleteChatGroupMemberParams{
 		GroupID: gid,
 		UserID:  uid,
 	})
@@ -234,7 +234,7 @@ func (r *ChatRepo) LeaveGroup(ctx context.Context, groupID, userID string, now i
 	if aff == 0 {
 		return ErrChatNotMember
 	}
-	if _, err := qtx.DecChatGroupMemberCount(ctx, chat.DecChatGroupMemberCountParams{
+	if _, err := qtx.DecChatGroupMemberCount(ctx, dao.DecChatGroupMemberCountParams{
 		GroupID: gid,
 		Utime:   now,
 	}); err != nil {
@@ -275,14 +275,14 @@ func (r *ChatRepo) TransferOwner(ctx context.Context, groupID, ownerID, targetUs
 	if g.OwnerID != oid {
 		return ErrChatPermissionDenied
 	}
-	if _, err := qtx.GetChatGroupMemberRole(ctx, chat.GetChatGroupMemberRoleParams{GroupID: gid, UserID: tid}); err != nil {
+	if _, err := qtx.GetChatGroupMemberRole(ctx, dao.GetChatGroupMemberRoleParams{GroupID: gid, UserID: tid}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrChatNotMember
 		}
 		global.Log.Error(err)
 		return ErrDefault
 	}
-	aff, err := qtx.TransferChatGroupOwner(ctx, chat.TransferChatGroupOwnerParams{
+	aff, err := qtx.TransferChatGroupOwner(ctx, dao.TransferChatGroupOwnerParams{
 		GroupID:  gid,
 		UserID:   tid,
 		UserID_2: oid,
@@ -296,7 +296,7 @@ func (r *ChatRepo) TransferOwner(ctx context.Context, groupID, ownerID, targetUs
 	if aff <= 0 {
 		return ErrDefault
 	}
-	if _, err := qtx.UpdateChatGroupOwnerID(ctx, chat.UpdateChatGroupOwnerIDParams{
+	if _, err := qtx.UpdateChatGroupOwnerID(ctx, dao.UpdateChatGroupOwnerIDParams{
 		GroupID: gid,
 		OwnerID: tid,
 		Utime:   now,
@@ -367,7 +367,7 @@ func (r *ChatRepo) UpdateMemberLastSeenTime(ctx context.Context, groupID, userID
 	if lastSeenTime <= 0 {
 		lastSeenTime = time.Now().UnixMilli()
 	}
-	aff, err := r.dao.UpdateChatGroupMemberLastSeenTime(ctx, chat.UpdateChatGroupMemberLastSeenTimeParams{
+	aff, err := r.dao.UpdateChatGroupMemberLastSeenTime(ctx, dao.UpdateChatGroupMemberLastSeenTimeParams{
 		GroupID:      gid,
 		UserID:       uid,
 		LastSeenTime: lastSeenTime,
@@ -426,7 +426,7 @@ func (r *ChatRepo) ListDiscoverGroups(ctx context.Context, userID, seed, cursorS
 	realLimit := int32(limit + 1)
 	var rowsAny any
 	if cursorSortKey == "" && cursorGroupID == "" {
-		rows, err := r.dao.ListDiscoverChatGroupsFirst(ctx, chat.ListDiscoverChatGroupsFirstParams{
+		rows, err := r.dao.ListDiscoverChatGroupsFirst(ctx, dao.ListDiscoverChatGroupsFirstParams{
 			UserID:  uid,
 			Column2: seed,
 			Limit:   realLimit,
@@ -441,7 +441,7 @@ func (r *ChatRepo) ListDiscoverGroups(ctx context.Context, userID, seed, cursorS
 		if err := gid.Scan(cursorGroupID); err != nil {
 			return nil, "", false, ErrParamsType
 		}
-		rows, err := r.dao.ListDiscoverChatGroupsAfter(ctx, chat.ListDiscoverChatGroupsAfterParams{
+		rows, err := r.dao.ListDiscoverChatGroupsAfter(ctx, dao.ListDiscoverChatGroupsAfterParams{
 			UserID:  uid,
 			Column2: seed,
 			Column3: cursorSortKey,
@@ -457,7 +457,7 @@ func (r *ChatRepo) ListDiscoverGroups(ctx context.Context, userID, seed, cursorS
 
 	var items []ChatGroupDiscoverItem
 	switch v := rowsAny.(type) {
-	case []chat.ListDiscoverChatGroupsFirstRow:
+	case []dao.ListDiscoverChatGroupsFirstRow:
 		items = make([]ChatGroupDiscoverItem, 0, len(v))
 		for _, r := range v {
 			items = append(items, ChatGroupDiscoverItem{
@@ -469,7 +469,7 @@ func (r *ChatRepo) ListDiscoverGroups(ctx context.Context, userID, seed, cursorS
 				SortKey:     r.SortKey,
 			})
 		}
-	case []chat.ListDiscoverChatGroupsAfterRow:
+	case []dao.ListDiscoverChatGroupsAfterRow:
 		items = make([]ChatGroupDiscoverItem, 0, len(v))
 		for _, r := range v {
 			items = append(items, ChatGroupDiscoverItem{
@@ -504,7 +504,7 @@ func (r *ChatRepo) SearchGroupsByName(ctx context.Context, keyword string, limit
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := r.dao.SearchChatGroupsByName(ctx, chat.SearchChatGroupsByNameParams{
+	rows, err := r.dao.SearchChatGroupsByName(ctx, dao.SearchChatGroupsByNameParams{
 		Column1: pgtype.Text{String: keyword, Valid: true},
 		Limit:   int32(limit),
 	})
@@ -541,7 +541,7 @@ func (r *ChatRepo) GetGroupProfile(ctx context.Context, groupID string, memberPr
 		global.Log.Error(err)
 		return ChatGroupProfileItem{}, nil, ErrDefault
 	}
-	members, err := r.dao.ListChatGroupMembersPreviewWithProfile(ctx, chat.ListChatGroupMembersPreviewWithProfileParams{
+	members, err := r.dao.ListChatGroupMembersPreviewWithProfile(ctx, dao.ListChatGroupMembersPreviewWithProfileParams{
 		GroupID: gid,
 		Limit:   int32(memberPreviewLimit),
 	})
@@ -587,7 +587,7 @@ func (r *ChatRepo) ListMembersWithProfile(ctx context.Context, groupID string, p
 	}
 	limit := int32(pageSize + 1)
 	offset := int32((page - 1) * pageSize)
-	rows, err := r.dao.ListChatGroupMembersWithProfile(ctx, chat.ListChatGroupMembersWithProfileParams{
+	rows, err := r.dao.ListChatGroupMembersWithProfile(ctx, dao.ListChatGroupMembersWithProfileParams{
 		GroupID: gid,
 		Limit:   limit,
 		Offset:  offset,
@@ -627,7 +627,7 @@ func (r *ChatRepo) SaveMessage(ctx context.Context, groupID, messageID, fromUser
 	if now <= 0 {
 		now = time.Now().UnixMilli()
 	}
-	aff, err := r.dao.CreateChatGroupMessage(ctx, chat.CreateChatGroupMessageParams{
+	aff, err := r.dao.CreateChatGroupMessage(ctx, dao.CreateChatGroupMessageParams{
 		MessageID:  mid,
 		GroupID:    gid,
 		FromUserID: uid,
@@ -653,7 +653,7 @@ func (r *ChatRepo) ListMessagesLatest(ctx context.Context, groupID string, limit
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := r.dao.ListChatGroupMessagesLatest(ctx, chat.ListChatGroupMessagesLatestParams{
+	rows, err := r.dao.ListChatGroupMessagesLatest(ctx, dao.ListChatGroupMessagesLatestParams{
 		GroupID: gid,
 		Limit:   int32(limit),
 	})
@@ -686,7 +686,7 @@ func (r *ChatRepo) ListMessagesBefore(ctx context.Context, groupID string, befor
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := r.dao.ListChatGroupMessagesBefore(ctx, chat.ListChatGroupMessagesBeforeParams{
+	rows, err := r.dao.ListChatGroupMessagesBefore(ctx, dao.ListChatGroupMessagesBeforeParams{
 		GroupID:   gid,
 		Ctime:     beforeCtime,
 		MessageID: mid,
@@ -721,7 +721,7 @@ func (r *ChatRepo) ListMessagesAfter(ctx context.Context, groupID string, afterC
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows, err := r.dao.ListChatGroupMessagesAfter(ctx, chat.ListChatGroupMessagesAfterParams{
+	rows, err := r.dao.ListChatGroupMessagesAfter(ctx, dao.ListChatGroupMessagesAfterParams{
 		GroupID:   gid,
 		Ctime:     afterCtime,
 		MessageID: mid,
@@ -753,7 +753,7 @@ func (r *ChatRepo) GetMemberRole(ctx context.Context, groupID, userID string) (s
 	if err := uid.Scan(userID); err != nil {
 		return "", ErrParamsType
 	}
-	role, err := r.dao.GetChatGroupMemberRole(ctx, chat.GetChatGroupMemberRoleParams{
+	role, err := r.dao.GetChatGroupMemberRole(ctx, dao.GetChatGroupMemberRoleParams{
 		GroupID: gid,
 		UserID:  uid,
 	})

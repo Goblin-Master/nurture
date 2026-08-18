@@ -2,7 +2,7 @@
 // versions:
 //   sqlc v1.30.0
 
-package chat
+package dao
 
 import (
 	"github.com/jackc/pgx/v5/pgtype"

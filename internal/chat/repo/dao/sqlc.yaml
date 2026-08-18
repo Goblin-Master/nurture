@@ -1,0 +1,12 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "sql/chat.sql"
+    schema:
+      - "../../../../deploy/schema/chat.sql"
+      - "../../../../deploy/schema/user.sql"
+    gen:
+      go:
+        package: "dao"
+        out: "."
+        sql_package: "pgx/v5"
