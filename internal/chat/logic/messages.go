@@ -12,7 +12,7 @@ func (l *ChatLogic) SaveMessage(ctx context.Context, userID string, groupID stri
 	if strings.TrimSpace(groupID) == "" || strings.TrimSpace(messageID) == "" {
 		return ErrParamsType
 	}
-	if msgType != constant.MessageTypeText && msgType != constant.MessageTypeImage && msgType != constant.MessageTypeSystem {
+	if !IsGroupMessageType(msgType) {
 		return ErrInvalidMessageType
 	}
 	if content == "" {

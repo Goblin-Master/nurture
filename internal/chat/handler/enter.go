@@ -2,6 +2,7 @@ package handler
 
 import (
 	"nurture/internal/chat/logic"
+	"nurture/internal/chat/session"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,14 +15,16 @@ type ParseTokenFunc func(token string) (string, error)
 
 type ChatHandler struct {
 	chatLogic  logic.IChatLogic
+	hub        *session.Hub
 	getUserID  GetUserIDFunc
 	parseToken ParseTokenFunc
 	respond    RespondFunc
 }
 
-func NewChatHandler(chatLogic logic.IChatLogic, getUserID GetUserIDFunc, parseToken ParseTokenFunc, respond RespondFunc) *ChatHandler {
+func NewChatHandler(chatLogic logic.IChatLogic, hub *session.Hub, getUserID GetUserIDFunc, parseToken ParseTokenFunc, respond RespondFunc) *ChatHandler {
 	return &ChatHandler{
 		chatLogic:  chatLogic,
+		hub:        hub,
 		getUserID:  getUserID,
 		parseToken: parseToken,
 		respond:    respond,

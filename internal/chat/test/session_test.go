@@ -1,21 +1,22 @@
 package test
 
 import (
-	"nurture/internal/pkg/realtimex"
+	"nurture/internal/chat/constant"
+	"nurture/internal/chat/session"
 	"testing"
 	"time"
 )
 
 func TestRealtimeHubSendToUserByChannel(t *testing.T) {
-	hub := realtimex.NewHub()
+	hub := session.NewHub()
 	go hub.Run()
 
-	directClient := realtimex.NewClient(hub, nil, "user-1", realtimex.ChannelDirect)
-	groupClient := realtimex.NewClient(hub, nil, "user-1", realtimex.ChannelGroup)
+	directClient := session.NewClient(hub, nil, "user-1", constant.ChannelDirect)
+	groupClient := session.NewClient(hub, nil, "user-1", constant.ChannelGroup)
 	hub.Register(directClient)
 	hub.Register(groupClient)
 
-	hub.SendToUser(realtimex.ChannelDirect, "user-1", []byte("direct-message"))
+	hub.SendToUser(constant.ChannelDirect, "user-1", []byte("direct-message"))
 
 	got := readRealtimeMessage(t, directClient.Send)
 	if string(got) != "direct-message" {
@@ -25,11 +26,11 @@ func TestRealtimeHubSendToUserByChannel(t *testing.T) {
 }
 
 func TestRealtimeHubBroadcastToSubscribedRoom(t *testing.T) {
-	hub := realtimex.NewHub()
+	hub := session.NewHub()
 	go hub.Run()
 
-	subscriber := realtimex.NewClient(hub, nil, "user-1", realtimex.ChannelGroup)
-	outsider := realtimex.NewClient(hub, nil, "user-2", realtimex.ChannelGroup)
+	subscriber := session.NewClient(hub, nil, "user-1", constant.ChannelGroup)
+	outsider := session.NewClient(hub, nil, "user-2", constant.ChannelGroup)
 	hub.Register(subscriber)
 	hub.Register(outsider)
 	hub.Subscribe(subscriber, "group-1")

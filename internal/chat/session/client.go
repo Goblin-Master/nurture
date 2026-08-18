@@ -1,22 +1,10 @@
-package realtimex
+package session
 
 import (
+	"nurture/internal/chat/constant"
 	"time"
 
 	"github.com/gorilla/websocket"
-)
-
-const (
-	ChannelDirect = "direct"
-	ChannelGroup  = "group"
-)
-
-const (
-	writeWait      = 10 * time.Second
-	pongWait       = 60 * time.Second
-	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 4096
-	sendBufferSize = 256
 )
 
 type Client struct {
@@ -31,7 +19,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID, channel string) *Client {
 	return &Client{
 		Hub:     hub,
 		Conn:    conn,
-		Send:    make(chan []byte, sendBufferSize),
+		Send:    make(chan []byte, constant.WSSendBufferSize),
 		UserID:  userID,
 		Channel: channel,
 	}
@@ -56,10 +44,10 @@ func (c *Client) ReadPump(handleMessage func(message []byte)) {
 		c.Hub.Unregister(c)
 		_ = c.Conn.Close()
 	}()
-	c.Conn.SetReadLimit(maxMessageSize)
-	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.Conn.SetReadLimit(constant.WSMaxMessageSize)
+	c.Conn.SetReadDeadline(time.Now().Add(constant.WSPongWait))
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+		c.Conn.SetReadDeadline(time.Now().Add(constant.WSPongWait))
 		return nil
 	})
 	for {
@@ -74,7 +62,7 @@ func (c *Client) ReadPump(handleMessage func(message []byte)) {
 }
 
 func (c *Client) WritePump() {
-	ticker := time.NewTicker(pingPeriod)
+	ticker := time.NewTicker(constant.WSPingPeriod)
 	defer func() {
 		ticker.Stop()
 		_ = c.Conn.Close()
@@ -82,7 +70,7 @@ func (c *Client) WritePump() {
 	for {
 		select {
 		case message, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			c.Conn.SetWriteDeadline(time.Now().Add(constant.WSWriteWait))
 			if !ok {
 				_ = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
@@ -100,7 +88,7 @@ func (c *Client) WritePump() {
 				return
 			}
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			c.Conn.SetWriteDeadline(time.Now().Add(constant.WSWriteWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

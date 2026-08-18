@@ -5,7 +5,6 @@ import (
 	"nurture/internal/pkg/aix"
 	"nurture/internal/pkg/miniox"
 	"nurture/internal/pkg/pgsqlx"
-	"nurture/internal/pkg/realtimex"
 	"nurture/internal/pkg/redisx"
 	"nurture/internal/pkg/zapx"
 
@@ -16,12 +15,11 @@ import (
 )
 
 var (
-	Log      *zap.SugaredLogger
-	DB       *pgxpool.Pool
-	RDB      redis.Cmdable
-	MIO      *minio.Client
-	AIX      *aix.AIX // AI 功能实例
-	Realtime *realtimex.Hub
+	Log *zap.SugaredLogger
+	DB  *pgxpool.Pool
+	RDB redis.Cmdable
+	MIO *minio.Client
+	AIX *aix.AIX // AI 功能实例
 )
 
 func Init() {
@@ -29,9 +27,6 @@ func Init() {
 	DB = pgsqlx.InitPgsql()
 	RDB = redisx.InitRedis()
 	MIO = miniox.InitMinio()
-
-	Realtime = realtimex.NewHub()
-	go Realtime.Run()
 
 	// 初始化 AIX
 	var err error

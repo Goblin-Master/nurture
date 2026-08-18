@@ -1,4 +1,4 @@
-package realtimex
+package session
 
 type subscription struct {
 	client *Client

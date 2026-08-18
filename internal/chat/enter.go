@@ -5,6 +5,7 @@ import (
 	"nurture/internal/chat/handler"
 	"nurture/internal/chat/logic"
 	"nurture/internal/chat/repo"
+	"nurture/internal/chat/session"
 	"nurture/internal/pkg/ratelimitx"
 	"time"
 
@@ -57,9 +58,11 @@ func NewModule(deps Deps) *Module {
 
 	chatRepo := repo.NewChatRepo(deps.DB, deps.RDB, deps.Log)
 	chatLogic := logic.NewChatLogic(chatRepo, ratelimitx.NewLimiter(deps.RDB))
+	hub := session.NewHub()
+	go hub.Run()
 
 	return &Module{
-		handler:       handler.NewChatHandler(chatLogic, getUserID, parseToken, respond),
+		handler:       handler.NewChatHandler(chatLogic, hub, getUserID, parseToken, respond),
 		authUser:      authUser,
 		rateLimitUser: rateLimitUser,
 	}

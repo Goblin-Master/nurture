@@ -7,7 +7,6 @@ import (
 )
 
 func (m *Module) RegisterRoutes(chatAPI *gin.RouterGroup, ws *gin.RouterGroup) {
-	_ = ws
 	groups := chatAPI.Group("/groups", m.authUser)
 	{
 		groups.POST("",
@@ -59,4 +58,6 @@ func (m *Module) RegisterRoutes(chatAPI *gin.RouterGroup, ws *gin.RouterGroup) {
 			m.handler.ListMessages,
 		)
 	}
+	ws.GET("/chat", m.handler.ConnectDirect)
+	ws.GET("/group", m.handler.ConnectGroup)
 }

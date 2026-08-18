@@ -63,5 +63,4 @@ func registerRoutes(r *gin.Engine) {
 	registerBabyRoutes(api.Group("/baby"))
 	registerPostRoutes(api.Group("/post"))
 	registerAdminRoutes(api.Group("/admin"))
-	registerWSRoutes(ws)
 }
