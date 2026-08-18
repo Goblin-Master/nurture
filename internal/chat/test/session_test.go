@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestRealtimeHubSendToUserByChannel(t *testing.T) {
+func TestSessionHubSendToUserByChannel(t *testing.T) {
 	hub := session.NewHub()
 	go hub.Run()
 
@@ -18,14 +18,14 @@ func TestRealtimeHubSendToUserByChannel(t *testing.T) {
 
 	hub.SendToUser(constant.ChannelDirect, "user-1", []byte("direct-message"))
 
-	got := readRealtimeMessage(t, directClient.Send)
+	got := readSessionMessage(t, directClient.Send)
 	if string(got) != "direct-message" {
 		t.Fatalf("got %q, want direct-message", got)
 	}
-	assertNoRealtimeMessage(t, groupClient.Send)
+	assertNoSessionMessage(t, groupClient.Send)
 }
 
-func TestRealtimeHubBroadcastToSubscribedRoom(t *testing.T) {
+func TestSessionHubBroadcastToSubscribedRoom(t *testing.T) {
 	hub := session.NewHub()
 	go hub.Run()
 
@@ -37,14 +37,14 @@ func TestRealtimeHubBroadcastToSubscribedRoom(t *testing.T) {
 
 	hub.Broadcast("group-1", []byte("room-message"))
 
-	got := readRealtimeMessage(t, subscriber.Send)
+	got := readSessionMessage(t, subscriber.Send)
 	if string(got) != "room-message" {
 		t.Fatalf("got %q, want room-message", got)
 	}
-	assertNoRealtimeMessage(t, outsider.Send)
+	assertNoSessionMessage(t, outsider.Send)
 }
 
-func readRealtimeMessage(t *testing.T, ch <-chan []byte) []byte {
+func readSessionMessage(t *testing.T, ch <-chan []byte) []byte {
 	t.Helper()
 	select {
 	case got := <-ch:
@@ -55,7 +55,7 @@ func readRealtimeMessage(t *testing.T, ch <-chan []byte) []byte {
 	}
 }
 
-func assertNoRealtimeMessage(t *testing.T, ch <-chan []byte) {
+func assertNoSessionMessage(t *testing.T, ch <-chan []byte) {
 	t.Helper()
 	select {
 	case got := <-ch:
