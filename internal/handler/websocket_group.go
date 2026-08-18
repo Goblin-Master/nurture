@@ -1,8 +1,10 @@
-package chat
+package handler
 
 import (
 	"context"
 	"encoding/json"
+	"nurture/internal/logic"
+	"nurture/internal/pkg/realtimex"
 	"time"
 )
 
@@ -46,7 +48,7 @@ type groupMessageBody struct {
 	Ctime      int64  `json:"ctime"`
 }
 
-func (h *Handler) handleGroupMessage(client *session, message []byte) {
+func (h *WebSocketHandler) handleGroupMessage(client *realtimex.Client, chatLogic *logic.ChatLogic, message []byte) {
 	var in groupInMessage
 	if err := json.Unmarshal(message, &in); err != nil {
 		writeGroupAck(client, groupAckMessage{Op: "ack", For: "parse", Ok: false, Error: "invalid_json"})
@@ -54,36 +56,36 @@ func (h *Handler) handleGroupMessage(client *session, message []byte) {
 	}
 	switch in.Op {
 	case "subscribe":
-		h.handleGroupSubscribe(client, in.GroupID)
+		h.handleGroupSubscribe(client, chatLogic, in.GroupID)
 	case "subscribe_many":
-		h.handleGroupSubscribeMany(client, in.GroupIDs)
+		h.handleGroupSubscribeMany(client, chatLogic, in.GroupIDs)
 	case "unsubscribe":
 		if in.GroupID != "" {
-			client.hub.unsubscribeGroup(client, in.GroupID)
+			client.Hub.Unsubscribe(client, in.GroupID)
 		}
 	case "send":
-		h.handleGroupSend(client, in.GroupID, in.MessageID, in.Type, in.Content)
+		h.handleGroupSend(client, chatLogic, in.GroupID, in.MessageID, in.Type, in.Content)
 	default:
 		writeGroupAck(client, groupAckMessage{Op: "ack", For: in.Op, Ok: false, Error: "unknown_op"})
 	}
 }
 
-func (h *Handler) handleGroupSubscribe(client *session, groupID string) {
+func (h *WebSocketHandler) handleGroupSubscribe(client *realtimex.Client, chatLogic *logic.ChatLogic, groupID string) {
 	if groupID == "" {
 		writeGroupAck(client, groupAckMessage{Op: "ack", For: "subscribe", Ok: false, Error: "missing_group_id"})
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := h.chatLogic.CheckMember(ctx, client.userID, groupID); err != nil {
+	if err := chatLogic.CheckMember(ctx, client.UserID, groupID); err != nil {
 		writeGroupAck(client, groupAckMessage{Op: "ack", For: "subscribe", Ok: false, Error: err.Error(), GroupID: groupID})
 		return
 	}
-	client.hub.subscribeGroup(client, groupID)
+	client.Hub.Subscribe(client, groupID)
 	writeGroupAck(client, groupAckMessage{Op: "ack", For: "subscribe", Ok: true, GroupID: groupID})
 }
 
-func (h *Handler) handleGroupSubscribeMany(client *session, groupIDs []string) {
+func (h *WebSocketHandler) handleGroupSubscribeMany(client *realtimex.Client, chatLogic *logic.ChatLogic, groupIDs []string) {
 	if len(groupIDs) == 0 {
 		writeGroupAck(client, groupAckMessage{Op: "ack", For: "subscribe_many", Ok: false, Error: "missing_group_ids"})
 		return
@@ -96,17 +98,17 @@ func (h *Handler) handleGroupSubscribeMany(client *session, groupIDs []string) {
 		if groupID == "" {
 			continue
 		}
-		if err := h.chatLogic.CheckMember(ctx, client.userID, groupID); err != nil {
+		if err := chatLogic.CheckMember(ctx, client.UserID, groupID); err != nil {
 			failed = append(failed, groupFailedDetail{GroupID: groupID, Error: err.Error()})
 			continue
 		}
-		client.hub.subscribeGroup(client, groupID)
+		client.Hub.Subscribe(client, groupID)
 		okIDs = append(okIDs, groupID)
 	}
 	writeGroupAck(client, groupAckMessage{Op: "ack", For: "subscribe_many", Ok: len(failed) == 0, GroupIDs: okIDs, Failed: failed})
 }
 
-func (h *Handler) handleGroupSend(client *session, groupID, messageID, msgType, content string) {
+func (h *WebSocketHandler) handleGroupSend(client *realtimex.Client, chatLogic *logic.ChatLogic, groupID, messageID, msgType, content string) {
 	if groupID == "" || messageID == "" || msgType == "" || content == "" {
 		writeGroupAck(client, groupAckMessage{Op: "ack", For: "send", Ok: false, Error: "missing_fields", MessageID: messageID})
 		return
@@ -114,7 +116,7 @@ func (h *Handler) handleGroupSend(client *session, groupID, messageID, msgType, 
 	now := time.Now().UnixMilli()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := h.chatLogic.SaveMessage(ctx, client.userID, groupID, messageID, msgType, content, now); err != nil {
+	if err := chatLogic.SaveMessage(ctx, client.UserID, groupID, messageID, msgType, content, now); err != nil {
 		writeGroupAck(client, groupAckMessage{Op: "ack", For: "send", Ok: false, Error: err.Error(), GroupID: groupID, MessageID: messageID, ServerTS: now})
 		return
 	}
@@ -123,20 +125,20 @@ func (h *Handler) handleGroupSend(client *session, groupID, messageID, msgType, 
 		GroupID: groupID,
 		Message: groupMessageBody{
 			MessageID:  messageID,
-			FromUserID: client.userID,
+			FromUserID: client.UserID,
 			Type:       msgType,
 			Content:    content,
 			Ctime:      now,
 		},
 	})
-	client.hub.broadcastGroup(groupID, out)
+	client.Hub.Broadcast(groupID, out)
 	writeGroupAck(client, groupAckMessage{Op: "ack", For: "send", Ok: true, GroupID: groupID, MessageID: messageID, ServerTS: now})
 }
 
-func writeGroupAck(client *session, ack groupAckMessage) {
+func writeGroupAck(client *realtimex.Client, ack groupAckMessage) {
 	b, err := json.Marshal(ack)
 	if err != nil {
 		return
 	}
-	client.trySend(b)
+	client.TrySend(b)
 }

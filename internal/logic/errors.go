@@ -61,3 +61,13 @@ var (
 	ErrInvalidVaccineStatus  = errors.New("疫苗状态非法")
 	ErrInvalidActualTime     = errors.New("接种时间非法")
 )
+
+var (
+	ErrChatGroupNotExist          = errors.New("群不存在")
+	ErrChatGroupFull              = errors.New("群人数已满")
+	ErrChatNotMember              = errors.New("不是群成员")
+	ErrChatPermissionDenied       = errors.New("无权限")
+	ErrChatOwnerMustTransferFirst = errors.New("群主需要先转让再退出")
+	ErrChatInvalidCursor          = errors.New("游标格式错误")
+	ErrChatInvalidMessageType     = errors.New("消息类型非法")
+)
