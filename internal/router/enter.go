@@ -7,7 +7,6 @@ import (
 	"nurture/internal/global"
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
-	"nurture/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -49,15 +48,6 @@ func registerRoutes(r *gin.Engine) {
 		Log:           global.Log,
 		AuthUser:      middleware.Authentication(jwtx.COMMON_USER),
 		RateLimitUser: middleware.RateLimitUser,
-		GetUserID:     jwtx.GetUserID,
-		ParseToken: func(token string) (string, error) {
-			claims, err := jwtx.ParseTokenString(token)
-			if err != nil {
-				return "", err
-			}
-			return claims.UserID, nil
-		},
-		Respond: response.Response,
 	}).RegisterRoutes(api.Group("/chat"), ws)
 	registerUserRoutes(api.Group("/user"))
 	registerBabyRoutes(api.Group("/baby"))

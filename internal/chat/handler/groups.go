@@ -2,6 +2,8 @@ package handler
 
 import (
 	"nurture/internal/chat/dto"
+	"nurture/internal/pkg/jwtx"
+	"nurture/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,9 +13,9 @@ func (h *ChatHandler) CreateGroup(c *gin.Context) {
 	if !h.bindJSON(c, &cr) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	resp, err := h.chatLogic.CreateGroup(c.Request.Context(), userID, cr)
-	h.respond(c, resp, err)
+	response.Response(c, resp, err)
 }
 
 func (h *ChatHandler) JoinGroup(c *gin.Context) {
@@ -21,9 +23,9 @@ func (h *ChatHandler) JoinGroup(c *gin.Context) {
 	if !h.bindURI(c, &uri) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	err := h.chatLogic.JoinGroup(c.Request.Context(), userID, uri)
-	h.respond(c, nil, err)
+	response.Response(c, nil, err)
 }
 
 func (h *ChatHandler) LeaveGroup(c *gin.Context) {
@@ -31,9 +33,9 @@ func (h *ChatHandler) LeaveGroup(c *gin.Context) {
 	if !h.bindURI(c, &uri) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	err := h.chatLogic.LeaveGroup(c.Request.Context(), userID, uri)
-	h.respond(c, nil, err)
+	response.Response(c, nil, err)
 }
 
 func (h *ChatHandler) TransferOwner(c *gin.Context) {
@@ -45,9 +47,9 @@ func (h *ChatHandler) TransferOwner(c *gin.Context) {
 	if !h.bindJSON(c, &cr) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	err := h.chatLogic.TransferOwner(c.Request.Context(), userID, uri, cr)
-	h.respond(c, nil, err)
+	response.Response(c, nil, err)
 }
 
 func (h *ChatHandler) DissolveGroup(c *gin.Context) {
@@ -55,15 +57,15 @@ func (h *ChatHandler) DissolveGroup(c *gin.Context) {
 	if !h.bindURI(c, &uri) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	err := h.chatLogic.DissolveGroup(c.Request.Context(), userID, uri)
-	h.respond(c, nil, err)
+	response.Response(c, nil, err)
 }
 
 func (h *ChatHandler) ListMyGroups(c *gin.Context) {
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	resp, err := h.chatLogic.ListMyGroups(c.Request.Context(), userID)
-	h.respond(c, resp, err)
+	response.Response(c, resp, err)
 }
 
 func (h *ChatHandler) DiscoverGroups(c *gin.Context) {
@@ -71,9 +73,9 @@ func (h *ChatHandler) DiscoverGroups(c *gin.Context) {
 	if !h.bindQuery(c, &q) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	resp, err := h.chatLogic.DiscoverGroups(c.Request.Context(), userID, q)
-	h.respond(c, resp, err)
+	response.Response(c, resp, err)
 }
 
 func (h *ChatHandler) SearchGroups(c *gin.Context) {
@@ -81,9 +83,9 @@ func (h *ChatHandler) SearchGroups(c *gin.Context) {
 	if !h.bindQuery(c, &q) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	resp, err := h.chatLogic.SearchGroups(c.Request.Context(), userID, q)
-	h.respond(c, resp, err)
+	response.Response(c, resp, err)
 }
 
 func (h *ChatHandler) GroupProfile(c *gin.Context) {
@@ -91,9 +93,9 @@ func (h *ChatHandler) GroupProfile(c *gin.Context) {
 	if !h.bindURI(c, &uri) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	resp, err := h.chatLogic.GetGroupProfile(c.Request.Context(), userID, uri)
-	h.respond(c, resp, err)
+	response.Response(c, resp, err)
 }
 
 func (h *ChatHandler) ListMembers(c *gin.Context) {
@@ -105,9 +107,9 @@ func (h *ChatHandler) ListMembers(c *gin.Context) {
 	if !h.bindQuery(c, &q) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	resp, err := h.chatLogic.ListMembers(c.Request.Context(), userID, uri, q)
-	h.respond(c, resp, err)
+	response.Response(c, resp, err)
 }
 
 func (h *ChatHandler) ListMessages(c *gin.Context) {
@@ -119,9 +121,9 @@ func (h *ChatHandler) ListMessages(c *gin.Context) {
 	if !h.bindQuery(c, &q) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	resp, err := h.chatLogic.ListMessages(c.Request.Context(), userID, uri, q)
-	h.respond(c, resp, err)
+	response.Response(c, resp, err)
 }
 
 func (h *ChatHandler) MarkSeen(c *gin.Context) {
@@ -129,7 +131,7 @@ func (h *ChatHandler) MarkSeen(c *gin.Context) {
 	if !h.bindURI(c, &uri) {
 		return
 	}
-	userID := h.getUserID(c)
+	userID := jwtx.GetUserID(c)
 	err := h.chatLogic.MarkGroupSeen(c.Request.Context(), userID, uri.GroupID, 0)
-	h.respond(c, nil, err)
+	response.Response(c, nil, err)
 }

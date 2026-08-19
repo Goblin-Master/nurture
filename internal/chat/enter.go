@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"errors"
 	"nurture/internal/chat/handler"
 	"nurture/internal/chat/logic"
 	"nurture/internal/chat/repo"
@@ -23,9 +22,6 @@ type Deps struct {
 	Log           *zap.SugaredLogger
 	AuthUser      gin.HandlerFunc
 	RateLimitUser RateLimitUserFunc
-	GetUserID     handler.GetUserIDFunc
-	ParseToken    handler.ParseTokenFunc
-	Respond       handler.RespondFunc
 }
 
 type Module struct {
@@ -43,26 +39,13 @@ func NewModule(deps Deps) *Module {
 	if rateLimitUser == nil {
 		rateLimitUser = noopRateLimit
 	}
-	getUserID := deps.GetUserID
-	if getUserID == nil {
-		getUserID = defaultGetUserID
-	}
-	parseToken := deps.ParseToken
-	if parseToken == nil {
-		parseToken = defaultParseToken
-	}
-	respond := deps.Respond
-	if respond == nil {
-		respond = defaultRespond
-	}
-
 	chatRepo := repo.NewChatRepo(deps.DB, deps.RDB, deps.Log)
 	chatLogic := logic.NewChatLogic(chatRepo, ratelimitx.NewLimiter(deps.RDB))
 	hub := session.NewHub()
 	go hub.Run()
 
 	return &Module{
-		handler:       handler.NewChatHandler(chatLogic, hub, getUserID, parseToken, respond),
+		handler:       handler.NewChatHandler(chatLogic, hub),
 		authUser:      authUser,
 		rateLimitUser: rateLimitUser,
 	}
@@ -74,20 +57,4 @@ func noopMiddleware(c *gin.Context) {
 
 func noopRateLimit(string, int64, time.Duration) gin.HandlerFunc {
 	return noopMiddleware
-}
-
-func defaultGetUserID(*gin.Context) string {
-	return ""
-}
-
-func defaultParseToken(string) (string, error) {
-	return "", errors.New("token无效")
-}
-
-func defaultRespond(c *gin.Context, resp interface{}, err error) {
-	if err != nil {
-		c.JSON(200, gin.H{"code": -1, "message": err.Error(), "data": nil})
-		return
-	}
-	c.JSON(200, gin.H{"code": 0, "message": "OK", "data": resp})
 }

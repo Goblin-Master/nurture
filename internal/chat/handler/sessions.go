@@ -8,6 +8,8 @@ import (
 	"nurture/internal/chat/constant"
 	"nurture/internal/chat/logic"
 	"nurture/internal/chat/session"
+	"nurture/internal/pkg/jwtx"
+	"nurture/internal/pkg/response"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -31,18 +33,19 @@ func (h *ChatHandler) ConnectDirect(c *gin.Context) {
 	tokenStr := c.Query("token")
 	partnerID := c.Query("user_id")
 	if tokenStr == "" || partnerID == "" {
-		h.respond(c, nil, ErrTokenEmpty)
+		response.Response(c, nil, ErrTokenEmpty)
 		return
 	}
-	userID, err := h.parseToken(tokenStr)
+	claims, err := jwtx.ParseTokenString(tokenStr)
 	if err != nil {
-		h.respond(c, nil, ErrTokenInvalid)
+		response.Response(c, nil, ErrTokenInvalid)
 		return
 	}
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
+	userID := claims.UserID
 	client := session.NewClient(h.hub, conn, userID, constant.ChannelDirect)
 	client.Hub.Register(client)
 
@@ -56,18 +59,19 @@ func (h *ChatHandler) ConnectDirect(c *gin.Context) {
 func (h *ChatHandler) ConnectGroup(c *gin.Context) {
 	tokenStr := c.Query("token")
 	if tokenStr == "" {
-		h.respond(c, nil, ErrTokenEmpty)
+		response.Response(c, nil, ErrTokenEmpty)
 		return
 	}
-	userID, err := h.parseToken(tokenStr)
+	claims, err := jwtx.ParseTokenString(tokenStr)
 	if err != nil {
-		h.respond(c, nil, ErrTokenInvalid)
+		response.Response(c, nil, ErrTokenInvalid)
 		return
 	}
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
+	userID := claims.UserID
 	client := session.NewClient(h.hub, conn, userID, constant.ChannelGroup)
 	client.Hub.Register(client)
 
