@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -23,11 +22,6 @@ var upgrader = websocket.Upgrader{
 		return true
 	},
 }
-
-var (
-	newline = []byte{'\n'}
-	space   = []byte{' '}
-)
 
 func (h *ChatHandler) ConnectDirect(c *gin.Context) {
 	tokenStr := c.Query("token")
@@ -51,7 +45,15 @@ func (h *ChatHandler) ConnectDirect(c *gin.Context) {
 
 	go client.WritePump()
 	go client.ReadPump(func(message []byte) {
-		h.handleDirectMessage(client, partnerID, message)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		result, err := h.chatLogic.HandleDirectMessage(ctx, client.UserID, partnerID, message)
+		if err != nil {
+			return
+		}
+		if result.RecipientID != "" && len(result.Message) > 0 {
+			client.Hub.SendToUser(constant.ChannelDirect, result.RecipientID, result.Message)
+		}
 	})
 }
 
@@ -80,11 +82,6 @@ func (h *ChatHandler) ConnectGroup(c *gin.Context) {
 		defer cancel()
 		h.handleGroupMessage(ctx, client, message)
 	})
-}
-
-func (h *ChatHandler) handleDirectMessage(client *session.Client, partnerID string, message []byte) {
-	message = bytes.TrimSpace(bytes.ReplaceAll(message, newline, space))
-	client.Hub.SendToUser(constant.ChannelDirect, partnerID, message)
 }
 
 func (h *ChatHandler) handleGroupMessage(ctx context.Context, client *session.Client, message []byte) {

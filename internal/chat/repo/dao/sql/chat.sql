@@ -237,6 +237,14 @@ INSERT INTO "chat_group_message" (
 )
 ON CONFLICT (group_id, message_id) DO NOTHING;
 
+-- name: CreateChatDirectMessage :execrows
+INSERT INTO "chat_direct_message" (
+  message_id, from_user_id, to_user_id, type, content, ctime, utime
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $6
+)
+ON CONFLICT (from_user_id, to_user_id, message_id) DO NOTHING;
+
 -- name: ListChatGroupMessagesLatest :many
 SELECT
   message_id::text AS message_id,

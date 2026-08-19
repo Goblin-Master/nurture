@@ -28,6 +28,7 @@ type IChatLogic interface {
 	SaveMessage(ctx context.Context, userID string, groupID string, messageID string, msgType string, content string, now int64) error
 	MarkGroupSeen(ctx context.Context, userID string, groupID string, now int64) error
 	CheckMember(ctx context.Context, userID string, groupID string) error
+	HandleDirectMessage(ctx context.Context, userID string, partnerID string, message []byte) (DirectMessageResult, error)
 	HandleGroupMessage(ctx context.Context, userID string, message []byte) GroupMessageResult
 }
 

@@ -42,6 +42,35 @@ func (r *ChatRepo) SaveMessage(ctx context.Context, groupID, messageID, fromUser
 	return nil
 }
 
+func (r *ChatRepo) SaveDirectMessage(ctx context.Context, messageID, fromUserID, toUserID, msgType, content string, now int64) error {
+	var mid, fromUID, toUID pgtype.UUID
+	if err := mid.Scan(messageID); err != nil {
+		return ErrParamsType
+	}
+	if err := fromUID.Scan(fromUserID); err != nil {
+		return ErrParamsType
+	}
+	if err := toUID.Scan(toUserID); err != nil {
+		return ErrParamsType
+	}
+	if now <= 0 {
+		now = time.Now().UnixMilli()
+	}
+	_, err := r.dao.CreateChatDirectMessage(ctx, dao.CreateChatDirectMessageParams{
+		MessageID:  mid,
+		FromUserID: fromUID,
+		ToUserID:   toUID,
+		Type:       msgType,
+		Content:    content,
+		Ctime:      now,
+	})
+	if err != nil {
+		r.logError(err)
+		return ErrDefault
+	}
+	return nil
+}
+
 func (r *ChatRepo) ListMessagesLatest(ctx context.Context, groupID string, limit int) ([]ChatGroupMessageItem, error) {
 	var gid pgtype.UUID
 	if err := gid.Scan(groupID); err != nil {

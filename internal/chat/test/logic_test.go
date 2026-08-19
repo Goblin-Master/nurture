@@ -9,6 +9,8 @@ import (
 	"nurture/internal/chat/repo"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type allowAllLimiter struct{}
@@ -20,6 +22,18 @@ func (allowAllLimiter) Allow(_ context.Context, _ string, limit int64, _ time.Du
 type chatRepoFake struct {
 	joinGroupErr     error
 	getMemberRoleErr error
+
+	saveDirectMessageErr error
+	savedDirectMessage   savedDirectMessage
+}
+
+type savedDirectMessage struct {
+	messageID  string
+	fromUserID string
+	toUserID   string
+	msgType    string
+	content    string
+	now        int64
 }
 
 func (f *chatRepoFake) CreateGroup(context.Context, string, string, string, string, string, int32, int64) error {
@@ -68,6 +82,18 @@ func (f *chatRepoFake) ListMembersWithProfile(context.Context, string, int, int)
 
 func (f *chatRepoFake) SaveMessage(context.Context, string, string, string, string, string, int64) error {
 	return nil
+}
+
+func (f *chatRepoFake) SaveDirectMessage(_ context.Context, messageID, fromUserID, toUserID, msgType, content string, now int64) error {
+	f.savedDirectMessage = savedDirectMessage{
+		messageID:  messageID,
+		fromUserID: fromUserID,
+		toUserID:   toUserID,
+		msgType:    msgType,
+		content:    content,
+		now:        now,
+	}
+	return f.saveDirectMessageErr
 }
 
 func (f *chatRepoFake) ListMessagesLatest(context.Context, string, int) ([]repo.ChatGroupMessageItem, error) {
@@ -131,6 +157,87 @@ func TestChatLogicSaveMessageMapsNotMember(t *testing.T) {
 
 	if !errors.Is(err, logic.ErrNotMember) {
 		t.Fatalf("SaveMessage() error = %v, want %v", err, logic.ErrNotMember)
+	}
+}
+
+func TestChatLogicHandleDirectMessageStoresAndReturnsMessage(t *testing.T) {
+	chatRepo := &chatRepoFake{}
+	l := logic.NewChatLogic(chatRepo, allowAllLimiter{})
+
+	got, err := l.HandleDirectMessage(t.Context(), "sender-id", "receiver-id", []byte(" hello\nthere "))
+
+	if err != nil {
+		t.Fatalf("HandleDirectMessage() error = %v", err)
+	}
+	if got.RecipientID != "receiver-id" {
+		t.Fatalf("HandleDirectMessage() recipient = %q, want receiver-id", got.RecipientID)
+	}
+	if string(got.Message) != "hello there" {
+		t.Fatalf("HandleDirectMessage() message = %q, want hello there", got.Message)
+	}
+	if _, err := uuid.Parse(chatRepo.savedDirectMessage.messageID); err != nil {
+		t.Fatalf("saved message id = %q, want uuid: %v", chatRepo.savedDirectMessage.messageID, err)
+	}
+	if chatRepo.savedDirectMessage.fromUserID != "sender-id" {
+		t.Fatalf("saved from user = %q, want sender-id", chatRepo.savedDirectMessage.fromUserID)
+	}
+	if chatRepo.savedDirectMessage.toUserID != "receiver-id" {
+		t.Fatalf("saved to user = %q, want receiver-id", chatRepo.savedDirectMessage.toUserID)
+	}
+	if chatRepo.savedDirectMessage.msgType != constant.MessageTypeText {
+		t.Fatalf("saved message type = %q, want %q", chatRepo.savedDirectMessage.msgType, constant.MessageTypeText)
+	}
+	if chatRepo.savedDirectMessage.content != "hello there" {
+		t.Fatalf("saved content = %q, want hello there", chatRepo.savedDirectMessage.content)
+	}
+	if chatRepo.savedDirectMessage.now <= 0 {
+		t.Fatalf("saved time = %d, want positive value", chatRepo.savedDirectMessage.now)
+	}
+}
+
+func TestChatLogicHandleDirectMessageRejectsInvalidMessage(t *testing.T) {
+	tests := []struct {
+		name      string
+		userID    string
+		partnerID string
+		message   []byte
+	}{
+		{name: "missing sender", userID: "", partnerID: "receiver-id", message: []byte("hello")},
+		{name: "missing receiver", userID: "sender-id", partnerID: "", message: []byte("hello")},
+		{name: "same user", userID: "sender-id", partnerID: "sender-id", message: []byte("hello")},
+		{name: "empty message", userID: "sender-id", partnerID: "receiver-id", message: []byte(" \n ")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chatRepo := &chatRepoFake{}
+			l := logic.NewChatLogic(chatRepo, allowAllLimiter{})
+
+			got, err := l.HandleDirectMessage(t.Context(), tt.userID, tt.partnerID, tt.message)
+
+			if !errors.Is(err, logic.ErrParamsType) {
+				t.Fatalf("HandleDirectMessage() error = %v, want %v", err, logic.ErrParamsType)
+			}
+			if got.RecipientID != "" || len(got.Message) != 0 {
+				t.Fatalf("HandleDirectMessage() result = %+v, want empty result", got)
+			}
+			if chatRepo.savedDirectMessage != (savedDirectMessage{}) {
+				t.Fatalf("saved direct message = %+v, want none", chatRepo.savedDirectMessage)
+			}
+		})
+	}
+}
+
+func TestChatLogicHandleDirectMessageMapsRepoError(t *testing.T) {
+	l := logic.NewChatLogic(&chatRepoFake{saveDirectMessageErr: repo.ErrDefault}, allowAllLimiter{})
+
+	got, err := l.HandleDirectMessage(t.Context(), "sender-id", "receiver-id", []byte("hello"))
+
+	if !errors.Is(err, logic.ErrDefault) {
+		t.Fatalf("HandleDirectMessage() error = %v, want %v", err, logic.ErrDefault)
+	}
+	if got.RecipientID != "" || len(got.Message) != 0 {
+		t.Fatalf("HandleDirectMessage() result = %+v, want empty result", got)
 	}
 }
 

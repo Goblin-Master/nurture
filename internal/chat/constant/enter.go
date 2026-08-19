@@ -52,10 +52,12 @@ const (
 )
 
 const (
-	RateLimitHTTPWindow       = time.Minute
-	RateLimitWSSendWindow     = time.Second
-	RateLimitWSSendUserKey    = "rl:ws:send:user:%s"
-	RateLimitWSSendGroupKey   = "rl:ws:send:group:%s:%s"
-	RateLimitWSSendUserLimit  = 10
-	RateLimitWSSendGroupLimit = 5
+	RateLimitHTTPWindow        = time.Minute
+	RateLimitWSSendWindow      = time.Second
+	RateLimitWSSendUserKey     = "rl:ws:send:user:%s"
+	RateLimitWSSendDirectKey   = "rl:ws:send:direct:%s:%s"
+	RateLimitWSSendGroupKey    = "rl:ws:send:group:%s:%s"
+	RateLimitWSSendUserLimit   = 10
+	RateLimitWSSendDirectLimit = 10
+	RateLimitWSSendGroupLimit  = 5
 )

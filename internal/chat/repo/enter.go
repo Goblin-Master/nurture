@@ -84,6 +84,7 @@ type IChatRepo interface {
 	ListMembersWithProfile(ctx context.Context, groupID string, page, pageSize int) ([]ChatGroupMemberProfile, bool, error)
 
 	SaveMessage(ctx context.Context, groupID, messageID, fromUserID, msgType, content string, now int64) error
+	SaveDirectMessage(ctx context.Context, messageID, fromUserID, toUserID, msgType, content string, now int64) error
 	ListMessagesLatest(ctx context.Context, groupID string, limit int) ([]ChatGroupMessageItem, error)
 	ListMessagesBefore(ctx context.Context, groupID string, beforeCtime int64, beforeMessageID string, limit int) ([]ChatGroupMessageItem, error)
 	ListMessagesAfter(ctx context.Context, groupID string, afterCtime int64, afterMessageID string, limit int) ([]ChatGroupMessageItem, error)

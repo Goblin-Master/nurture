@@ -11,6 +11,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createChatDirectMessage = `-- name: CreateChatDirectMessage :execrows
+INSERT INTO "chat_direct_message" (
+  message_id, from_user_id, to_user_id, type, content, ctime, utime
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $6
+)
+ON CONFLICT (from_user_id, to_user_id, message_id) DO NOTHING
+`
+
+type CreateChatDirectMessageParams struct {
+	MessageID  pgtype.UUID
+	FromUserID pgtype.UUID
+	ToUserID   pgtype.UUID
+	Type       string
+	Content    string
+	Ctime      int64
+}
+
+func (q *Queries) CreateChatDirectMessage(ctx context.Context, arg CreateChatDirectMessageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createChatDirectMessage,
+		arg.MessageID,
+		arg.FromUserID,
+		arg.ToUserID,
+		arg.Type,
+		arg.Content,
+		arg.Ctime,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createChatGroup = `-- name: CreateChatGroup :exec
 WITH g AS (
   INSERT INTO "chat_group" (

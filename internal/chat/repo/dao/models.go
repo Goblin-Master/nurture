@@ -8,6 +8,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// 私聊-消息表
+type ChatDirectMessage struct {
+	// 主键ID
+	ID int64
+	// 消息ID(UUID)
+	MessageID pgtype.UUID
+	// 发送者用户ID(UUID)
+	FromUserID pgtype.UUID
+	// 接收者用户ID(UUID)
+	ToUserID pgtype.UUID
+	// 消息类型(text/image/system)
+	Type string
+	// 消息内容(文本或图片URL)
+	Content string
+	// 创建时间戳(毫秒)
+	Ctime int64
+	// 更新时间戳(毫秒)
+	Utime int64
+}
+
 // 群聊-群表
 type ChatGroup struct {
 	// 主键ID

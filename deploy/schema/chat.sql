@@ -71,3 +71,29 @@ COMMENT ON COLUMN "chat_group_message".ctime IS '创建时间戳(毫秒)';
 COMMENT ON COLUMN "chat_group_message".utime IS '更新时间戳(毫秒)';
 
 CREATE INDEX IF NOT EXISTS idx_chat_group_message_group_ctime ON "chat_group_message"(group_id, ctime, message_id);
+
+CREATE TABLE IF NOT EXISTS "chat_direct_message" (
+  id           BIGSERIAL PRIMARY KEY,
+  message_id   UUID NOT NULL,
+  from_user_id UUID NOT NULL,
+  to_user_id   UUID NOT NULL,
+  type         VARCHAR(20) NOT NULL CHECK (type IN ('text','image','system')),
+  content      TEXT NOT NULL,
+  ctime        BIGINT NOT NULL,
+  utime        BIGINT NOT NULL,
+  CONSTRAINT ck_chat_direct_message_users CHECK (from_user_id <> to_user_id),
+  CONSTRAINT uq_chat_direct_message UNIQUE (from_user_id, to_user_id, message_id)
+);
+
+COMMENT ON TABLE "chat_direct_message" IS '私聊-消息表';
+COMMENT ON COLUMN "chat_direct_message".id IS '主键ID';
+COMMENT ON COLUMN "chat_direct_message".message_id IS '消息ID(UUID)';
+COMMENT ON COLUMN "chat_direct_message".from_user_id IS '发送者用户ID(UUID)';
+COMMENT ON COLUMN "chat_direct_message".to_user_id IS '接收者用户ID(UUID)';
+COMMENT ON COLUMN "chat_direct_message".type IS '消息类型(text/image/system)';
+COMMENT ON COLUMN "chat_direct_message".content IS '消息内容(文本或图片URL)';
+COMMENT ON COLUMN "chat_direct_message".ctime IS '创建时间戳(毫秒)';
+COMMENT ON COLUMN "chat_direct_message".utime IS '更新时间戳(毫秒)';
+
+CREATE INDEX IF NOT EXISTS idx_chat_direct_message_from_to_ctime ON "chat_direct_message"(from_user_id, to_user_id, ctime, message_id);
+CREATE INDEX IF NOT EXISTS idx_chat_direct_message_to_from_ctime ON "chat_direct_message"(to_user_id, from_user_id, ctime, message_id);
