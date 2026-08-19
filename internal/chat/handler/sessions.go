@@ -51,8 +51,7 @@ func (h *ChatHandler) ConnectDirect(c *gin.Context) {
 
 	go client.WritePump()
 	go client.ReadPump(func(message []byte) {
-		message = bytes.TrimSpace(bytes.ReplaceAll(message, newline, space))
-		client.Hub.SendToUser(constant.ChannelDirect, partnerID, message)
+		h.handleDirectMessage(client, partnerID, message)
 	})
 }
 
@@ -81,6 +80,11 @@ func (h *ChatHandler) ConnectGroup(c *gin.Context) {
 		defer cancel()
 		h.handleGroupMessage(ctx, client, message)
 	})
+}
+
+func (h *ChatHandler) handleDirectMessage(client *session.Client, partnerID string, message []byte) {
+	message = bytes.TrimSpace(bytes.ReplaceAll(message, newline, space))
+	client.Hub.SendToUser(constant.ChannelDirect, partnerID, message)
 }
 
 func (h *ChatHandler) handleGroupMessage(ctx context.Context, client *session.Client, message []byte) {
