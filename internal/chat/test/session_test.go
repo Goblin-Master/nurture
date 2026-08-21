@@ -44,6 +44,23 @@ func TestSessionHubBroadcastToSubscribedRoom(t *testing.T) {
 	assertNoSessionMessage(t, outsider.Send)
 }
 
+func TestSessionHubSkipsDuplicateDeliveryEvent(t *testing.T) {
+	hub := session.NewHub()
+	go hub.Run()
+
+	client := session.NewClient(hub, nil, "user-1", constant.ChannelDirect)
+	hub.Register(client)
+
+	hub.DeliverToUser(constant.ChannelDirect, "user-1", "event-1", []byte("message-1"))
+	hub.DeliverToUser(constant.ChannelDirect, "user-1", "event-1", []byte("message-1-duplicate"))
+
+	got := readSessionMessage(t, client.Send)
+	if string(got) != "message-1" {
+		t.Fatalf("got %q, want message-1", got)
+	}
+	assertNoSessionMessage(t, client.Send)
+}
+
 func readSessionMessage(t *testing.T, ch <-chan []byte) []byte {
 	t.Helper()
 	select {

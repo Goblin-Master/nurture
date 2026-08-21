@@ -19,6 +19,7 @@ const (
 	WSPingPeriod     = (WSPongWait * 9) / 10
 	WSMaxMessageSize = 4096
 	WSSendBufferSize = 256
+	WSDeliveredCache = 1024
 )
 
 const (

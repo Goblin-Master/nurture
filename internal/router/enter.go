@@ -45,6 +45,7 @@ func registerRoutes(r *gin.Engine) {
 	chat.NewModule(chat.Deps{
 		DB:            global.DB,
 		RDB:           global.RDB,
+		RabbitMQ:      global.RMQ,
 		Log:           global.Log,
 		AuthUser:      middleware.Authentication(jwtx.COMMON_USER),
 		RateLimitUser: middleware.RateLimitUser,

@@ -8,12 +8,14 @@ type subscription struct {
 type userMessage struct {
 	channel string
 	userID  string
+	eventID string
 	data    []byte
 }
 
 type roomMessage struct {
-	roomID string
-	data   []byte
+	roomID  string
+	eventID string
+	data    []byte
 }
 
 type Hub struct {
@@ -53,9 +55,9 @@ func (h *Hub) Run() {
 		case sub := <-h.unsubscribe:
 			h.removeSubscription(sub.client, sub.roomID)
 		case msg := <-h.sendUser:
-			h.sendToUser(msg.channel, msg.userID, msg.data)
+			h.sendToUser(msg.channel, msg.userID, msg.eventID, msg.data)
 		case msg := <-h.broadcast:
-			h.broadcastToRoom(msg.roomID, msg.data)
+			h.broadcastToRoom(msg.roomID, msg.eventID, msg.data)
 		}
 	}
 }
@@ -80,8 +82,16 @@ func (h *Hub) SendToUser(channel, userID string, data []byte) {
 	h.sendUser <- userMessage{channel: channel, userID: userID, data: data}
 }
 
+func (h *Hub) DeliverToUser(channel, userID, eventID string, data []byte) {
+	h.sendUser <- userMessage{channel: channel, userID: userID, eventID: eventID, data: data}
+}
+
 func (h *Hub) Broadcast(roomID string, data []byte) {
 	h.broadcast <- roomMessage{roomID: roomID, data: data}
+}
+
+func (h *Hub) DeliverToRoom(roomID, eventID string, data []byte) {
+	h.broadcast <- roomMessage{roomID: roomID, eventID: eventID, data: data}
 }
 
 func (h *Hub) addClient(client *Client) {
@@ -144,7 +154,7 @@ func (h *Hub) removeSubscription(client *Client, roomID string) {
 	}
 }
 
-func (h *Hub) sendToUser(channel, userID string, data []byte) {
+func (h *Hub) sendToUser(channel, userID, eventID string, data []byte) {
 	byChannel, ok := h.clients[channel]
 	if !ok {
 		return
@@ -154,21 +164,24 @@ func (h *Hub) sendToUser(channel, userID string, data []byte) {
 		return
 	}
 	for client := range byUser {
-		h.send(client, data)
+		h.send(client, eventID, data)
 	}
 }
 
-func (h *Hub) broadcastToRoom(roomID string, data []byte) {
+func (h *Hub) broadcastToRoom(roomID, eventID string, data []byte) {
 	clients, ok := h.rooms[roomID]
 	if !ok {
 		return
 	}
 	for client := range clients {
-		h.send(client, data)
+		h.send(client, eventID, data)
 	}
 }
 
-func (h *Hub) send(client *Client, data []byte) {
+func (h *Hub) send(client *Client, eventID string, data []byte) {
+	if !client.markDelivered(eventID) {
+		return
+	}
 	if !client.TrySend(data) {
 		h.removeClient(client)
 		if client.Conn != nil {

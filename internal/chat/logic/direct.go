@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"nurture/internal/chat/constant"
+	"nurture/internal/chat/event"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ var (
 )
 
 type DirectMessageResult struct {
+	MessageID   string
 	RecipientID string
 	Message     []byte
 }
@@ -43,7 +45,19 @@ func (l *ChatLogic) HandleDirectMessage(ctx context.Context, userID string, part
 	if err := l.chatRepo.SaveDirectMessage(ctx, messageID, userID, partnerID, constant.MessageTypeText, content, now); err != nil {
 		return DirectMessageResult{}, mapRepoErr(err)
 	}
+	if err := l.publisher.PublishDirect(ctx, event.DirectMessage{
+		EventID:    event.DirectEventID(messageID),
+		MessageID:  messageID,
+		FromUserID: userID,
+		ToUserID:   partnerID,
+		Type:       constant.MessageTypeText,
+		Content:    content,
+		Ctime:      now,
+	}); err != nil {
+		return DirectMessageResult{}, ErrDefault
+	}
 	return DirectMessageResult{
+		MessageID:   messageID,
 		RecipientID: partnerID,
 		Message:     []byte(content),
 	}, nil

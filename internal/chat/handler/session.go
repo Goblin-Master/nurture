@@ -47,13 +47,7 @@ func (h *ChatHandler) ConnectDirect(c *gin.Context) {
 	go client.ReadPump(func(message []byte) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		result, err := h.chatLogic.HandleDirectMessage(ctx, client.UserID, partnerID, message)
-		if err != nil {
-			return
-		}
-		if result.RecipientID != "" && len(result.Message) > 0 {
-			client.Hub.SendToUser(constant.ChannelDirect, result.RecipientID, result.Message)
-		}
+		_, _ = h.chatLogic.HandleDirectMessage(ctx, client.UserID, partnerID, message)
 	})
 }
 
@@ -91,9 +85,6 @@ func (h *ChatHandler) handleGroupMessage(ctx context.Context, client *session.Cl
 	}
 	for _, groupID := range result.Unsubscribe {
 		client.Hub.Unsubscribe(client, groupID)
-	}
-	if len(result.Broadcast) > 0 && result.BroadcastGroupID != "" {
-		client.Hub.Broadcast(result.BroadcastGroupID, result.Broadcast)
 	}
 	if result.Ack != nil {
 		writeGroupAck(client, *result.Ack)

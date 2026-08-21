@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"nurture/internal/chat/dto"
+	"nurture/internal/chat/event"
 	"nurture/internal/chat/repo"
 	"time"
 )
@@ -33,14 +34,19 @@ type IChatLogic interface {
 }
 
 type ChatLogic struct {
-	chatRepo repo.IChatRepo
-	limiter  RateLimiter
+	chatRepo  repo.IChatRepo
+	limiter   RateLimiter
+	publisher event.Publisher
 }
 
-func NewChatLogic(chatRepo repo.IChatRepo, limiter RateLimiter) *ChatLogic {
+func NewChatLogic(chatRepo repo.IChatRepo, limiter RateLimiter, publisher event.Publisher) *ChatLogic {
+	if publisher == nil {
+		publisher = event.NoopPublisher{}
+	}
 	return &ChatLogic{
-		chatRepo: chatRepo,
-		limiter:  limiter,
+		chatRepo:  chatRepo,
+		limiter:   limiter,
+		publisher: publisher,
 	}
 }
 

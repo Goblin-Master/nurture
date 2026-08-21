@@ -5,6 +5,7 @@ import (
 	"errors"
 	"nurture/internal/chat/constant"
 	"nurture/internal/chat/dto"
+	"nurture/internal/chat/event"
 	"nurture/internal/chat/logic"
 	"nurture/internal/chat/repo"
 	"testing"
@@ -17,6 +18,22 @@ type allowAllLimiter struct{}
 
 func (allowAllLimiter) Allow(_ context.Context, _ string, limit int64, _ time.Duration) (bool, int64, error) {
 	return true, limit, nil
+}
+
+type publisherFake struct {
+	direct event.DirectMessage
+	group  event.GroupMessage
+	err    error
+}
+
+func (f *publisherFake) PublishDirect(_ context.Context, msg event.DirectMessage) error {
+	f.direct = msg
+	return f.err
+}
+
+func (f *publisherFake) PublishGroup(_ context.Context, msg event.GroupMessage) error {
+	f.group = msg
+	return f.err
 }
 
 type chatRepoFake struct {
@@ -116,7 +133,7 @@ func (f *chatRepoFake) GetMemberRole(context.Context, string, string) (string, e
 }
 
 func TestChatLogicListMessagesRejectsInvalidCursor(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{})
+	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{}, event.NoopPublisher{})
 
 	_, err := l.ListMessages(t.Context(), "user-1", dto.ChatGroupIDUri{GroupID: "group-1"}, dto.ChatGroupMessageListReq{
 		Before: "bad-cursor",
@@ -128,7 +145,7 @@ func TestChatLogicListMessagesRejectsInvalidCursor(t *testing.T) {
 }
 
 func TestChatLogicListMessagesRejectsBeforeAndAfter(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{})
+	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{}, event.NoopPublisher{})
 
 	_, err := l.ListMessages(t.Context(), "user-1", dto.ChatGroupIDUri{GroupID: "group-1"}, dto.ChatGroupMessageListReq{
 		Before: "123|00000000-0000-0000-0000-000000000001",
@@ -141,7 +158,7 @@ func TestChatLogicListMessagesRejectsBeforeAndAfter(t *testing.T) {
 }
 
 func TestChatLogicSaveMessageRejectsInvalidType(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{})
+	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{}, event.NoopPublisher{})
 
 	err := l.SaveMessage(t.Context(), "user-1", "group-1", "message-1", "video", "hello", 1)
 
@@ -151,7 +168,7 @@ func TestChatLogicSaveMessageRejectsInvalidType(t *testing.T) {
 }
 
 func TestChatLogicSaveMessageMapsNotMember(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{getMemberRoleErr: repo.ErrNotMember}, allowAllLimiter{})
+	l := logic.NewChatLogic(&chatRepoFake{getMemberRoleErr: repo.ErrNotMember}, allowAllLimiter{}, event.NoopPublisher{})
 
 	err := l.SaveMessage(t.Context(), "user-1", "group-1", "message-1", constant.MessageTypeText, "hello", 1)
 
@@ -162,7 +179,8 @@ func TestChatLogicSaveMessageMapsNotMember(t *testing.T) {
 
 func TestChatLogicHandleDirectMessageStoresAndReturnsMessage(t *testing.T) {
 	chatRepo := &chatRepoFake{}
-	l := logic.NewChatLogic(chatRepo, allowAllLimiter{})
+	publisher := &publisherFake{}
+	l := logic.NewChatLogic(chatRepo, allowAllLimiter{}, publisher)
 
 	got, err := l.HandleDirectMessage(t.Context(), "sender-id", "receiver-id", []byte(" hello\nthere "))
 
@@ -193,6 +211,12 @@ func TestChatLogicHandleDirectMessageStoresAndReturnsMessage(t *testing.T) {
 	if chatRepo.savedDirectMessage.now <= 0 {
 		t.Fatalf("saved time = %d, want positive value", chatRepo.savedDirectMessage.now)
 	}
+	if publisher.direct.EventID != event.DirectEventID(chatRepo.savedDirectMessage.messageID) {
+		t.Fatalf("published event id = %q, want %q", publisher.direct.EventID, event.DirectEventID(chatRepo.savedDirectMessage.messageID))
+	}
+	if publisher.direct.ToUserID != "receiver-id" || publisher.direct.Content != "hello there" {
+		t.Fatalf("published direct message = %+v, want receiver/content", publisher.direct)
+	}
 }
 
 func TestChatLogicHandleDirectMessageRejectsInvalidMessage(t *testing.T) {
@@ -211,7 +235,7 @@ func TestChatLogicHandleDirectMessageRejectsInvalidMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			chatRepo := &chatRepoFake{}
-			l := logic.NewChatLogic(chatRepo, allowAllLimiter{})
+			l := logic.NewChatLogic(chatRepo, allowAllLimiter{}, event.NoopPublisher{})
 
 			got, err := l.HandleDirectMessage(t.Context(), tt.userID, tt.partnerID, tt.message)
 
@@ -229,7 +253,7 @@ func TestChatLogicHandleDirectMessageRejectsInvalidMessage(t *testing.T) {
 }
 
 func TestChatLogicHandleDirectMessageMapsRepoError(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{saveDirectMessageErr: repo.ErrDefault}, allowAllLimiter{})
+	l := logic.NewChatLogic(&chatRepoFake{saveDirectMessageErr: repo.ErrDefault}, allowAllLimiter{}, event.NoopPublisher{})
 
 	got, err := l.HandleDirectMessage(t.Context(), "sender-id", "receiver-id", []byte("hello"))
 
@@ -238,6 +262,29 @@ func TestChatLogicHandleDirectMessageMapsRepoError(t *testing.T) {
 	}
 	if got.RecipientID != "" || len(got.Message) != 0 {
 		t.Fatalf("HandleDirectMessage() result = %+v, want empty result", got)
+	}
+}
+
+func TestChatLogicHandleGroupMessagePublishesEvent(t *testing.T) {
+	publisher := &publisherFake{}
+	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{}, publisher)
+	groupID := uuid.NewString()
+	messageID := uuid.NewString()
+
+	in := []byte(`{"op":"send","group_id":"` + groupID + `","message_id":"` + messageID + `","type":"text","content":"hello"}`)
+	got := l.HandleGroupMessage(t.Context(), "user-1", in)
+
+	if got.Ack == nil || !got.Ack.Ok {
+		t.Fatalf("HandleGroupMessage() ack = %+v, want ok", got.Ack)
+	}
+	if publisher.group.EventID != event.GroupEventID(groupID, messageID) {
+		t.Fatalf("published event id = %q, want %q", publisher.group.EventID, event.GroupEventID(groupID, messageID))
+	}
+	if publisher.group.GroupID != groupID || publisher.group.MessageID != messageID || publisher.group.Content != "hello" {
+		t.Fatalf("published group message = %+v, want group/message/content", publisher.group)
+	}
+	if publisher.group.Payload == "" {
+		t.Fatal("published group payload is empty")
 	}
 }
 
@@ -254,7 +301,7 @@ func TestChatLogicMapsRepoErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := logic.NewChatLogic(&chatRepoFake{joinGroupErr: tt.repoErr}, allowAllLimiter{})
+			l := logic.NewChatLogic(&chatRepoFake{joinGroupErr: tt.repoErr}, allowAllLimiter{}, event.NoopPublisher{})
 
 			err := l.JoinGroup(t.Context(), "user-1", dto.ChatGroupIDUri{GroupID: "group-1"})
 

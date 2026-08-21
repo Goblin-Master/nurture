@@ -8,11 +8,13 @@ import (
 )
 
 type Client struct {
-	Hub     *Hub
-	Conn    *websocket.Conn
-	Send    chan []byte
-	UserID  string
-	Channel string
+	Hub            *Hub
+	Conn           *websocket.Conn
+	Send           chan []byte
+	UserID         string
+	Channel        string
+	delivered      map[string]struct{}
+	deliveredOrder []string
 }
 
 func NewClient(hub *Hub, conn *websocket.Conn, userID, channel string) *Client {
@@ -37,6 +39,27 @@ func (c *Client) TrySend(message []byte) (ok bool) {
 	default:
 		return false
 	}
+}
+
+func (c *Client) markDelivered(eventID string) bool {
+	if eventID == "" {
+		return true
+	}
+	if c.delivered == nil {
+		c.delivered = make(map[string]struct{})
+	}
+	if _, ok := c.delivered[eventID]; ok {
+		return false
+	}
+	c.delivered[eventID] = struct{}{}
+	c.deliveredOrder = append(c.deliveredOrder, eventID)
+	if len(c.deliveredOrder) > constant.WSDeliveredCache {
+		oldest := c.deliveredOrder[0]
+		delete(c.delivered, oldest)
+		copy(c.deliveredOrder, c.deliveredOrder[1:])
+		c.deliveredOrder = c.deliveredOrder[:len(c.deliveredOrder)-1]
+	}
+	return true
 }
 
 func (c *Client) ReadPump(handleMessage func(message []byte)) {

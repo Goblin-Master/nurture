@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"nurture/internal/chat/constant"
+	"nurture/internal/chat/event"
 	"time"
 )
 
@@ -48,11 +49,9 @@ type GroupMessageBody struct {
 }
 
 type GroupMessageResult struct {
-	Ack              *GroupAckMessage
-	Subscribe        []string
-	Unsubscribe      []string
-	BroadcastGroupID string
-	Broadcast        []byte
+	Ack         *GroupAckMessage
+	Subscribe   []string
+	Unsubscribe []string
 }
 
 func (l *ChatLogic) HandleGroupMessage(ctx context.Context, userID string, message []byte) GroupMessageResult {
@@ -131,10 +130,20 @@ func (l *ChatLogic) handleGroupSend(ctx context.Context, userID, groupID, messag
 			Ctime:      now,
 		},
 	})
+	if err := l.publisher.PublishGroup(ctx, event.GroupMessage{
+		EventID:    event.GroupEventID(groupID, messageID),
+		MessageID:  messageID,
+		GroupID:    groupID,
+		FromUserID: userID,
+		Type:       msgType,
+		Content:    content,
+		Ctime:      now,
+		Payload:    string(out),
+	}); err != nil {
+		return GroupMessageResult{Ack: &GroupAckMessage{Op: "ack", For: "send", Ok: false, Error: ErrDefault.Error(), GroupID: groupID, MessageID: messageID, ServerTS: now}}
+	}
 	return GroupMessageResult{
-		Ack:              &GroupAckMessage{Op: "ack", For: "send", Ok: true, GroupID: groupID, MessageID: messageID, ServerTS: now},
-		BroadcastGroupID: groupID,
-		Broadcast:        out,
+		Ack: &GroupAckMessage{Op: "ack", For: "send", Ok: true, GroupID: groupID, MessageID: messageID, ServerTS: now},
 	}
 }
 
