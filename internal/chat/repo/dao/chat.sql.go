@@ -17,18 +17,18 @@ WITH picked AS (
   FROM "chat_event_outbox" e
   WHERE (
     e.status = 'pending'
-    AND e.next_retry_at <= $1
+    AND e.next_retry_at <= $2
   ) OR (
     e.status = 'publishing'
-    AND e.utime <= $2
+    AND e.utime <= $3
   )
   ORDER BY e.id ASC
-  LIMIT $3
+  LIMIT $4
   FOR UPDATE SKIP LOCKED
 )
 UPDATE "chat_event_outbox" o
 SET status = 'publishing',
-    utime = $4
+    utime = $1
 FROM picked
 WHERE o.id = picked.id
 RETURNING
@@ -41,10 +41,10 @@ RETURNING
 `
 
 type ClaimPendingChatEventOutboxParams struct {
-	NextRetryAt int64
-	Utime       int64
-	Limit       int32
-	Utime_2     int64
+	ClaimedAt   int64
+	RetryBefore int64
+	StaleBefore int64
+	ClaimLimit  int32
 }
 
 type ClaimPendingChatEventOutboxRow struct {
@@ -58,10 +58,10 @@ type ClaimPendingChatEventOutboxRow struct {
 
 func (q *Queries) ClaimPendingChatEventOutbox(ctx context.Context, arg ClaimPendingChatEventOutboxParams) ([]ClaimPendingChatEventOutboxRow, error) {
 	rows, err := q.db.Query(ctx, claimPendingChatEventOutbox,
-		arg.NextRetryAt,
-		arg.Utime,
-		arg.Limit,
-		arg.Utime_2,
+		arg.ClaimedAt,
+		arg.RetryBefore,
+		arg.StaleBefore,
+		arg.ClaimLimit,
 	)
 	if err != nil {
 		return nil, err

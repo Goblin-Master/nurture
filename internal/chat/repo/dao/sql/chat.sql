@@ -271,18 +271,18 @@ WITH picked AS (
   FROM "chat_event_outbox" e
   WHERE (
     e.status = 'pending'
-    AND e.next_retry_at <= $1
+    AND e.next_retry_at <= sqlc.arg(retry_before)
   ) OR (
     e.status = 'publishing'
-    AND e.utime <= $2
+    AND e.utime <= sqlc.arg(stale_before)
   )
   ORDER BY e.id ASC
-  LIMIT $3
+  LIMIT sqlc.arg(claim_limit)
   FOR UPDATE SKIP LOCKED
 )
 UPDATE "chat_event_outbox" o
 SET status = 'publishing',
-    utime = $4
+    utime = sqlc.arg(claimed_at)
 FROM picked
 WHERE o.id = picked.id
 RETURNING

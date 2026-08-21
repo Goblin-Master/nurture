@@ -17,10 +17,10 @@ func (r *ChatRepo) ListPendingOutbox(ctx context.Context, now int64, staleBefore
 		limit = 50
 	}
 	rows, err := r.dao.ClaimPendingChatEventOutbox(ctx, dao.ClaimPendingChatEventOutboxParams{
-		NextRetryAt: now,
-		Utime:       staleBefore,
-		Limit:       int32(limit),
-		Utime_2:     now,
+		ClaimedAt:   now,
+		RetryBefore: now,
+		StaleBefore: staleBefore,
+		ClaimLimit:  int32(limit),
 	})
 	if err != nil {
 		r.logError(err)
