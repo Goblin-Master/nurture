@@ -142,10 +142,13 @@ sequenceDiagram
 
   loop every OutboxPollInterval
     Outbox->>Repo: ListPendingOutbox(now, staleBefore, batchSize)
-    Repo->>DB: ClaimPendingChatEventOutbox
-    Note over DB: claim status=pending and retry_before reached
-    Note over DB: also reclaim stale status=publishing rows
-    DB-->>Repo: claimed events with status=publishing
+    Repo->>DB: ClaimPendingChatEventOutbox(retryBefore=now, staleBefore)
+    alt pending event reached retry time
+      DB->>DB: status pending -> publishing
+    else publishing event became stale
+      DB->>DB: reclaim stale publishing row
+    end
+    DB-->>Repo: claimed publishing events
     Repo-->>Outbox: events
 
     loop each event
@@ -153,12 +156,16 @@ sequenceDiagram
       alt publisher confirm ack
         MQ-->>Outbox: ack
         Outbox->>Repo: MarkOutboxPublished(id, now)
-        Repo->>DB: status=published, published_at=now
+        Repo->>DB: status publishing -> published
       else publish error or timeout
         MQ-->>Outbox: error
         Outbox->>Outbox: calculate nextRetryAt
         Outbox->>Repo: MarkOutboxFailed(id, nextRetryAt, maxAttempts, now)
-        Repo->>DB: status=pending or failed, attempts=attempts+1
+        alt attempts reached maxAttempts
+          Repo->>DB: status publishing -> failed
+        else can retry later
+          Repo->>DB: status publishing -> pending
+        end
       end
     end
   end
