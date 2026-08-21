@@ -2,19 +2,21 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 )
 
 var Conf = new(Config)
 
 type Config struct {
-	App   App   `mapstructure:"app"`
-	DB    DB    `mapstructure:"db"`
-	Redis Redis `mapstructure:"redis"`
-	Auth  Auth  `mapstructure:"auth"`
-	Email Email `mapstructure:"email"`
-	SMS   SMS   `mapstructure:"sms"`
-	Minio Minio `mapstructure:"minio"`
-	AI    AI    `mapstructure:"ai"`
+	App      App      `mapstructure:"app"`
+	DB       DB       `mapstructure:"db"`
+	Redis    Redis    `mapstructure:"redis"`
+	RabbitMQ RabbitMQ `mapstructure:"rabbitmq"`
+	Auth     Auth     `mapstructure:"auth"`
+	Email    Email    `mapstructure:"email"`
+	SMS      SMS      `mapstructure:"sms"`
+	Minio    Minio    `mapstructure:"minio"`
+	AI       AI       `mapstructure:"ai"`
 }
 
 // AI 配置
@@ -100,6 +102,29 @@ type Redis struct {
 func (redis *Redis) DSN() string {
 	dsn := fmt.Sprintf("%s:%d", redis.Host, redis.Port)
 	return dsn
+}
+
+type RabbitMQ struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	VHost    string `mapstructure:"vhost"`
+	Enable   bool   `mapstructure:"enable"`
+}
+
+func (rabbitmq *RabbitMQ) DSN() string {
+	vhost := rabbitmq.VHost
+	if vhost == "" {
+		vhost = "/"
+	}
+	u := url.URL{
+		Scheme: "amqp",
+		User:   url.UserPassword(rabbitmq.Username, rabbitmq.Password),
+		Host:   fmt.Sprintf("%s:%d", rabbitmq.Host, rabbitmq.Port),
+		Path:   vhost,
+	}
+	return u.String()
 }
 
 type Minio struct {

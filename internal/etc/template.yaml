@@ -18,6 +18,13 @@ redis:
   password:
   db: 0
   enable: true
+rabbitmq:
+  host: nurture-rabbitmq  # RabbitMQ 容器名
+  port: 5672
+  username: nurture
+  password: 123456
+  vhost: /
+  enable: true
 minio:
   endpoint: "xxxxxx" # minio 地址, 格式: ip:port,千万不要暴露地址
   access_key: "xxxxxx" # minio 登录账号
