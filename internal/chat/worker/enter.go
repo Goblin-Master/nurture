@@ -24,6 +24,20 @@ type Worker struct {
 	log      *zap.SugaredLogger
 }
 
+type directOutMessage struct {
+	Op      string            `json:"op"`
+	Message directMessageBody `json:"message"`
+}
+
+type directMessageBody struct {
+	MessageID  string `json:"message_id"`
+	FromUserID string `json:"from_user_id"`
+	ToUserID   string `json:"to_user_id"`
+	Type       string `json:"type"`
+	Content    string `json:"content"`
+	Ctime      int64  `json:"ctime"`
+}
+
 func NewWorker(consumer Consumer, hub *session.Hub, log *zap.SugaredLogger) *Worker {
 	return &Worker{
 		consumer: consumer,
@@ -88,7 +102,28 @@ func (w *Worker) handleDirect(delivery rabbitmqx.Delivery) {
 	if eventID == "" {
 		eventID = delivery.MessageID
 	}
-	w.hub.DeliverToUser(constant.ChannelDirect, msg.ToUserID, eventID, []byte(msg.Content))
+	payload := msg.Payload
+	if payload == "" {
+		out, err := json.Marshal(directOutMessage{
+			Op: "new_message",
+			Message: directMessageBody{
+				MessageID:  msg.MessageID,
+				FromUserID: msg.FromUserID,
+				ToUserID:   msg.ToUserID,
+				Type:       msg.Type,
+				Content:    msg.Content,
+				Ctime:      msg.Ctime,
+			},
+		})
+		if err != nil {
+			if w.log != nil {
+				w.log.Error(err)
+			}
+			return
+		}
+		payload = string(out)
+	}
+	w.hub.DeliverToUser(constant.ChannelDirect, msg.ToUserID, eventID, []byte(payload))
 }
 
 func (w *Worker) handleGroup(delivery rabbitmqx.Delivery) {

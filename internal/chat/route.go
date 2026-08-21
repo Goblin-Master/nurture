@@ -9,6 +9,21 @@ import (
 )
 
 func (m *Module) RegisterRoutes(chatAPI *gin.RouterGroup, ws *gin.RouterGroup) {
+	direct := chatAPI.Group("/direct", m.authUser)
+	{
+		direct.GET("/:user_id/messages",
+			m.rateLimitUser(constant.RateLimitDirectMessages, constant.RateLimitDirectMessagesLimit, constant.RateLimitHTTPWindow),
+			middleware.BindUriMiddleware[dto.ChatDirectMessageUserUri],
+			middleware.BindQueryMiddleware[dto.ChatDirectMessageListReq],
+			m.handler.ListDirectMessages,
+		)
+		direct.POST("/:user_id/seen",
+			m.rateLimitUser(constant.RateLimitDirectSeen, constant.RateLimitDirectSeenLimit, constant.RateLimitHTTPWindow),
+			middleware.BindUriMiddleware[dto.ChatDirectMessageUserUri],
+			m.handler.MarkDirectSeen,
+		)
+	}
+
 	groups := chatAPI.Group("/groups", m.authUser)
 	{
 		groups.POST("",

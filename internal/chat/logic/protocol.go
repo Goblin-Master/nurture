@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"nurture/internal/chat/constant"
-	"nurture/internal/chat/event"
 	"time"
 )
 
@@ -119,35 +118,12 @@ func (l *ChatLogic) handleGroupSend(ctx context.Context, userID, groupID, messag
 	if err := l.SaveMessage(ctx, userID, groupID, messageID, msgType, content, now); err != nil {
 		return GroupMessageResult{Ack: &GroupAckMessage{Op: "ack", For: "send", Ok: false, Error: err.Error(), GroupID: groupID, MessageID: messageID, ServerTS: now}}
 	}
-	out, _ := json.Marshal(GroupOutMessage{
-		Op:      "new_message",
-		GroupID: groupID,
-		Message: GroupMessageBody{
-			MessageID:  messageID,
-			FromUserID: userID,
-			Type:       msgType,
-			Content:    content,
-			Ctime:      now,
-		},
-	})
-	if err := l.publisher.PublishGroup(ctx, event.GroupMessage{
-		EventID:    event.GroupEventID(groupID, messageID),
-		MessageID:  messageID,
-		GroupID:    groupID,
-		FromUserID: userID,
-		Type:       msgType,
-		Content:    content,
-		Ctime:      now,
-		Payload:    string(out),
-	}); err != nil {
-		return GroupMessageResult{Ack: &GroupAckMessage{Op: "ack", For: "send", Ok: false, Error: ErrDefault.Error(), GroupID: groupID, MessageID: messageID, ServerTS: now}}
-	}
 	return GroupMessageResult{
 		Ack: &GroupAckMessage{Op: "ack", For: "send", Ok: true, GroupID: groupID, MessageID: messageID, ServerTS: now},
 	}
 }
 
-func IsGroupMessageType(msgType string) bool {
+func IsChatMessageType(msgType string) bool {
 	switch msgType {
 	case constant.MessageTypeText, constant.MessageTypeImage, constant.MessageTypeSystem:
 		return true

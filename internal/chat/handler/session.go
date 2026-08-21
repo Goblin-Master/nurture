@@ -47,7 +47,7 @@ func (h *ChatHandler) ConnectDirect(c *gin.Context) {
 	go client.ReadPump(func(message []byte) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_, _ = h.chatLogic.HandleDirectMessage(ctx, client.UserID, partnerID, message)
+		h.handleDirectMessage(ctx, client, partnerID, message)
 	})
 }
 
@@ -78,6 +78,13 @@ func (h *ChatHandler) ConnectGroup(c *gin.Context) {
 	})
 }
 
+func (h *ChatHandler) handleDirectMessage(ctx context.Context, client *session.Client, partnerID string, message []byte) {
+	result, _ := h.chatLogic.HandleDirectMessage(ctx, client.UserID, partnerID, message)
+	if result.Ack != nil {
+		writeDirectAck(client, *result.Ack)
+	}
+}
+
 func (h *ChatHandler) handleGroupMessage(ctx context.Context, client *session.Client, message []byte) {
 	result := h.chatLogic.HandleGroupMessage(ctx, client.UserID, message)
 	for _, groupID := range result.Subscribe {
@@ -89,6 +96,14 @@ func (h *ChatHandler) handleGroupMessage(ctx context.Context, client *session.Cl
 	if result.Ack != nil {
 		writeGroupAck(client, *result.Ack)
 	}
+}
+
+func writeDirectAck(client *session.Client, ack logic.DirectAckMessage) {
+	b, err := json.Marshal(ack)
+	if err != nil {
+		return
+	}
+	client.TrySend(b)
 }
 
 func writeGroupAck(client *session.Client, ack logic.GroupAckMessage) {

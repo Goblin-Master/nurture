@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"nurture/internal/chat/constant"
 	"nurture/internal/chat/dto"
@@ -20,28 +21,17 @@ func (allowAllLimiter) Allow(_ context.Context, _ string, limit int64, _ time.Du
 	return true, limit, nil
 }
 
-type publisherFake struct {
-	direct event.DirectMessage
-	group  event.GroupMessage
-	err    error
-}
-
-func (f *publisherFake) PublishDirect(_ context.Context, msg event.DirectMessage) error {
-	f.direct = msg
-	return f.err
-}
-
-func (f *publisherFake) PublishGroup(_ context.Context, msg event.GroupMessage) error {
-	f.group = msg
-	return f.err
-}
-
 type chatRepoFake struct {
 	joinGroupErr     error
 	getMemberRoleErr error
 
 	saveDirectMessageErr error
+	saveDirectCreated    bool
 	savedDirectMessage   savedDirectMessage
+
+	saveGroupCreated  bool
+	savedGroupOutbox  repo.ChatOutboxEvent
+	directMessageRows []repo.ChatDirectMessageItem
 }
 
 type savedDirectMessage struct {
@@ -51,6 +41,7 @@ type savedDirectMessage struct {
 	msgType    string
 	content    string
 	now        int64
+	outbox     repo.ChatOutboxEvent
 }
 
 func (f *chatRepoFake) CreateGroup(context.Context, string, string, string, string, string, int32, int64) error {
@@ -97,11 +88,12 @@ func (f *chatRepoFake) ListMembersWithProfile(context.Context, string, int, int)
 	return nil, false, nil
 }
 
-func (f *chatRepoFake) SaveMessage(context.Context, string, string, string, string, string, int64) error {
-	return nil
+func (f *chatRepoFake) SaveMessage(_ context.Context, groupID, messageID, fromUserID, msgType, content string, now int64, outbox repo.ChatOutboxEvent) (bool, error) {
+	f.savedGroupOutbox = outbox
+	return f.saveGroupCreated, nil
 }
 
-func (f *chatRepoFake) SaveDirectMessage(_ context.Context, messageID, fromUserID, toUserID, msgType, content string, now int64) error {
+func (f *chatRepoFake) SaveDirectMessage(_ context.Context, messageID, fromUserID, toUserID, msgType, content string, now int64, outbox repo.ChatOutboxEvent) (bool, error) {
 	f.savedDirectMessage = savedDirectMessage{
 		messageID:  messageID,
 		fromUserID: fromUserID,
@@ -109,8 +101,9 @@ func (f *chatRepoFake) SaveDirectMessage(_ context.Context, messageID, fromUserI
 		msgType:    msgType,
 		content:    content,
 		now:        now,
+		outbox:     outbox,
 	}
-	return f.saveDirectMessageErr
+	return f.saveDirectCreated, f.saveDirectMessageErr
 }
 
 func (f *chatRepoFake) ListMessagesLatest(context.Context, string, int) ([]repo.ChatGroupMessageItem, error) {
@@ -125,6 +118,22 @@ func (f *chatRepoFake) ListMessagesAfter(context.Context, string, int64, string,
 	return nil, nil
 }
 
+func (f *chatRepoFake) ListDirectMessagesLatest(context.Context, string, string, int) ([]repo.ChatDirectMessageItem, error) {
+	return f.directMessageRows, nil
+}
+
+func (f *chatRepoFake) ListDirectMessagesBefore(context.Context, string, string, int64, string, int) ([]repo.ChatDirectMessageItem, error) {
+	return f.directMessageRows, nil
+}
+
+func (f *chatRepoFake) ListDirectMessagesAfter(context.Context, string, string, int64, string, int) ([]repo.ChatDirectMessageItem, error) {
+	return f.directMessageRows, nil
+}
+
+func (f *chatRepoFake) MarkDirectSeen(context.Context, string, string, int64, int64) error {
+	return nil
+}
+
 func (f *chatRepoFake) GetMemberRole(context.Context, string, string) (string, error) {
 	if f.getMemberRoleErr != nil {
 		return "", f.getMemberRoleErr
@@ -133,7 +142,7 @@ func (f *chatRepoFake) GetMemberRole(context.Context, string, string) (string, e
 }
 
 func TestChatLogicListMessagesRejectsInvalidCursor(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{}, event.NoopPublisher{})
+	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{})
 
 	_, err := l.ListMessages(t.Context(), "user-1", dto.ChatGroupIDUri{GroupID: "group-1"}, dto.ChatGroupMessageListReq{
 		Before: "bad-cursor",
@@ -145,7 +154,7 @@ func TestChatLogicListMessagesRejectsInvalidCursor(t *testing.T) {
 }
 
 func TestChatLogicListMessagesRejectsBeforeAndAfter(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{}, event.NoopPublisher{})
+	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{})
 
 	_, err := l.ListMessages(t.Context(), "user-1", dto.ChatGroupIDUri{GroupID: "group-1"}, dto.ChatGroupMessageListReq{
 		Before: "123|00000000-0000-0000-0000-000000000001",
@@ -158,7 +167,7 @@ func TestChatLogicListMessagesRejectsBeforeAndAfter(t *testing.T) {
 }
 
 func TestChatLogicSaveMessageRejectsInvalidType(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{}, event.NoopPublisher{})
+	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{})
 
 	err := l.SaveMessage(t.Context(), "user-1", "group-1", "message-1", "video", "hello", 1)
 
@@ -168,7 +177,7 @@ func TestChatLogicSaveMessageRejectsInvalidType(t *testing.T) {
 }
 
 func TestChatLogicSaveMessageMapsNotMember(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{getMemberRoleErr: repo.ErrNotMember}, allowAllLimiter{}, event.NoopPublisher{})
+	l := logic.NewChatLogic(&chatRepoFake{getMemberRoleErr: repo.ErrNotMember}, allowAllLimiter{})
 
 	err := l.SaveMessage(t.Context(), "user-1", "group-1", "message-1", constant.MessageTypeText, "hello", 1)
 
@@ -177,45 +186,50 @@ func TestChatLogicSaveMessageMapsNotMember(t *testing.T) {
 	}
 }
 
-func TestChatLogicHandleDirectMessageStoresAndReturnsMessage(t *testing.T) {
-	chatRepo := &chatRepoFake{}
-	publisher := &publisherFake{}
-	l := logic.NewChatLogic(chatRepo, allowAllLimiter{}, publisher)
+func TestChatLogicHandleDirectMessageStoresOutboxAndReturnsAck(t *testing.T) {
+	messageID := uuid.NewString()
+	chatRepo := &chatRepoFake{saveDirectCreated: true}
+	l := logic.NewChatLogic(chatRepo, allowAllLimiter{})
 
-	got, err := l.HandleDirectMessage(t.Context(), "sender-id", "receiver-id", []byte(" hello\nthere "))
+	in := []byte(`{"op":"send","message_id":"` + messageID + `","type":"text","content":"hello"}`)
+	got, err := l.HandleDirectMessage(t.Context(), "sender-id", "receiver-id", in)
 
 	if err != nil {
 		t.Fatalf("HandleDirectMessage() error = %v", err)
 	}
-	if got.RecipientID != "receiver-id" {
-		t.Fatalf("HandleDirectMessage() recipient = %q, want receiver-id", got.RecipientID)
+	if got.Ack == nil || !got.Ack.Ok {
+		t.Fatalf("HandleDirectMessage() ack = %+v, want ok", got.Ack)
 	}
-	if string(got.Message) != "hello there" {
-		t.Fatalf("HandleDirectMessage() message = %q, want hello there", got.Message)
+	if got.Ack.MessageID != messageID {
+		t.Fatalf("ack message id = %q, want %q", got.Ack.MessageID, messageID)
 	}
-	if _, err := uuid.Parse(chatRepo.savedDirectMessage.messageID); err != nil {
-		t.Fatalf("saved message id = %q, want uuid: %v", chatRepo.savedDirectMessage.messageID, err)
+	if chatRepo.savedDirectMessage.messageID != messageID {
+		t.Fatalf("saved message id = %q, want %q", chatRepo.savedDirectMessage.messageID, messageID)
 	}
-	if chatRepo.savedDirectMessage.fromUserID != "sender-id" {
-		t.Fatalf("saved from user = %q, want sender-id", chatRepo.savedDirectMessage.fromUserID)
-	}
-	if chatRepo.savedDirectMessage.toUserID != "receiver-id" {
-		t.Fatalf("saved to user = %q, want receiver-id", chatRepo.savedDirectMessage.toUserID)
+	if chatRepo.savedDirectMessage.fromUserID != "sender-id" || chatRepo.savedDirectMessage.toUserID != "receiver-id" {
+		t.Fatalf("saved users = %+v, want sender/receiver", chatRepo.savedDirectMessage)
 	}
 	if chatRepo.savedDirectMessage.msgType != constant.MessageTypeText {
 		t.Fatalf("saved message type = %q, want %q", chatRepo.savedDirectMessage.msgType, constant.MessageTypeText)
 	}
-	if chatRepo.savedDirectMessage.content != "hello there" {
-		t.Fatalf("saved content = %q, want hello there", chatRepo.savedDirectMessage.content)
+	if chatRepo.savedDirectMessage.content != "hello" {
+		t.Fatalf("saved content = %q, want hello", chatRepo.savedDirectMessage.content)
 	}
 	if chatRepo.savedDirectMessage.now <= 0 {
 		t.Fatalf("saved time = %d, want positive value", chatRepo.savedDirectMessage.now)
 	}
-	if publisher.direct.EventID != event.DirectEventID(chatRepo.savedDirectMessage.messageID) {
-		t.Fatalf("published event id = %q, want %q", publisher.direct.EventID, event.DirectEventID(chatRepo.savedDirectMessage.messageID))
+	if chatRepo.savedDirectMessage.outbox.EventID != event.DirectEventID(messageID) {
+		t.Fatalf("outbox event id = %q, want %q", chatRepo.savedDirectMessage.outbox.EventID, event.DirectEventID(messageID))
 	}
-	if publisher.direct.ToUserID != "receiver-id" || publisher.direct.Content != "hello there" {
-		t.Fatalf("published direct message = %+v, want receiver/content", publisher.direct)
+	if chatRepo.savedDirectMessage.outbox.RoutingKey != event.RoutingKeyDirect {
+		t.Fatalf("outbox routing key = %q, want %q", chatRepo.savedDirectMessage.outbox.RoutingKey, event.RoutingKeyDirect)
+	}
+	var out event.DirectMessage
+	if err := json.Unmarshal([]byte(chatRepo.savedDirectMessage.outbox.Payload), &out); err != nil {
+		t.Fatalf("outbox payload json error: %v", err)
+	}
+	if out.MessageID != messageID || out.ToUserID != "receiver-id" || out.Content != "hello" {
+		t.Fatalf("outbox payload = %+v, want message/receiver/content", out)
 	}
 }
 
@@ -226,24 +240,25 @@ func TestChatLogicHandleDirectMessageRejectsInvalidMessage(t *testing.T) {
 		partnerID string
 		message   []byte
 	}{
-		{name: "missing sender", userID: "", partnerID: "receiver-id", message: []byte("hello")},
-		{name: "missing receiver", userID: "sender-id", partnerID: "", message: []byte("hello")},
-		{name: "same user", userID: "sender-id", partnerID: "sender-id", message: []byte("hello")},
-		{name: "empty message", userID: "sender-id", partnerID: "receiver-id", message: []byte(" \n ")},
+		{name: "missing sender", userID: "", partnerID: "receiver-id", message: []byte(`{"op":"send","message_id":"` + uuid.NewString() + `","type":"text","content":"hello"}`)},
+		{name: "missing receiver", userID: "sender-id", partnerID: "", message: []byte(`{"op":"send","message_id":"` + uuid.NewString() + `","type":"text","content":"hello"}`)},
+		{name: "same user", userID: "sender-id", partnerID: "sender-id", message: []byte(`{"op":"send","message_id":"` + uuid.NewString() + `","type":"text","content":"hello"}`)},
+		{name: "empty message", userID: "sender-id", partnerID: "receiver-id", message: []byte(`{"op":"send","message_id":"` + uuid.NewString() + `","type":"text","content":" "}`)},
+		{name: "plain text", userID: "sender-id", partnerID: "receiver-id", message: []byte("hello")},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			chatRepo := &chatRepoFake{}
-			l := logic.NewChatLogic(chatRepo, allowAllLimiter{}, event.NoopPublisher{})
+			l := logic.NewChatLogic(chatRepo, allowAllLimiter{})
 
 			got, err := l.HandleDirectMessage(t.Context(), tt.userID, tt.partnerID, tt.message)
 
-			if !errors.Is(err, logic.ErrParamsType) {
+			if err != nil {
 				t.Fatalf("HandleDirectMessage() error = %v, want %v", err, logic.ErrParamsType)
 			}
-			if got.RecipientID != "" || len(got.Message) != 0 {
-				t.Fatalf("HandleDirectMessage() result = %+v, want empty result", got)
+			if got.Ack == nil || got.Ack.Ok {
+				t.Fatalf("HandleDirectMessage() ack = %+v, want failed ack", got.Ack)
 			}
 			if chatRepo.savedDirectMessage != (savedDirectMessage{}) {
 				t.Fatalf("saved direct message = %+v, want none", chatRepo.savedDirectMessage)
@@ -253,21 +268,21 @@ func TestChatLogicHandleDirectMessageRejectsInvalidMessage(t *testing.T) {
 }
 
 func TestChatLogicHandleDirectMessageMapsRepoError(t *testing.T) {
-	l := logic.NewChatLogic(&chatRepoFake{saveDirectMessageErr: repo.ErrDefault}, allowAllLimiter{}, event.NoopPublisher{})
+	l := logic.NewChatLogic(&chatRepoFake{saveDirectMessageErr: repo.ErrDefault}, allowAllLimiter{})
 
-	got, err := l.HandleDirectMessage(t.Context(), "sender-id", "receiver-id", []byte("hello"))
+	got, err := l.HandleDirectMessage(t.Context(), "sender-id", "receiver-id", []byte(`{"op":"send","message_id":"`+uuid.NewString()+`","type":"text","content":"hello"}`))
 
-	if !errors.Is(err, logic.ErrDefault) {
-		t.Fatalf("HandleDirectMessage() error = %v, want %v", err, logic.ErrDefault)
+	if err != nil {
+		t.Fatalf("HandleDirectMessage() error = %v, want nil with failed ack", err)
 	}
-	if got.RecipientID != "" || len(got.Message) != 0 {
-		t.Fatalf("HandleDirectMessage() result = %+v, want empty result", got)
+	if got.Ack == nil || got.Ack.Ok || got.Ack.Error != logic.ErrDefault.Error() {
+		t.Fatalf("HandleDirectMessage() ack = %+v, want default error ack", got.Ack)
 	}
 }
 
-func TestChatLogicHandleGroupMessagePublishesEvent(t *testing.T) {
-	publisher := &publisherFake{}
-	l := logic.NewChatLogic(&chatRepoFake{}, allowAllLimiter{}, publisher)
+func TestChatLogicHandleGroupMessageStoresOutbox(t *testing.T) {
+	chatRepo := &chatRepoFake{saveGroupCreated: true}
+	l := logic.NewChatLogic(chatRepo, allowAllLimiter{})
 	groupID := uuid.NewString()
 	messageID := uuid.NewString()
 
@@ -277,14 +292,43 @@ func TestChatLogicHandleGroupMessagePublishesEvent(t *testing.T) {
 	if got.Ack == nil || !got.Ack.Ok {
 		t.Fatalf("HandleGroupMessage() ack = %+v, want ok", got.Ack)
 	}
-	if publisher.group.EventID != event.GroupEventID(groupID, messageID) {
-		t.Fatalf("published event id = %q, want %q", publisher.group.EventID, event.GroupEventID(groupID, messageID))
+	if chatRepo.savedGroupOutbox.EventID != event.GroupEventID(groupID, messageID) {
+		t.Fatalf("outbox event id = %q, want %q", chatRepo.savedGroupOutbox.EventID, event.GroupEventID(groupID, messageID))
 	}
-	if publisher.group.GroupID != groupID || publisher.group.MessageID != messageID || publisher.group.Content != "hello" {
-		t.Fatalf("published group message = %+v, want group/message/content", publisher.group)
+	if chatRepo.savedGroupOutbox.RoutingKey != event.RoutingKeyGroup {
+		t.Fatalf("outbox routing key = %q, want %q", chatRepo.savedGroupOutbox.RoutingKey, event.RoutingKeyGroup)
 	}
-	if publisher.group.Payload == "" {
-		t.Fatal("published group payload is empty")
+	var out event.GroupMessage
+	if err := json.Unmarshal([]byte(chatRepo.savedGroupOutbox.Payload), &out); err != nil {
+		t.Fatalf("outbox payload json error: %v", err)
+	}
+	if out.GroupID != groupID || out.MessageID != messageID || out.Content != "hello" || out.Payload == "" {
+		t.Fatalf("outbox payload = %+v, want group/message/content/payload", out)
+	}
+}
+
+func TestChatLogicListDirectMessagesMapsRows(t *testing.T) {
+	partnerID := uuid.NewString()
+	messageID := uuid.NewString()
+	l := logic.NewChatLogic(&chatRepoFake{directMessageRows: []repo.ChatDirectMessageItem{{
+		MessageID:  messageID,
+		FromUserID: "user-1",
+		ToUserID:   partnerID,
+		Type:       constant.MessageTypeText,
+		Content:    "hello",
+		Ctime:      123,
+	}}}, allowAllLimiter{})
+
+	got, err := l.ListDirectMessages(t.Context(), "user-1", dto.ChatDirectMessageUserUri{UserID: partnerID}, dto.ChatDirectMessageListReq{})
+
+	if err != nil {
+		t.Fatalf("ListDirectMessages() error = %v", err)
+	}
+	if len(got.Items) != 1 {
+		t.Fatalf("ListDirectMessages() items = %d, want 1", len(got.Items))
+	}
+	if got.Items[0].MessageID != messageID || got.Items[0].ToUserID != partnerID {
+		t.Fatalf("ListDirectMessages() item = %+v, want message/partner", got.Items[0])
 	}
 }
 
@@ -301,7 +345,7 @@ func TestChatLogicMapsRepoErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := logic.NewChatLogic(&chatRepoFake{joinGroupErr: tt.repoErr}, allowAllLimiter{}, event.NoopPublisher{})
+			l := logic.NewChatLogic(&chatRepoFake{joinGroupErr: tt.repoErr}, allowAllLimiter{})
 
 			err := l.JoinGroup(t.Context(), "user-1", dto.ChatGroupIDUri{GroupID: "group-1"})
 

@@ -2,8 +2,11 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"nurture/internal/chat/constant"
+	"nurture/internal/chat/event"
+	"nurture/internal/chat/repo"
 	"strings"
 	"time"
 )
@@ -12,7 +15,7 @@ func (l *ChatLogic) SaveMessage(ctx context.Context, userID string, groupID stri
 	if strings.TrimSpace(groupID) == "" || strings.TrimSpace(messageID) == "" {
 		return ErrParamsType
 	}
-	if !IsGroupMessageType(msgType) {
+	if !IsChatMessageType(msgType) {
 		return ErrInvalidMessageType
 	}
 	if content == "" {
@@ -33,7 +36,39 @@ func (l *ChatLogic) SaveMessage(ctx context.Context, userID string, groupID stri
 	if now <= 0 {
 		now = time.Now().UnixMilli()
 	}
-	if err := l.chatRepo.SaveMessage(ctx, groupID, messageID, userID, msgType, content, now); err != nil {
+	out, err := json.Marshal(GroupOutMessage{
+		Op:      "new_message",
+		GroupID: groupID,
+		Message: GroupMessageBody{
+			MessageID:  messageID,
+			FromUserID: userID,
+			Type:       msgType,
+			Content:    content,
+			Ctime:      now,
+		},
+	})
+	if err != nil {
+		return ErrDefault
+	}
+	payload, err := json.Marshal(event.GroupMessage{
+		EventID:    event.GroupEventID(groupID, messageID),
+		MessageID:  messageID,
+		GroupID:    groupID,
+		FromUserID: userID,
+		Type:       msgType,
+		Content:    content,
+		Ctime:      now,
+		Payload:    string(out),
+	})
+	if err != nil {
+		return ErrDefault
+	}
+	if _, err := l.chatRepo.SaveMessage(ctx, groupID, messageID, userID, msgType, content, now, repo.ChatOutboxEvent{
+		EventID:    event.GroupEventID(groupID, messageID),
+		RoutingKey: event.RoutingKeyGroup,
+		Payload:    string(payload),
+		Ctime:      now,
+	}); err != nil {
 		return mapRepoErr(err)
 	}
 	return nil

@@ -3,7 +3,6 @@ package logic
 import (
 	"context"
 	"nurture/internal/chat/dto"
-	"nurture/internal/chat/event"
 	"nurture/internal/chat/repo"
 	"time"
 )
@@ -25,28 +24,25 @@ type IChatLogic interface {
 	GetGroupProfile(ctx context.Context, userID string, uri dto.ChatGroupIDUri) (dto.ChatGroupProfileResp, error)
 	ListMembers(ctx context.Context, userID string, uri dto.ChatGroupIDUri, req dto.ChatGroupMemberListReq) (dto.ChatGroupMemberListResp, error)
 	ListMessages(ctx context.Context, userID string, uri dto.ChatGroupIDUri, req dto.ChatGroupMessageListReq) (dto.ChatGroupMessageListResp, error)
+	ListDirectMessages(ctx context.Context, userID string, uri dto.ChatDirectMessageUserUri, req dto.ChatDirectMessageListReq) (dto.ChatDirectMessageListResp, error)
 
 	SaveMessage(ctx context.Context, userID string, groupID string, messageID string, msgType string, content string, now int64) error
 	MarkGroupSeen(ctx context.Context, userID string, groupID string, now int64) error
+	MarkDirectSeen(ctx context.Context, userID string, partnerID string, now int64) error
 	CheckMember(ctx context.Context, userID string, groupID string) error
 	HandleDirectMessage(ctx context.Context, userID string, partnerID string, message []byte) (DirectMessageResult, error)
 	HandleGroupMessage(ctx context.Context, userID string, message []byte) GroupMessageResult
 }
 
 type ChatLogic struct {
-	chatRepo  repo.IChatRepo
-	limiter   RateLimiter
-	publisher event.Publisher
+	chatRepo repo.IChatRepo
+	limiter  RateLimiter
 }
 
-func NewChatLogic(chatRepo repo.IChatRepo, limiter RateLimiter, publisher event.Publisher) *ChatLogic {
-	if publisher == nil {
-		publisher = event.NoopPublisher{}
-	}
+func NewChatLogic(chatRepo repo.IChatRepo, limiter RateLimiter) *ChatLogic {
 	return &ChatLogic{
-		chatRepo:  chatRepo,
-		limiter:   limiter,
-		publisher: publisher,
+		chatRepo: chatRepo,
+		limiter:  limiter,
 	}
 }
 

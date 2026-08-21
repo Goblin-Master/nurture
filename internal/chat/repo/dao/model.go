@@ -28,6 +28,46 @@ type ChatDirectMessage struct {
 	Utime int64
 }
 
+// 私聊-已读游标表
+type ChatDirectSeen struct {
+	// 主键ID
+	ID int64
+	// 用户ID(UUID)
+	UserID pgtype.UUID
+	// 会话对方用户ID(UUID)
+	PartnerUserID pgtype.UUID
+	// 最后已读时间戳(毫秒)
+	LastSeenTime int64
+	// 创建时间戳(毫秒)
+	Ctime int64
+	// 更新时间戳(毫秒)
+	Utime int64
+}
+
+// 聊天事件 outbox 表
+type ChatEventOutbox struct {
+	// 主键ID
+	ID int64
+	// 事件ID(幂等)
+	EventID string
+	// RabbitMQ 路由键
+	RoutingKey string
+	// 事件载荷(JSON字符串)
+	Payload string
+	// 事件状态(pending/publishing/published/failed)
+	Status string
+	// 发布尝试次数
+	Attempts int32
+	// 下一次重试时间戳(毫秒)
+	NextRetryAt int64
+	// 发布时间戳(毫秒)
+	PublishedAt int64
+	// 创建时间戳(毫秒)
+	Ctime int64
+	// 更新时间戳(毫秒)
+	Utime int64
+}
+
 // 群聊-群表
 type ChatGroup struct {
 	// 主键ID

@@ -46,6 +46,24 @@ type ChatGroupMessageItem struct {
 	Ctime      int64
 }
 
+type ChatDirectMessageItem struct {
+	MessageID  string
+	FromUserID string
+	ToUserID   string
+	Type       string
+	Content    string
+	Ctime      int64
+}
+
+type ChatOutboxEvent struct {
+	ID         int64
+	EventID    string
+	RoutingKey string
+	Payload    string
+	Attempts   int32
+	Ctime      int64
+}
+
 type ChatGroupDiscoverItem struct {
 	GroupID     string
 	Name        string
@@ -83,11 +101,15 @@ type IChatRepo interface {
 	GetGroupProfile(ctx context.Context, groupID string, memberPreviewLimit int) (ChatGroupProfileItem, []ChatGroupMemberProfile, error)
 	ListMembersWithProfile(ctx context.Context, groupID string, page, pageSize int) ([]ChatGroupMemberProfile, bool, error)
 
-	SaveMessage(ctx context.Context, groupID, messageID, fromUserID, msgType, content string, now int64) error
-	SaveDirectMessage(ctx context.Context, messageID, fromUserID, toUserID, msgType, content string, now int64) error
+	SaveMessage(ctx context.Context, groupID, messageID, fromUserID, msgType, content string, now int64, outbox ChatOutboxEvent) (bool, error)
+	SaveDirectMessage(ctx context.Context, messageID, fromUserID, toUserID, msgType, content string, now int64, outbox ChatOutboxEvent) (bool, error)
 	ListMessagesLatest(ctx context.Context, groupID string, limit int) ([]ChatGroupMessageItem, error)
 	ListMessagesBefore(ctx context.Context, groupID string, beforeCtime int64, beforeMessageID string, limit int) ([]ChatGroupMessageItem, error)
 	ListMessagesAfter(ctx context.Context, groupID string, afterCtime int64, afterMessageID string, limit int) ([]ChatGroupMessageItem, error)
+	ListDirectMessagesLatest(ctx context.Context, userID, partnerID string, limit int) ([]ChatDirectMessageItem, error)
+	ListDirectMessagesBefore(ctx context.Context, userID, partnerID string, beforeCtime int64, beforeMessageID string, limit int) ([]ChatDirectMessageItem, error)
+	ListDirectMessagesAfter(ctx context.Context, userID, partnerID string, afterCtime int64, afterMessageID string, limit int) ([]ChatDirectMessageItem, error)
+	MarkDirectSeen(ctx context.Context, userID, partnerID string, lastSeenTime int64, now int64) error
 
 	GetMemberRole(ctx context.Context, groupID, userID string) (string, error)
 }

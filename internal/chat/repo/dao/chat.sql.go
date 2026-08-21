@@ -11,6 +11,83 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimPendingChatEventOutbox = `-- name: ClaimPendingChatEventOutbox :many
+WITH picked AS (
+  SELECT e.id
+  FROM "chat_event_outbox" e
+  WHERE (
+    e.status = 'pending'
+    AND e.next_retry_at <= $1
+  ) OR (
+    e.status = 'publishing'
+    AND e.utime <= $2
+  )
+  ORDER BY e.id ASC
+  LIMIT $3
+  FOR UPDATE SKIP LOCKED
+)
+UPDATE "chat_event_outbox" o
+SET status = 'publishing',
+    utime = $4
+FROM picked
+WHERE o.id = picked.id
+RETURNING
+  o.id,
+  o.event_id,
+  o.routing_key,
+  o.payload,
+  o.attempts,
+  o.ctime
+`
+
+type ClaimPendingChatEventOutboxParams struct {
+	NextRetryAt int64
+	Utime       int64
+	Limit       int32
+	Utime_2     int64
+}
+
+type ClaimPendingChatEventOutboxRow struct {
+	ID         int64
+	EventID    string
+	RoutingKey string
+	Payload    string
+	Attempts   int32
+	Ctime      int64
+}
+
+func (q *Queries) ClaimPendingChatEventOutbox(ctx context.Context, arg ClaimPendingChatEventOutboxParams) ([]ClaimPendingChatEventOutboxRow, error) {
+	rows, err := q.db.Query(ctx, claimPendingChatEventOutbox,
+		arg.NextRetryAt,
+		arg.Utime,
+		arg.Limit,
+		arg.Utime_2,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimPendingChatEventOutboxRow
+	for rows.Next() {
+		var i ClaimPendingChatEventOutboxRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.RoutingKey,
+			&i.Payload,
+			&i.Attempts,
+			&i.Ctime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createChatDirectMessage = `-- name: CreateChatDirectMessage :execrows
 INSERT INTO "chat_direct_message" (
   message_id, from_user_id, to_user_id, type, content, ctime, utime
@@ -36,6 +113,37 @@ func (q *Queries) CreateChatDirectMessage(ctx context.Context, arg CreateChatDir
 		arg.ToUserID,
 		arg.Type,
 		arg.Content,
+		arg.Ctime,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const createChatEventOutbox = `-- name: CreateChatEventOutbox :execrows
+INSERT INTO "chat_event_outbox" (
+  event_id, routing_key, payload, status,
+  attempts, next_retry_at, published_at, ctime, utime
+) VALUES (
+  $1, $2, $3, 'pending',
+  0, 0, 0, $4, $4
+)
+ON CONFLICT (event_id) DO NOTHING
+`
+
+type CreateChatEventOutboxParams struct {
+	EventID    string
+	RoutingKey string
+	Payload    string
+	Ctime      int64
+}
+
+func (q *Queries) CreateChatEventOutbox(ctx context.Context, arg CreateChatEventOutboxParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createChatEventOutbox,
+		arg.EventID,
+		arg.RoutingKey,
+		arg.Payload,
 		arg.Ctime,
 	)
 	if err != nil {
@@ -336,6 +444,214 @@ func (q *Queries) IncChatGroupMemberCount(ctx context.Context, arg IncChatGroupM
 	return result.RowsAffected(), nil
 }
 
+const listChatDirectMessagesAfter = `-- name: ListChatDirectMessagesAfter :many
+SELECT
+  message_id::text AS message_id,
+  from_user_id::text AS from_user_id,
+  to_user_id::text AS to_user_id,
+  type,
+  content,
+  ctime
+FROM "chat_direct_message"
+WHERE (
+  (
+    from_user_id = $1 AND to_user_id = $2
+  ) OR (
+    from_user_id = $2 AND to_user_id = $1
+  )
+)
+  AND (
+    ctime > $3 OR
+    (ctime = $3 AND message_id > $4)
+  )
+ORDER BY ctime ASC, message_id ASC
+LIMIT $5
+`
+
+type ListChatDirectMessagesAfterParams struct {
+	FromUserID pgtype.UUID
+	ToUserID   pgtype.UUID
+	Ctime      int64
+	MessageID  pgtype.UUID
+	Limit      int32
+}
+
+type ListChatDirectMessagesAfterRow struct {
+	MessageID  string
+	FromUserID string
+	ToUserID   string
+	Type       string
+	Content    string
+	Ctime      int64
+}
+
+func (q *Queries) ListChatDirectMessagesAfter(ctx context.Context, arg ListChatDirectMessagesAfterParams) ([]ListChatDirectMessagesAfterRow, error) {
+	rows, err := q.db.Query(ctx, listChatDirectMessagesAfter,
+		arg.FromUserID,
+		arg.ToUserID,
+		arg.Ctime,
+		arg.MessageID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatDirectMessagesAfterRow
+	for rows.Next() {
+		var i ListChatDirectMessagesAfterRow
+		if err := rows.Scan(
+			&i.MessageID,
+			&i.FromUserID,
+			&i.ToUserID,
+			&i.Type,
+			&i.Content,
+			&i.Ctime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatDirectMessagesBefore = `-- name: ListChatDirectMessagesBefore :many
+SELECT
+  message_id::text AS message_id,
+  from_user_id::text AS from_user_id,
+  to_user_id::text AS to_user_id,
+  type,
+  content,
+  ctime
+FROM "chat_direct_message"
+WHERE (
+  (
+    from_user_id = $1 AND to_user_id = $2
+  ) OR (
+    from_user_id = $2 AND to_user_id = $1
+  )
+)
+  AND (
+    ctime < $3 OR
+    (ctime = $3 AND message_id < $4)
+  )
+ORDER BY ctime DESC, message_id DESC
+LIMIT $5
+`
+
+type ListChatDirectMessagesBeforeParams struct {
+	FromUserID pgtype.UUID
+	ToUserID   pgtype.UUID
+	Ctime      int64
+	MessageID  pgtype.UUID
+	Limit      int32
+}
+
+type ListChatDirectMessagesBeforeRow struct {
+	MessageID  string
+	FromUserID string
+	ToUserID   string
+	Type       string
+	Content    string
+	Ctime      int64
+}
+
+func (q *Queries) ListChatDirectMessagesBefore(ctx context.Context, arg ListChatDirectMessagesBeforeParams) ([]ListChatDirectMessagesBeforeRow, error) {
+	rows, err := q.db.Query(ctx, listChatDirectMessagesBefore,
+		arg.FromUserID,
+		arg.ToUserID,
+		arg.Ctime,
+		arg.MessageID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatDirectMessagesBeforeRow
+	for rows.Next() {
+		var i ListChatDirectMessagesBeforeRow
+		if err := rows.Scan(
+			&i.MessageID,
+			&i.FromUserID,
+			&i.ToUserID,
+			&i.Type,
+			&i.Content,
+			&i.Ctime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatDirectMessagesLatest = `-- name: ListChatDirectMessagesLatest :many
+SELECT
+  message_id::text AS message_id,
+  from_user_id::text AS from_user_id,
+  to_user_id::text AS to_user_id,
+  type,
+  content,
+  ctime
+FROM "chat_direct_message"
+WHERE (
+  from_user_id = $1 AND to_user_id = $2
+) OR (
+  from_user_id = $2 AND to_user_id = $1
+)
+ORDER BY ctime DESC, message_id DESC
+LIMIT $3
+`
+
+type ListChatDirectMessagesLatestParams struct {
+	FromUserID pgtype.UUID
+	ToUserID   pgtype.UUID
+	Limit      int32
+}
+
+type ListChatDirectMessagesLatestRow struct {
+	MessageID  string
+	FromUserID string
+	ToUserID   string
+	Type       string
+	Content    string
+	Ctime      int64
+}
+
+func (q *Queries) ListChatDirectMessagesLatest(ctx context.Context, arg ListChatDirectMessagesLatestParams) ([]ListChatDirectMessagesLatestRow, error) {
+	rows, err := q.db.Query(ctx, listChatDirectMessagesLatest, arg.FromUserID, arg.ToUserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatDirectMessagesLatestRow
+	for rows.Next() {
+		var i ListChatDirectMessagesLatestRow
+		if err := rows.Scan(
+			&i.MessageID,
+			&i.FromUserID,
+			&i.ToUserID,
+			&i.Type,
+			&i.Content,
+			&i.Ctime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatGroupMembersPreviewWithProfile = `-- name: ListChatGroupMembersPreviewWithProfile :many
 SELECT
   gm.user_id::text AS user_id,
@@ -460,7 +776,7 @@ WHERE group_id = $1
   AND (
     ctime > $2 OR
     (ctime = $2 AND message_id > $3)
-  )
+)
 ORDER BY ctime ASC, message_id ASC
 LIMIT $4
 `
@@ -887,6 +1203,58 @@ func (q *Queries) LockChatGroupByID(ctx context.Context, groupID pgtype.UUID) (C
 	return i, err
 }
 
+const markChatEventOutboxFailed = `-- name: MarkChatEventOutboxFailed :execrows
+UPDATE "chat_event_outbox"
+SET status = CASE WHEN attempts + 1 >= $3 THEN 'failed' ELSE 'pending' END,
+    attempts = attempts + 1,
+    next_retry_at = CASE WHEN attempts + 1 >= $3 THEN 0 ELSE $2 END,
+    utime = $4
+WHERE id = $1
+  AND status = 'publishing'
+`
+
+type MarkChatEventOutboxFailedParams struct {
+	ID          int64
+	NextRetryAt int64
+	Attempts    int32
+	Utime       int64
+}
+
+func (q *Queries) MarkChatEventOutboxFailed(ctx context.Context, arg MarkChatEventOutboxFailedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markChatEventOutboxFailed,
+		arg.ID,
+		arg.NextRetryAt,
+		arg.Attempts,
+		arg.Utime,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markChatEventOutboxPublished = `-- name: MarkChatEventOutboxPublished :execrows
+UPDATE "chat_event_outbox"
+SET status = 'published',
+    published_at = $2,
+    utime = $2
+WHERE id = $1
+  AND status = 'publishing'
+`
+
+type MarkChatEventOutboxPublishedParams struct {
+	ID          int64
+	PublishedAt int64
+}
+
+func (q *Queries) MarkChatEventOutboxPublished(ctx context.Context, arg MarkChatEventOutboxPublishedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markChatEventOutboxPublished, arg.ID, arg.PublishedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const searchChatGroupsByName = `-- name: SearchChatGroupsByName :many
 SELECT
   g.group_id::text AS group_id,
@@ -1012,4 +1380,32 @@ func (q *Queries) UpdateChatGroupOwnerID(ctx context.Context, arg UpdateChatGrou
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertChatDirectSeen = `-- name: UpsertChatDirectSeen :exec
+INSERT INTO "chat_direct_seen" (
+  user_id, partner_user_id, last_seen_time, ctime, utime
+) VALUES (
+  $1, $2, $3, $4, $4
+)
+ON CONFLICT (user_id, partner_user_id) DO UPDATE
+SET last_seen_time = GREATEST("chat_direct_seen".last_seen_time, EXCLUDED.last_seen_time),
+    utime = EXCLUDED.utime
+`
+
+type UpsertChatDirectSeenParams struct {
+	UserID        pgtype.UUID
+	PartnerUserID pgtype.UUID
+	LastSeenTime  int64
+	Ctime         int64
+}
+
+func (q *Queries) UpsertChatDirectSeen(ctx context.Context, arg UpsertChatDirectSeenParams) error {
+	_, err := q.db.Exec(ctx, upsertChatDirectSeen,
+		arg.UserID,
+		arg.PartnerUserID,
+		arg.LastSeenTime,
+		arg.Ctime,
+	)
+	return err
 }

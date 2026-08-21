@@ -137,3 +137,28 @@ type (
 		NextAfter  string                 `json:"next_after,omitempty"`
 	}
 )
+
+type (
+	ChatDirectMessageUserUri struct {
+		UserID string `uri:"user_id" binding:"required"`
+	}
+	ChatDirectMessageListReq struct {
+		Before string `form:"before"`
+		After  string `form:"after"`
+		Limit  int    `form:"limit"`
+	}
+	ChatDirectMessageItem struct {
+		MessageID  string `json:"message_id"`
+		FromUserID string `json:"from_user_id"`
+		ToUserID   string `json:"to_user_id"`
+		Type       string `json:"type"`
+		Content    string `json:"content"`
+		Ctime      int64  `json:"ctime"`
+	}
+	ChatDirectMessageListResp struct {
+		Items      []ChatDirectMessageItem `json:"items"`
+		HasMore    bool                    `json:"has_more"`
+		NextBefore string                  `json:"next_before,omitempty"`
+		NextAfter  string                  `json:"next_after,omitempty"`
+	}
+)

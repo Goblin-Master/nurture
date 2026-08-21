@@ -97,3 +97,51 @@ COMMENT ON COLUMN "chat_direct_message".utime IS '更新时间戳(毫秒)';
 
 CREATE INDEX IF NOT EXISTS idx_chat_direct_message_from_to_ctime ON "chat_direct_message"(from_user_id, to_user_id, ctime, message_id);
 CREATE INDEX IF NOT EXISTS idx_chat_direct_message_to_from_ctime ON "chat_direct_message"(to_user_id, from_user_id, ctime, message_id);
+
+CREATE TABLE IF NOT EXISTS "chat_direct_seen" (
+  id              BIGSERIAL PRIMARY KEY,
+  user_id         UUID NOT NULL,
+  partner_user_id UUID NOT NULL,
+  last_seen_time  BIGINT NOT NULL DEFAULT 0,
+  ctime           BIGINT NOT NULL,
+  utime           BIGINT NOT NULL,
+  CONSTRAINT ck_chat_direct_seen_users CHECK (user_id <> partner_user_id),
+  CONSTRAINT uq_chat_direct_seen UNIQUE (user_id, partner_user_id)
+);
+
+COMMENT ON TABLE "chat_direct_seen" IS '私聊-已读游标表';
+COMMENT ON COLUMN "chat_direct_seen".id IS '主键ID';
+COMMENT ON COLUMN "chat_direct_seen".user_id IS '用户ID(UUID)';
+COMMENT ON COLUMN "chat_direct_seen".partner_user_id IS '会话对方用户ID(UUID)';
+COMMENT ON COLUMN "chat_direct_seen".last_seen_time IS '最后已读时间戳(毫秒)';
+COMMENT ON COLUMN "chat_direct_seen".ctime IS '创建时间戳(毫秒)';
+COMMENT ON COLUMN "chat_direct_seen".utime IS '更新时间戳(毫秒)';
+
+CREATE INDEX IF NOT EXISTS idx_chat_direct_seen_user_partner ON "chat_direct_seen"(user_id, partner_user_id);
+
+CREATE TABLE IF NOT EXISTS "chat_event_outbox" (
+  id            BIGSERIAL PRIMARY KEY,
+  event_id      VARCHAR(128) UNIQUE NOT NULL,
+  routing_key   VARCHAR(64) NOT NULL,
+  payload       TEXT NOT NULL,
+  status        VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','publishing','published','failed')),
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  next_retry_at BIGINT NOT NULL DEFAULT 0,
+  published_at  BIGINT NOT NULL DEFAULT 0,
+  ctime         BIGINT NOT NULL,
+  utime         BIGINT NOT NULL
+);
+
+COMMENT ON TABLE "chat_event_outbox" IS '聊天事件 outbox 表';
+COMMENT ON COLUMN "chat_event_outbox".id IS '主键ID';
+COMMENT ON COLUMN "chat_event_outbox".event_id IS '事件ID(幂等)';
+COMMENT ON COLUMN "chat_event_outbox".routing_key IS 'RabbitMQ 路由键';
+COMMENT ON COLUMN "chat_event_outbox".payload IS '事件载荷(JSON字符串)';
+COMMENT ON COLUMN "chat_event_outbox".status IS '事件状态(pending/publishing/published/failed)';
+COMMENT ON COLUMN "chat_event_outbox".attempts IS '发布尝试次数';
+COMMENT ON COLUMN "chat_event_outbox".next_retry_at IS '下一次重试时间戳(毫秒)';
+COMMENT ON COLUMN "chat_event_outbox".published_at IS '发布时间戳(毫秒)';
+COMMENT ON COLUMN "chat_event_outbox".ctime IS '创建时间戳(毫秒)';
+COMMENT ON COLUMN "chat_event_outbox".utime IS '更新时间戳(毫秒)';
+
+CREATE INDEX IF NOT EXISTS idx_chat_event_outbox_pending ON "chat_event_outbox"(status, next_retry_at, id);

@@ -245,6 +245,71 @@ INSERT INTO "chat_direct_message" (
 )
 ON CONFLICT (from_user_id, to_user_id, message_id) DO NOTHING;
 
+-- name: UpsertChatDirectSeen :exec
+INSERT INTO "chat_direct_seen" (
+  user_id, partner_user_id, last_seen_time, ctime, utime
+) VALUES (
+  $1, $2, $3, $4, $4
+)
+ON CONFLICT (user_id, partner_user_id) DO UPDATE
+SET last_seen_time = GREATEST("chat_direct_seen".last_seen_time, EXCLUDED.last_seen_time),
+    utime = EXCLUDED.utime;
+
+-- name: CreateChatEventOutbox :execrows
+INSERT INTO "chat_event_outbox" (
+  event_id, routing_key, payload, status,
+  attempts, next_retry_at, published_at, ctime, utime
+) VALUES (
+  $1, $2, $3, 'pending',
+  0, 0, 0, $4, $4
+)
+ON CONFLICT (event_id) DO NOTHING;
+
+-- name: ClaimPendingChatEventOutbox :many
+WITH picked AS (
+  SELECT e.id
+  FROM "chat_event_outbox" e
+  WHERE (
+    e.status = 'pending'
+    AND e.next_retry_at <= $1
+  ) OR (
+    e.status = 'publishing'
+    AND e.utime <= $2
+  )
+  ORDER BY e.id ASC
+  LIMIT $3
+  FOR UPDATE SKIP LOCKED
+)
+UPDATE "chat_event_outbox" o
+SET status = 'publishing',
+    utime = $4
+FROM picked
+WHERE o.id = picked.id
+RETURNING
+  o.id,
+  o.event_id,
+  o.routing_key,
+  o.payload,
+  o.attempts,
+  o.ctime;
+
+-- name: MarkChatEventOutboxPublished :execrows
+UPDATE "chat_event_outbox"
+SET status = 'published',
+    published_at = $2,
+    utime = $2
+WHERE id = $1
+  AND status = 'publishing';
+
+-- name: MarkChatEventOutboxFailed :execrows
+UPDATE "chat_event_outbox"
+SET status = CASE WHEN attempts + 1 >= $3 THEN 'failed' ELSE 'pending' END,
+    attempts = attempts + 1,
+    next_retry_at = CASE WHEN attempts + 1 >= $3 THEN 0 ELSE $2 END,
+    utime = $4
+WHERE id = $1
+  AND status = 'publishing';
+
 -- name: ListChatGroupMessagesLatest :many
 SELECT
   message_id::text AS message_id,
@@ -288,6 +353,69 @@ WHERE group_id = $1
   AND (
     ctime > $2 OR
     (ctime = $2 AND message_id > $3)
-  )
+)
 ORDER BY ctime ASC, message_id ASC
 LIMIT $4;
+
+-- name: ListChatDirectMessagesLatest :many
+SELECT
+  message_id::text AS message_id,
+  from_user_id::text AS from_user_id,
+  to_user_id::text AS to_user_id,
+  type,
+  content,
+  ctime
+FROM "chat_direct_message"
+WHERE (
+  from_user_id = $1 AND to_user_id = $2
+) OR (
+  from_user_id = $2 AND to_user_id = $1
+)
+ORDER BY ctime DESC, message_id DESC
+LIMIT $3;
+
+-- name: ListChatDirectMessagesBefore :many
+SELECT
+  message_id::text AS message_id,
+  from_user_id::text AS from_user_id,
+  to_user_id::text AS to_user_id,
+  type,
+  content,
+  ctime
+FROM "chat_direct_message"
+WHERE (
+  (
+    from_user_id = $1 AND to_user_id = $2
+  ) OR (
+    from_user_id = $2 AND to_user_id = $1
+  )
+)
+  AND (
+    ctime < $3 OR
+    (ctime = $3 AND message_id < $4)
+  )
+ORDER BY ctime DESC, message_id DESC
+LIMIT $5;
+
+-- name: ListChatDirectMessagesAfter :many
+SELECT
+  message_id::text AS message_id,
+  from_user_id::text AS from_user_id,
+  to_user_id::text AS to_user_id,
+  type,
+  content,
+  ctime
+FROM "chat_direct_message"
+WHERE (
+  (
+    from_user_id = $1 AND to_user_id = $2
+  ) OR (
+    from_user_id = $2 AND to_user_id = $1
+  )
+)
+  AND (
+    ctime > $3 OR
+    (ctime = $3 AND message_id > $4)
+  )
+ORDER BY ctime ASC, message_id ASC
+LIMIT $5;
