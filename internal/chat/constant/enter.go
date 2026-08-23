@@ -31,6 +31,11 @@ const (
 )
 
 const (
+	ConsumerRetryDelay  = 2 * time.Second
+	ConsumerMaxAttempts = 3
+)
+
+const (
 	RateLimitGroupCreate    = "chat:groups:create"
 	RateLimitGroupDiscover  = "chat:groups:discover"
 	RateLimitGroupSearch    = "chat:groups:search"

@@ -60,6 +60,10 @@ func (w *Worker) Start(ctx context.Context) {
 					event.RoutingKeyDirect,
 					event.RoutingKeyGroup,
 				},
+				Retry: rabbitmqx.RetryConfig{
+					Delay:       constant.ConsumerRetryDelay,
+					MaxAttempts: constant.ConsumerMaxAttempts,
+				},
 			}, w.handle)
 			if ctx.Err() != nil {
 				return
@@ -79,24 +83,18 @@ func (w *Worker) Start(ctx context.Context) {
 func (w *Worker) handle(_ context.Context, delivery rabbitmqx.Delivery) error {
 	switch delivery.RoutingKey {
 	case event.RoutingKeyDirect:
-		w.handleDirect(delivery)
+		return w.handleDirect(delivery)
 	case event.RoutingKeyGroup:
-		w.handleGroup(delivery)
+		return w.handleGroup(delivery)
 	default:
-		if w.log != nil {
-			w.log.Warnf("unknown chat event routing key: %s", delivery.RoutingKey)
-		}
+		return rabbitmqx.Discard(fmt.Errorf("unknown chat event routing key: %s", delivery.RoutingKey))
 	}
-	return nil
 }
 
-func (w *Worker) handleDirect(delivery rabbitmqx.Delivery) {
+func (w *Worker) handleDirect(delivery rabbitmqx.Delivery) error {
 	var msg event.DirectMessage
 	if err := json.Unmarshal(delivery.Body, &msg); err != nil {
-		if w.log != nil {
-			w.log.Error(err)
-		}
-		return
+		return rabbitmqx.Discard(fmt.Errorf("decode direct chat event: %w", err))
 	}
 	eventID := msg.EventID
 	if eventID == "" {
@@ -116,32 +114,28 @@ func (w *Worker) handleDirect(delivery rabbitmqx.Delivery) {
 			},
 		})
 		if err != nil {
-			if w.log != nil {
-				w.log.Error(err)
-			}
-			return
+			return rabbitmqx.Discard(fmt.Errorf("build direct chat payload: %w", err))
 		}
 		payload = string(out)
 	}
 	w.hub.DeliverToUser(constant.ChannelDirect, msg.ToUserID, eventID, []byte(payload))
+	return nil
 }
 
-func (w *Worker) handleGroup(delivery rabbitmqx.Delivery) {
+func (w *Worker) handleGroup(delivery rabbitmqx.Delivery) error {
 	var msg event.GroupMessage
 	if err := json.Unmarshal(delivery.Body, &msg); err != nil {
-		if w.log != nil {
-			w.log.Error(err)
-		}
-		return
+		return rabbitmqx.Discard(fmt.Errorf("decode group chat event: %w", err))
 	}
 	eventID := msg.EventID
 	if eventID == "" {
 		eventID = delivery.MessageID
 	}
 	if msg.Payload == "" {
-		return
+		return rabbitmqx.Discard(fmt.Errorf("missing group chat payload: %s", eventID))
 	}
 	w.hub.DeliverToRoom(msg.GroupID, eventID, []byte(msg.Payload))
+	return nil
 }
 
 func instanceQueueName() string {
