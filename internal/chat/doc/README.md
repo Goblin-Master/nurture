@@ -171,6 +171,38 @@ sequenceDiagram
   end
 ```
 
+## RabbitMQ 消费侧 DLQ 重试链路
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant MQ as RabbitMQ chat.event
+  participant MainQ as instance main queue
+  participant Consumer as Worker
+  participant RetryQ as instance retry queue
+  participant DeadQ as instance dead queue
+  participant Hub as session.Hub
+
+  MQ->>MainQ: route chat.direct/chat.group
+  MainQ-->>Consumer: deliver message(attempt=1)
+  Consumer->>Consumer: handle event
+  alt handled
+    Consumer->>Hub: deliver online message
+    Consumer->>MainQ: ack
+  else discard error
+    Consumer->>MainQ: ack and drop
+  else retryable error and attempt < ConsumerMaxAttempts
+    Consumer->>MainQ: nack requeue=false
+    MainQ->>RetryQ: dead-letter by original routing key
+    RetryQ->>RetryQ: wait ConsumerRetryDelay
+    RetryQ->>MainQ: dead-letter to default exchange by queue name
+    MainQ-->>Consumer: deliver message(attempt+1)
+  else retryable error and attempt >= ConsumerMaxAttempts
+    Consumer->>DeadQ: publish failed message with x-error
+    Consumer->>MainQ: ack
+  end
+```
+
 ## 会话同步与已读链路
 
 ```mermaid
