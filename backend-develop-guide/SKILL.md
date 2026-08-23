@@ -286,7 +286,10 @@ response.Response(c, resp, err)
 
 ## 测试规范
 
-- **测试位置**：所有测试代码必须位于 `internal/test/` 包下（或项目根目录的 `test/`，根据项目约定）。
+- **pkg 测试位置**：`internal/pkg/<pkg>` 的单元测试和基础设施集成测试必须放在各自包下，例如 `internal/pkg/jwtx/jwtx_test.go`、`internal/pkg/ratelimitx/ratelimitx_test.go`。pkg 测试不得放业务测试。
+- **模块测试位置**：可拆卸业务模块允许自带测试包，例如 `internal/chat/test`。模块测试只覆盖该模块自己的 handler、logic、repo、session、worker 等边界。
+- **业务联调测试位置**：`internal/test` 只放跨业务层联调测试，例如需要串联 logic、repo、global、pkg 或真实外部服务的业务链路。
+- **依赖初始化**：pkg 集成测试只初始化当前包必要依赖，避免使用 `global.Init()` 拉起无关 DB、RabbitMQ、AI 等服务。
 - **Token 生成**：测试时如需 Token，使用 `jwtx.GenTestToken()` 生成，禁止使用硬编码 Token。
 - **配置加载**：测试代码中涉及密钥或配置时，必须通过 `config.LoadConfig()` 加载，**禁止在代码中明文写死密钥**。
 
