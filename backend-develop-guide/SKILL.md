@@ -1,6 +1,6 @@
 ---
 name: backend-develop-guide
-description: 当用户需要开发 Go 后端 API、创建新业务模块、或进行代码审查时使用。适用于基于 Gin + PostgreSQL + Redis 的三层架构项目。
+description: Use when developing Go backend APIs, adding business modules, reviewing backend code, changing database/sqlc files, or deciding shared three-layer versus detachable module boundaries in this Gin PostgreSQL Redis project.
 ---
 
 # Go 后端开发指南
@@ -15,6 +15,7 @@ description: 当用户需要开发 Go 后端 API、创建新业务模块、或�
 - 添加新业务模块（如：用户模块、订单模块）
 - 进行代码审查
 - 数据库表设计和 SQL 操作
+- 判断业务是否应该拆成可拆卸模块
 - 项目初始化或架构设计
 
 ## 核心架构：三层架构
@@ -47,6 +48,14 @@ HTTP Request
 | Logic | `internal/logic/` | 业务规则、编排 Repo 和 pkg | 不直接操作数据库 |
 | Repo | `internal/repo/` | 数据库操作、缓存操作 | 不写业务逻辑 |
 | pkg | `internal/pkg/` | 基础设施（日志、JWT、邮件等） | 不依赖业务层 |
+
+## 架构形态选择
+
+默认使用共享三层目录：`internal/handler`、`internal/logic`、`internal/repo`、`internal/dto`。
+
+当业务出现独立 HTTP/WS/worker 入口、独立 SQL/缓存边界、复杂状态流、独立测试夹具，或未来可能整体拆除时，考虑拆成 `internal/<domain>` 可拆卸模块。模块化判断和迁移步骤必须先读 `reference/module-boundary.md`。
+
+`internal/pkg` 永远只放业务无关基础设施，不用作业务模块承载目录。
 
 ## 标准目录结构
 
@@ -91,7 +100,27 @@ internal/
 └── main.go          # 应用入口
 ```
 
+可拆卸模块使用 `internal/<domain>`，例如：
+
+```
+internal/chat/
+├── enter.go
+├── route.go
+├── dto/
+├── handler/
+├── logic/
+├── repo/
+│   ├── dao/
+│   └── cache/
+├── worker/
+├── session/
+├── doc/
+└── test/
+```
+
 ## 新增 API 开发流程
+
+开始前先判断目录形态：简单功能按共享三层开发；满足模块化信号时按 `reference/module-boundary.md` 设计模块边界。
 
 ### 步骤 1：定义 DTO（`internal/dto/`）
 
@@ -322,8 +351,9 @@ response.Response(c, resp, err)
 ## 详细参考文档
 
 - 分层架构详解：`reference/architecture.md`
+- 模块边界与可拆卸架构：`reference/module-boundary.md`
 - 代码模式规范：`reference/code-patterns.md`
 - 命名规范：`reference/naming-conventions.md`
 - 错误处理规范：`reference/error-handling.md`
 - 数据库操作指南：`reference/database-guide.md`
-- 代码示例：`reference/examples/`
+- 代码示例：`reference/example/`

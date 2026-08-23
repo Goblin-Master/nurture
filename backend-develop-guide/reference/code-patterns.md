@@ -115,6 +115,13 @@ var _ IUserLogic = (*UserLogic)(nil)
 var _ IUserRepo = (*UserRepo)(nil)
 ```
 
+### 避免过度接口包装
+
+- Logic/Repo 的接口用于表达业务层契约和便于测试。
+- 对已有稳定横切能力，例如 `middleware.Authentication`、`middleware.GetBind`、`jwtx.GetUserID`、`response.Response`，优先直接复用原包。
+- 不要为了“看起来可注入”而额外定义 `AuthUserFunc`、`RespondFunc`、`GetUserIDFunc` 这类只有一处调用且没有替换需求的包装类型。
+- 只有当业务层确实需要 fake、替换实现或隔离外部系统时，才在使用方定义小接口。
+
 ## 3. DTO 定义模式
 
 DTO（Data Transfer Object）用于定义请求和响应结构。

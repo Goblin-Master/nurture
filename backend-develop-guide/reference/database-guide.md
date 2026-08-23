@@ -529,6 +529,8 @@ func InitPgsql() *pgxpool.Pool {
 
 以添加「订单」模块为例：
 
+本节适用于共享三层目录下的新业务。如果业务应拆成 `internal/<domain>` 可拆卸模块，先按 `module-boundary.md` 判断边界，并把 SQL 和 sqlc 配置放到模块自己的 `repo/dao` 下。
+
 ### Step 1: 创建 Schema
 
 ```sql

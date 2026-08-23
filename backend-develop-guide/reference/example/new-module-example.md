@@ -2,6 +2,8 @@
 
 本示例展示如何从零开始添加一个新的业务模块。
 
+本示例适用于共享三层目录：`internal/dto`、`internal/handler`、`internal/logic`、`internal/repo`。如果业务需要独立入口、独立 SQL/缓存边界、worker/session 或未来可整体拆除，先阅读 `../module-boundary.md`，按 `internal/<domain>` 可拆卸模块设计。
+
 ## 场景
 
 添加「文章」模块，包含以下功能：

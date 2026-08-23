@@ -4,6 +4,8 @@
 
 本项目采用经典的三层架构（Three-Tier Architecture），确保关注点分离、可维护性和可扩展性。
 
+默认使用共享三层目录。业务出现独立入口、独立数据边界、复杂状态流或可拆除诉求时，先阅读 `module-boundary.md` 判断是否拆成 `internal/<domain>` 可拆卸模块。
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        HTTP Request                             │
@@ -280,6 +282,7 @@ Handler → Logic → Repo → sqlc DAO
 2. Handler 不能直接依赖 Repo
 3. Logic 不能直接操作数据库（必须通过 Repo）
 4. pkg 不能依赖业务层
+5. 可拆卸模块内部仍遵守 Handler → Logic → Repo 方向，模块边界参考 `module-boundary.md`
 
 ## 全局变量管理
 

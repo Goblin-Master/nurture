@@ -10,6 +10,7 @@
 - 添加新业务模块
 - 代码审查
 - 数据库表设计和 SQL 操作
+- 模块边界判断
 - 项目初始化或架构设计
 
 ## 目录结构
@@ -20,11 +21,12 @@ backend-develop-guide/
 ├── README.md                     # 本文件（人类阅读）
 └── reference/                    # 详细参考文档
     ├── architecture.md           # 分层架构详解
+    ├── module-boundary.md        # 模块边界与可拆卸架构
     ├── code-patterns.md          # 代码模式规范
     ├── naming-conventions.md     # 命名规范
     ├── error-handling.md         # 错误处理规范
     ├── database-guide.md         # 数据库操作指南（sqlc）
-    └── examples/                 # 代码示例
+    └── example/                  # 代码示例
         ├── new-api-example.md    # 新增 API 完整示例
         └── new-module-example.md # 新增业务模块完整示例
 ```
@@ -77,26 +79,28 @@ pkg (internal/pkg/)          →  基础设施包（横切关注点）
 
 ### 对于开发者
 
-1. **新增 API**：参考 `reference/examples/new-api-example.md`
-2. **新增模块**：参考 `reference/examples/new-module-example.md`
-3. **命名规范**：参考 `reference/naming-conventions.md`
-4. **错误处理**：参考 `reference/error-handling.md`
-5. **数据库操作**：参考 `reference/database-guide.md`
+1. **新增 API**：参考 `reference/example/new-api-example.md`
+2. **模块边界判断**：参考 `reference/module-boundary.md`
+3. **新增模块**：参考 `reference/example/new-module-example.md`
+4. **命名规范**：参考 `reference/naming-conventions.md`
+5. **错误处理**：参考 `reference/error-handling.md`
+6. **数据库操作**：参考 `reference/database-guide.md`
 
 ## 参考文档
 
 | 文档 | 说明 |
 |------|------|
 | [架构详解](reference/architecture.md) | 三层架构、各层职责、依赖方向 |
+| [模块边界](reference/module-boundary.md) | 共享三层与可拆卸模块的判断标准、目录和迁移清单 |
 | [代码模式](reference/code-patterns.md) | 构造函数、接口、DTO、中间件等模式 |
 | [命名规范](reference/naming-conventions.md) | 文件、包、函数、变量命名规范 |
 | [错误处理](reference/error-handling.md) | 各层错误处理规范和最佳实践 |
 | [数据库指南](reference/database-guide.md) | sqlc 工作流、SQL 编写规范 |
-| [新增 API 示例](reference/examples/new-api-example.md) | 在现有模块添加 API 的完整流程 |
-| [新增模块示例](reference/examples/new-module-example.md) | 从零创建新业务模块的完整流程 |
+| [新增 API 示例](reference/example/new-api-example.md) | 在现有模块添加 API 的完整流程 |
+| [新增模块示例](reference/example/new-module-example.md) | 从零创建新业务模块的完整流程 |
 
 ## 版本信息
 
 - **技能版本**：1.0.0
 - **基于项目**：nurture
-- **最后更新**：2026-01-30
+- **最后更新**：2026-08-23

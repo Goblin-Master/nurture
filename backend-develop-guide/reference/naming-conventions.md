@@ -39,7 +39,7 @@ internal/pkg/
 ├── redisx/     # Redis（redis + x）
 ├── zapx/       # Zap 日志（zap + x）
 ├── miniox/     # MinIO 对象存储（minio + x）
-├── response/   # 统一响应（无 x 后缀，因为是业务相关）
+├── response/   # 统一响应（稳定横切 API，无 x 后缀）
 └── syncx/      # 同步工具（sync + x）
 ```
 
