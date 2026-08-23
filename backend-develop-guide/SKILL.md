@@ -1,6 +1,6 @@
 ---
 name: backend-develop-guide
-description: Use when developing Go backend APIs, adding business modules, reviewing backend code, changing database/sqlc files, or deciding shared three-layer versus detachable module boundaries in this Gin PostgreSQL Redis project.
+description: Use when developing Go backend APIs, adding business modules, reviewing backend code, changing database/sqlc files, or deciding shared three-layer versus detachable module boundaries in this Gin PostgreSQL Redis RabbitMQ project.
 ---
 
 # Go 后端开发指南
@@ -86,6 +86,7 @@ internal/
 │   ├── emailx/
 │   ├── jwtx/
 │   ├── pgsqlx/
+│   ├── rabbitmqx/
 │   ├── redisx/
 │   ├── response/
 │   └── zapx/
@@ -343,6 +344,7 @@ response.Response(c, resp, err)
 | 数据库 | PostgreSQL (pgx/v5) |
 | ORM/Codegen | sqlc |
 | 缓存 | Redis |
+| 消息队列 | RabbitMQ |
 | 配置 | Viper + YAML |
 | 日志 | Zap + Lumberjack |
 | 认证 | JWT |

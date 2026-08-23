@@ -1,6 +1,6 @@
 # Backend Develop Guide Skill
 
-这是一个 Agent Skill，用于指导 Go 后端开发工作。基于 Gin + PostgreSQL + Redis 的三层架构项目规范。
+这是一个 Agent Skill，用于指导 Go 后端开发工作。基于 Gin + PostgreSQL + Redis + RabbitMQ 的三层架构项目规范。
 
 ## 技能说明
 
@@ -54,6 +54,7 @@ pkg (internal/pkg/)          →  基础设施包（横切关注点）
 | 数据库 | PostgreSQL (pgx/v5) |
 | ORM/Codegen | sqlc |
 | 缓存 | Redis |
+| 消息队列 | RabbitMQ |
 | 配置 | Viper + YAML |
 | 日志 | Zap + Lumberjack |
 | 认证 | JWT |

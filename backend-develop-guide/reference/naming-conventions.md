@@ -36,6 +36,7 @@ internal/pkg/
 ├── emailx/     # 邮件服务（email + x）
 ├── jwtx/       # JWT 处理（jwt + x）
 ├── pgsqlx/     # PostgreSQL（pgsql + x）
+├── rabbitmqx/  # RabbitMQ（rabbitmq + x）
 ├── redisx/     # Redis（redis + x）
 ├── zapx/       # Zap 日志（zap + x）
 ├── miniox/     # MinIO 对象存储（minio + x）
