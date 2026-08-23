@@ -22,17 +22,24 @@ type PublishMessage struct {
 	Body        []byte
 }
 
+type RetryConfig struct {
+	Delay       time.Duration
+	MaxAttempts int64
+}
+
 type ConsumeConfig struct {
 	Exchange    string
 	Queue       string
 	Consumer    string
 	RoutingKeys []string
+	Retry       RetryConfig
 }
 
 type Delivery struct {
 	MessageID   string
 	RoutingKey  string
 	Redelivered bool
+	Attempt     int64
 	Body        []byte
 }
 
@@ -127,7 +134,13 @@ func (c *Client) Consume(ctx context.Context, cfg ConsumeConfig, handle func(con
 	if err := ch.ExchangeDeclare(cfg.Exchange, amqp.ExchangeTopic, true, false, false, false, nil); err != nil {
 		return err
 	}
-	q, err := ch.QueueDeclare(cfg.Queue, false, true, true, false, nil)
+	topology := newConsumeTopology(cfg)
+	if topology.RetryEnabled {
+		if err := declareRetryTopology(ch, cfg, topology); err != nil {
+			return err
+		}
+	}
+	q, err := ch.QueueDeclare(cfg.Queue, false, true, true, false, topology.MainQueueArgs)
 	if err != nil {
 		return err
 	}
@@ -148,15 +161,36 @@ func (c *Client) Consume(ctx context.Context, cfg ConsumeConfig, handle func(con
 			if !ok {
 				return nil
 			}
+			attempt := deliveryAttempt(msg.Headers, q.Name)
 			err := handle(ctx, Delivery{
 				MessageID:   msg.MessageId,
 				RoutingKey:  msg.RoutingKey,
 				Redelivered: msg.Redelivered,
+				Attempt:     attempt,
 				Body:        msg.Body,
 			})
 			if err != nil {
 				if c.log != nil {
 					c.log.Error(err)
+				}
+				if isDiscard(err) {
+					_ = msg.Ack(false)
+					continue
+				}
+				if topology.RetryEnabled {
+					if attempt >= topology.MaxAttempts {
+						if err := publishDeadLetter(ctx, ch, topology, msg, err); err != nil {
+							if c.log != nil {
+								c.log.Error(err)
+							}
+							_ = msg.Nack(false, false)
+							continue
+						}
+						_ = msg.Ack(false)
+						continue
+					}
+					_ = msg.Nack(false, false)
+					continue
 				}
 				_ = msg.Nack(false, true)
 				continue
