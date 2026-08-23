@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS "chat_direct_message" (
 
 COMMENT ON TABLE "chat_direct_message" IS '私聊-消息表';
 COMMENT ON COLUMN "chat_direct_message".id IS '主键ID';
-COMMENT ON COLUMN "chat_direct_message".message_id IS '消息ID(UUID)';
+COMMENT ON COLUMN "chat_direct_message".message_id IS '消息ID(UUID,幂等)';
 COMMENT ON COLUMN "chat_direct_message".from_user_id IS '发送者用户ID(UUID)';
 COMMENT ON COLUMN "chat_direct_message".to_user_id IS '接收者用户ID(UUID)';
 COMMENT ON COLUMN "chat_direct_message".type IS '消息类型(text/image/system)';

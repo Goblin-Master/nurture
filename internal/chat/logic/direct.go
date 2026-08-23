@@ -106,8 +106,9 @@ func (l *ChatLogic) handleDirectSend(ctx context.Context, userID string, partner
 	if err != nil {
 		return directFailedAck("send", in.MessageID, ErrDefault.Error(), now)
 	}
+	eventID := event.DirectEventID(userID, partnerID, in.MessageID)
 	payload, err := json.Marshal(event.DirectMessage{
-		EventID:    event.DirectEventID(in.MessageID),
+		EventID:    eventID,
 		MessageID:  in.MessageID,
 		FromUserID: userID,
 		ToUserID:   partnerID,
@@ -120,7 +121,7 @@ func (l *ChatLogic) handleDirectSend(ctx context.Context, userID string, partner
 		return directFailedAck("send", in.MessageID, ErrDefault.Error(), now)
 	}
 	_, err = l.chatRepo.SaveDirectMessage(ctx, in.MessageID, userID, partnerID, in.Type, content, now, repo.ChatOutboxEvent{
-		EventID:    event.DirectEventID(in.MessageID),
+		EventID:    eventID,
 		RoutingKey: event.RoutingKeyDirect,
 		Payload:    string(payload),
 		Ctime:      now,

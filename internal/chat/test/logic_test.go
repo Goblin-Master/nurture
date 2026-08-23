@@ -218,8 +218,9 @@ func TestChatLogicHandleDirectMessageStoresOutboxAndReturnsAck(t *testing.T) {
 	if chatRepo.savedDirectMessage.now <= 0 {
 		t.Fatalf("saved time = %d, want positive value", chatRepo.savedDirectMessage.now)
 	}
-	if chatRepo.savedDirectMessage.outbox.EventID != event.DirectEventID(messageID) {
-		t.Fatalf("outbox event id = %q, want %q", chatRepo.savedDirectMessage.outbox.EventID, event.DirectEventID(messageID))
+	wantEventID := event.DirectEventID("sender-id", "receiver-id", messageID)
+	if chatRepo.savedDirectMessage.outbox.EventID != wantEventID {
+		t.Fatalf("outbox event id = %q, want %q", chatRepo.savedDirectMessage.outbox.EventID, wantEventID)
 	}
 	if chatRepo.savedDirectMessage.outbox.RoutingKey != event.RoutingKeyDirect {
 		t.Fatalf("outbox routing key = %q, want %q", chatRepo.savedDirectMessage.outbox.RoutingKey, event.RoutingKeyDirect)
@@ -228,8 +229,8 @@ func TestChatLogicHandleDirectMessageStoresOutboxAndReturnsAck(t *testing.T) {
 	if err := json.Unmarshal([]byte(chatRepo.savedDirectMessage.outbox.Payload), &out); err != nil {
 		t.Fatalf("outbox payload json error: %v", err)
 	}
-	if out.MessageID != messageID || out.ToUserID != "receiver-id" || out.Content != "hello" {
-		t.Fatalf("outbox payload = %+v, want message/receiver/content", out)
+	if out.EventID != wantEventID || out.MessageID != messageID || out.ToUserID != "receiver-id" || out.Content != "hello" {
+		t.Fatalf("outbox payload = %+v, want event/message/receiver/content", out)
 	}
 }
 

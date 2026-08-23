@@ -43,8 +43,8 @@ type GroupMessage struct {
 	Payload    string `json:"payload"`
 }
 
-func DirectEventID(messageID string) string {
-	return EventKindDirect + ":" + messageID
+func DirectEventID(fromUserID, toUserID, messageID string) string {
+	return EventKindDirect + ":" + fromUserID + ":" + toUserID + ":" + messageID
 }
 
 func GroupEventID(groupID string, messageID string) string {
