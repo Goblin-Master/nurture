@@ -1,12 +1,12 @@
-package test
+package emailx
 
 import (
 	"context"
 	"nurture/internal/config"
-	"nurture/internal/global"
-	"nurture/internal/pkg/emailx"
+	"nurture/internal/pkg/redisx"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -17,11 +17,20 @@ func TestEmailSend(t *testing.T) {
 	}
 	// 加载配置
 	config.LoadConfig()
-	// 初始化全局配置
-	global.Init()
+	rdb := redisx.InitRedis()
+	if rdb == nil {
+		t.Fatal("redis is disabled")
+	}
+	if closer, ok := rdb.(interface{ Close() error }); ok {
+		defer closer.Close()
+	}
 
 	// 初始化 EmailX
-	ex := emailx.NewEmailX()
+	ex := &EmailX{
+		config: config.Conf.Email,
+		ttl:    10 * time.Minute,
+		rdb:    rdb,
+	}
 
 	err := ex.SendRegisterCode(context.Background(), config.Conf.Email.SendEmail, "123456")
 	t.Logf("SendRegisterCode err: %v", err)

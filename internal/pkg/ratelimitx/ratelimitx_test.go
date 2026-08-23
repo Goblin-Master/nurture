@@ -1,4 +1,4 @@
-package test
+package ratelimitx
 
 import (
 	"context"
@@ -7,13 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"nurture/internal/pkg/ratelimitx"
-
 	"github.com/go-redis/redis/v8"
 )
 
 func TestRateLimitDefaultIsSlidingWindow(t *testing.T) {
-	limiter := ratelimitx.NewLimiter(nil)
+	limiter := NewLimiter(nil)
 	key := testRateLimitKey("default")
 
 	mustAllowDefault(t, limiter, key, 2, 50*time.Millisecond)
@@ -25,39 +23,39 @@ func TestRateLimitDefaultIsSlidingWindow(t *testing.T) {
 }
 
 func TestRateLimitSlidingWindowMemory(t *testing.T) {
-	limiter := ratelimitx.NewLimiterWithAlgorithm(nil, ratelimitx.AlgorithmSlidingWindow)
+	limiter := NewLimiterWithAlgorithm(nil, AlgorithmSlidingWindow)
 	key := testRateLimitKey("sliding")
 
-	mustAllow(t, limiter, ratelimitx.AlgorithmSlidingWindow, key, 2, 50*time.Millisecond)
-	mustAllow(t, limiter, ratelimitx.AlgorithmSlidingWindow, key, 2, 50*time.Millisecond)
-	mustDeny(t, limiter, ratelimitx.AlgorithmSlidingWindow, key, 2, 50*time.Millisecond)
+	mustAllow(t, limiter, AlgorithmSlidingWindow, key, 2, 50*time.Millisecond)
+	mustAllow(t, limiter, AlgorithmSlidingWindow, key, 2, 50*time.Millisecond)
+	mustDeny(t, limiter, AlgorithmSlidingWindow, key, 2, 50*time.Millisecond)
 
 	time.Sleep(70 * time.Millisecond)
-	mustAllow(t, limiter, ratelimitx.AlgorithmSlidingWindow, key, 2, 50*time.Millisecond)
+	mustAllow(t, limiter, AlgorithmSlidingWindow, key, 2, 50*time.Millisecond)
 }
 
 func TestRateLimitTokenBucketMemory(t *testing.T) {
-	limiter := ratelimitx.NewLimiterWithAlgorithm(nil, ratelimitx.AlgorithmTokenBucket)
+	limiter := NewLimiterWithAlgorithm(nil, AlgorithmTokenBucket)
 	key := testRateLimitKey("token")
 
-	mustAllow(t, limiter, ratelimitx.AlgorithmTokenBucket, key, 2, 100*time.Millisecond)
-	mustAllow(t, limiter, ratelimitx.AlgorithmTokenBucket, key, 2, 100*time.Millisecond)
-	mustDeny(t, limiter, ratelimitx.AlgorithmTokenBucket, key, 2, 100*time.Millisecond)
+	mustAllow(t, limiter, AlgorithmTokenBucket, key, 2, 100*time.Millisecond)
+	mustAllow(t, limiter, AlgorithmTokenBucket, key, 2, 100*time.Millisecond)
+	mustDeny(t, limiter, AlgorithmTokenBucket, key, 2, 100*time.Millisecond)
 
 	time.Sleep(70 * time.Millisecond)
-	mustAllow(t, limiter, ratelimitx.AlgorithmTokenBucket, key, 2, 100*time.Millisecond)
+	mustAllow(t, limiter, AlgorithmTokenBucket, key, 2, 100*time.Millisecond)
 }
 
 func TestRateLimitLeakyBucketMemory(t *testing.T) {
-	limiter := ratelimitx.NewLimiterWithAlgorithm(nil, ratelimitx.AlgorithmLeakyBucket)
+	limiter := NewLimiterWithAlgorithm(nil, AlgorithmLeakyBucket)
 	key := testRateLimitKey("leaky")
 
-	mustAllow(t, limiter, ratelimitx.AlgorithmLeakyBucket, key, 2, 100*time.Millisecond)
-	mustAllow(t, limiter, ratelimitx.AlgorithmLeakyBucket, key, 2, 100*time.Millisecond)
-	mustDeny(t, limiter, ratelimitx.AlgorithmLeakyBucket, key, 2, 100*time.Millisecond)
+	mustAllow(t, limiter, AlgorithmLeakyBucket, key, 2, 100*time.Millisecond)
+	mustAllow(t, limiter, AlgorithmLeakyBucket, key, 2, 100*time.Millisecond)
+	mustDeny(t, limiter, AlgorithmLeakyBucket, key, 2, 100*time.Millisecond)
 
 	time.Sleep(70 * time.Millisecond)
-	mustAllow(t, limiter, ratelimitx.AlgorithmLeakyBucket, key, 2, 100*time.Millisecond)
+	mustAllow(t, limiter, AlgorithmLeakyBucket, key, 2, 100*time.Millisecond)
 }
 
 func TestRateLimitRedisAlgorithms(t *testing.T) {
@@ -78,32 +76,32 @@ func TestRateLimitRedisAlgorithms(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		algorithm ratelimitx.Algorithm
+		algorithm Algorithm
 		window    time.Duration
 		wait      time.Duration
 	}{
 		{
 			name:      "sliding_window",
-			algorithm: ratelimitx.AlgorithmSlidingWindow,
+			algorithm: AlgorithmSlidingWindow,
 			window:    50 * time.Millisecond,
 			wait:      70 * time.Millisecond,
 		},
 		{
 			name:      "token_bucket",
-			algorithm: ratelimitx.AlgorithmTokenBucket,
+			algorithm: AlgorithmTokenBucket,
 			window:    300 * time.Millisecond,
 			wait:      180 * time.Millisecond,
 		},
 		{
 			name:      "leaky_bucket",
-			algorithm: ratelimitx.AlgorithmLeakyBucket,
+			algorithm: AlgorithmLeakyBucket,
 			window:    300 * time.Millisecond,
 			wait:      180 * time.Millisecond,
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			limiter := ratelimitx.NewLimiterWithAlgorithm(rdb, c.algorithm)
+			limiter := NewLimiterWithAlgorithm(rdb, c.algorithm)
 			key := testRateLimitKey(c.name)
 			defer rdb.Del(ctx, key)
 
@@ -121,7 +119,7 @@ func testRateLimitKey(name string) string {
 	return fmt.Sprintf("test:rl:%s:%d", name, time.Now().UnixNano())
 }
 
-func mustAllow(t *testing.T, limiter *ratelimitx.Limiter, algorithm ratelimitx.Algorithm, key string, limit int64, window time.Duration) {
+func mustAllow(t *testing.T, limiter *Limiter, algorithm Algorithm, key string, limit int64, window time.Duration) {
 	t.Helper()
 	ok, remaining, err := limiter.AllowWithAlgorithm(context.Background(), algorithm, key, limit, window)
 	if err != nil {
@@ -132,7 +130,7 @@ func mustAllow(t *testing.T, limiter *ratelimitx.Limiter, algorithm ratelimitx.A
 	}
 }
 
-func mustAllowDefault(t *testing.T, limiter *ratelimitx.Limiter, key string, limit int64, window time.Duration) {
+func mustAllowDefault(t *testing.T, limiter *Limiter, key string, limit int64, window time.Duration) {
 	t.Helper()
 	ok, remaining, err := limiter.Allow(context.Background(), key, limit, window)
 	if err != nil {
@@ -143,7 +141,7 @@ func mustAllowDefault(t *testing.T, limiter *ratelimitx.Limiter, key string, lim
 	}
 }
 
-func mustDenyDefault(t *testing.T, limiter *ratelimitx.Limiter, key string, limit int64, window time.Duration) {
+func mustDenyDefault(t *testing.T, limiter *Limiter, key string, limit int64, window time.Duration) {
 	t.Helper()
 	ok, remaining, err := limiter.Allow(context.Background(), key, limit, window)
 	if err != nil {
@@ -154,7 +152,7 @@ func mustDenyDefault(t *testing.T, limiter *ratelimitx.Limiter, key string, limi
 	}
 }
 
-func mustDeny(t *testing.T, limiter *ratelimitx.Limiter, algorithm ratelimitx.Algorithm, key string, limit int64, window time.Duration) {
+func mustDeny(t *testing.T, limiter *Limiter, algorithm Algorithm, key string, limit int64, window time.Duration) {
 	t.Helper()
 	ok, remaining, err := limiter.AllowWithAlgorithm(context.Background(), algorithm, key, limit, window)
 	if err != nil {

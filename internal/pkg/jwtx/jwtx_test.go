@@ -1,18 +1,17 @@
-package test
+package jwtx
 
 import (
-	"nurture/internal/pkg/jwtx"
 	"testing"
 )
 
 func TestJwtx(t *testing.T) {
-	token1, err := jwtx.GenTestToken("1", jwtx.COMMON_USER)
+	token1, err := GenTestToken("1", COMMON_USER)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(token1)
 
-	token2, err := jwtx.GenTestToken("2", jwtx.COMMON_USER)
+	token2, err := GenTestToken("2", COMMON_USER)
 	if err != nil {
 		t.Fatal(err)
 	}
