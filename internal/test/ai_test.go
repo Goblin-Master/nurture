@@ -8,16 +8,17 @@ import (
 	"nurture/internal/dto"
 	"nurture/internal/global"
 	"nurture/internal/logic"
-	"nurture/internal/pkg/aix"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/repo"
+	"os"
 	"testing"
 	"time"
 )
 
-func init() {
-	// 加载配置
+func TestMain(m *testing.M) {
 	config.LoadConfig()
+	global.Init()
+	os.Exit(m.Run())
 }
 
 func skipAIChatIntegration(t *testing.T) {
@@ -51,17 +52,10 @@ func TestStreamChat(t *testing.T) {
 	}
 	t.Logf("Generated Test Token: %s", token)
 
-	// 2. 初始化 Global AIX (Logic 层依赖 global.AIX)
-	// 注意：这里 RDB 传 nil，因为 repo 层的 dummy 实现还没真正用 Redis，如果有依赖需要 Mock
-	global.AIX, err = aix.NewAIX(config.Conf.AI, nil, "")
-	if err != nil {
-		t.Fatalf("NewAIX failed: %v", err)
-	}
-
-	// 3. 初始化 Logic
+	// 2. 初始化 Logic
 	commonLogic := logic.NewCommonLogic()
 
-	// 4. 准备请求数据 (SessionID 为空，测试自动生成)
+	// 3. 准备请求数据 (SessionID 为空，测试自动生成)
 	req := dto.ChatStreamReq{
 		SessionID: "",
 		Message:   "你好，请用一句话介绍一下你自己，并告诉我今天是星期几",
@@ -71,8 +65,7 @@ func TestStreamChat(t *testing.T) {
 	fmt.Printf("User: %s\n", req.Message)
 	fmt.Printf("AI: ")
 
-	// 5. 调用 Logic 层 ChatStream
-	// 模拟从 Token 解析出的 UserID
+	// 4. 调用 Logic 层 ChatStream
 	userID := "test_user_id_from_token"
 
 	err = commonLogic.ChatStream(context.Background(), userID, req, func(event dto.SSEEvent) {
@@ -91,24 +84,18 @@ func TestStreamChat(t *testing.T) {
 
 func TestEmbedding(t *testing.T) {
 	skipAIEmbeddingIntegration(t)
-	// 1. 初始化 AIX
-	ai, err := aix.NewAIX(config.Conf.AI, nil, "")
-	if err != nil {
-		t.Fatalf("NewAIX failed: %v", err)
-	}
-
-	// 2. 测试文本
+	// 1. 测试文本
 	text := "小王是个大混蛋"
 	fmt.Printf("\n=== Testing Embedding (Model: %s) ===\n", config.Conf.AI.Embedding.Model)
 	fmt.Printf("Input text: %s\n", text)
 
-	// 3. 调用向量化
-	vector, err := ai.EmbedDocument(context.Background(), text)
+	// 2. 调用向量化
+	vector, err := global.AIX.EmbedDocument(context.Background(), text)
 	if err != nil {
 		t.Fatalf("EmbedDocument failed: %v", err)
 	}
 
-	// 4. 验证结果
+	// 3. 验证结果
 	fmt.Printf("Vector dimension: %d\n", len(vector))
 	if len(vector) == 0 {
 		t.Error("Vector is empty")
@@ -118,29 +105,22 @@ func TestEmbedding(t *testing.T) {
 
 func TestSimilaritySearch(t *testing.T) {
 	skipAIVectorIntegration(t)
-	// 1. 初始化 (确保 Global AIX 被正确初始化，且包含 DB 连接)
-	var err error
-	// 必须传入有效的 DSN，否则无法连接向量库
-	global.AIX, err = aix.NewAIX(config.Conf.AI, nil, config.Conf.DB.DSN())
-	if err != nil {
-		t.Fatalf("NewAIX failed: %v", err)
-	}
 
 	aiRepo := repo.NewAIRepo()
 	userID := "test_user_id"
 	collectionName := fmt.Sprintf(constant.COLLECTION_USER_PREFIX, userID)
 
-	// 2. 添加文档
+	// 1. 添加文档
 	content := "小王是个大混蛋"
 	ctx := context.Background()
 	fmt.Printf("\n=== Testing Similarity Search ===\n")
 	fmt.Printf("Adding document: %s\n", content)
-	err = aiRepo.AddDocument(ctx, collectionName, content)
+	err := aiRepo.AddDocument(ctx, collectionName, content)
 	if err != nil {
 		t.Fatalf("AddDocument failed: %v", err)
 	}
 
-	// 3. 检索
+	// 2. 检索
 	query := "小王是什么"
 	fmt.Printf("Querying: %s\n", query)
 	docs, err := aiRepo.SimilaritySearch(ctx, query, []string{collectionName}, config.Conf.AI.Retrieval.DefaultTopK)
@@ -148,7 +128,7 @@ func TestSimilaritySearch(t *testing.T) {
 		t.Fatalf("SimilaritySearch failed: %v", err)
 	}
 
-	// 4. 验证
+	// 3. 验证
 	if len(docs) == 0 {
 		t.Fatal("No documents found")
 	}
