@@ -19,16 +19,22 @@ type AIX struct {
 
 // NewAIX 创建 AIX 实例
 func NewAIX(cfg config.AI, rdb redis.Cmdable, pgConnURL string) (*AIX, error) {
-	// 初始化 Chat 模型
-	chatModel, err := newChatModel(cfg.Chat)
-	if err != nil {
-		return nil, err
+	var chatModel llms.Model
+	if cfg.Chat.Enable {
+		var err error
+		chatModel, err = newChatModel(cfg.Chat)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// 初始化 Embedding 模型
-	embedder, err := newEmbeddingModel(cfg.Embedding)
-	if err != nil {
-		return nil, err
+	var embedder embeddings.Embedder
+	if cfg.Embedding.Enable {
+		var err error
+		embedder, err = newEmbeddingModel(cfg.Embedding)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &AIX{
@@ -38,4 +44,12 @@ func NewAIX(cfg config.AI, rdb redis.Cmdable, pgConnURL string) (*AIX, error) {
 		pgConnURL: pgConnURL,
 		config:    cfg,
 	}, nil
+}
+
+func (a *AIX) ChatEnabled() bool {
+	return a != nil && a.chatModel != nil
+}
+
+func (a *AIX) EmbeddingEnabled() bool {
+	return a != nil && a.embedder != nil
 }

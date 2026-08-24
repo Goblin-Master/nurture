@@ -21,7 +21,6 @@ type Config struct {
 
 // AI 配置
 type AI struct {
-	Enable    bool           `mapstructure:"enable"`
 	Chat      ChatModel      `mapstructure:"chat"`
 	Embedding EmbeddingModel `mapstructure:"embedding"`
 	Chunking  Chunking       `mapstructure:"chunking"`
@@ -29,7 +28,12 @@ type AI struct {
 	KBConfig  KBConfig       `mapstructure:"kb_config"`
 }
 
+func (ai AI) Enabled() bool {
+	return ai.Chat.Enable || ai.Embedding.Enable
+}
+
 type ChatModel struct {
+	Enable   bool   `mapstructure:"enable"`
 	Provider string `mapstructure:"provider"`
 	Model    string `mapstructure:"model"`
 	APIKey   string `mapstructure:"api_key"`
@@ -38,6 +42,7 @@ type ChatModel struct {
 }
 
 type EmbeddingModel struct {
+	Enable   bool   `mapstructure:"enable"`
 	Provider string `mapstructure:"provider"`
 	Model    string `mapstructure:"model"`
 	APIKey   string `mapstructure:"api_key"`

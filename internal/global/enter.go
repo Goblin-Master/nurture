@@ -32,9 +32,13 @@ func Init() {
 	MIO = miniox.InitMinio()
 
 	AIX = nil
-	if config.Conf.AI.Enable {
+	if config.Conf.AI.Enabled() {
 		var err error
-		AIX, err = aix.NewAIX(config.Conf.AI, RDB, config.Conf.DB.DSN())
+		pgConnURL := ""
+		if config.Conf.DB.Enable {
+			pgConnURL = config.Conf.DB.DSN()
+		}
+		AIX, err = aix.NewAIX(config.Conf.AI, RDB, pgConnURL)
 		if err != nil {
 			panic("AIX init failed: " + err.Error())
 		}

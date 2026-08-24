@@ -29,6 +29,9 @@ func newChatModel(cfg config.ChatModel) (llms.Model, error) {
 // StreamChat 流式对话
 func (a *AIX) StreamChat(ctx context.Context, messages []llms.MessageContent,
 	streamFunc func(chunk string)) (string, error) {
+	if !a.ChatEnabled() {
+		return "", ErrChatDisabled
+	}
 
 	var fullResponse strings.Builder
 
@@ -79,7 +82,6 @@ func (a *AIX) BuildMessages(history []ChatMessage, userMessage string,
 	var parts []llms.ContentPart
 
 	// 1. 添加图片 (如果有)
-	// 注意：LangChainGo/OpenAI 格式支持 image_url，智谱也兼容此格式
 	for _, imgURL := range images {
 		parts = append(parts, llms.ImageURLPart(imgURL))
 	}

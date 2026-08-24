@@ -46,8 +46,12 @@ func NewCommonLogic() *CommonLogic {
 
 var _ ICommonLogic = (*CommonLogic)(nil)
 
-func aiAvailable() bool {
-	return config.Conf.AI.Enable && global.AIX != nil
+func chatAvailable() bool {
+	return config.Conf.AI.Chat.Enable && global.AIX != nil && global.AIX.ChatEnabled()
+}
+
+func embeddingAvailable() bool {
+	return config.Conf.AI.Embedding.Enable && global.AIX != nil && global.AIX.EmbeddingEnabled()
 }
 
 func dbAvailable() bool {
@@ -115,7 +119,7 @@ func (l *CommonLogic) UploadFile(ctx context.Context, file multipart.File, heade
 // ChatStream 流式对话
 func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.ChatStreamReq,
 	streamFunc func(event dto.SSEEvent)) error {
-	if !aiAvailable() {
+	if !chatAvailable() {
 		streamAIUnavailable(streamFunc)
 		return ErrChatStream
 	}
@@ -223,7 +227,7 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 	collections := l.buildCollections(userID)
 
 	// 如果有选中的知识库，则进行检索
-	if len(collections) > 0 {
+	if len(collections) > 0 && embeddingAvailable() {
 		topK := config.Conf.AI.KBConfig.TopK
 		if topK <= 0 {
 			topK = config.Conf.AI.Retrieval.DefaultTopK
@@ -288,7 +292,7 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 
 // UploadKnowledge 上传知识库
 func (l *CommonLogic) UploadKnowledge(ctx context.Context, userID string, req dto.KnowledgeUploadReq) error {
-	if !aiAvailable() {
+	if !embeddingAvailable() {
 		return ErrKnowledgeUpload
 	}
 	if !dbAvailable() {
@@ -367,7 +371,7 @@ func (l *CommonLogic) GrowthAnalysisStream(ctx context.Context, userID string, r
 			return fmt.Errorf("invalid unit for %s: expected kg, got %s", req.Metric, req.Unit)
 		}
 	}
-	if !aiAvailable() {
+	if !chatAvailable() {
 		streamAIUnavailable(streamFunc)
 		return ErrChatStream
 	}
@@ -516,7 +520,7 @@ func (l *CommonLogic) GrowthReport(ctx context.Context, userID string, req dto.G
 		},
 	}
 
-	if !aiAvailable() {
+	if !chatAvailable() {
 		resp.Markdown = buildGrowthReportFallbackMarkdown(resp.Data, req.Language)
 		return resp, nil
 	}

@@ -2,6 +2,7 @@ package aix
 
 import (
 	"context"
+	"strings"
 
 	"github.com/tmc/langchaingo/schema"
 	"github.com/tmc/langchaingo/textsplitter"
@@ -14,6 +15,9 @@ func (a *AIX) AddDocument(ctx context.Context, collectionName string, content st
 }
 
 func (a *AIX) AddDocumentWithMetadata(ctx context.Context, collectionName string, content string, metadata map[string]any, split bool) error {
+	if !a.EmbeddingEnabled() {
+		return ErrEmbeddingDisabled
+	}
 	m := metadata
 	if m == nil {
 		m = map[string]any{}
@@ -53,6 +57,12 @@ func (a *AIX) AddDocumentWithMetadata(ctx context.Context, collectionName string
 // SimilaritySearch 相似度搜索
 func (a *AIX) SimilaritySearch(ctx context.Context, query string,
 	collections []string, topK int) ([]schema.Document, error) {
+	if !a.EmbeddingEnabled() {
+		return nil, ErrEmbeddingDisabled
+	}
+	if strings.TrimSpace(a.pgConnURL) == "" {
+		return nil, ErrVectorStoreDisabled
+	}
 
 	var allDocs []schema.Document
 
@@ -76,6 +86,9 @@ func (a *AIX) SimilaritySearch(ctx context.Context, query string,
 }
 
 func (a *AIX) newVectorStore(ctx context.Context, collectionName string) (pgvector.Store, error) {
+	if !a.EmbeddingEnabled() || strings.TrimSpace(a.pgConnURL) == "" {
+		return pgvector.Store{}, ErrVectorStoreDisabled
+	}
 	return pgvector.New(
 		ctx,
 		pgvector.WithConnectionURL(a.pgConnURL),

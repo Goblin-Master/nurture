@@ -20,15 +20,30 @@ func init() {
 	config.LoadConfig()
 }
 
-func skipAIIntegration(t *testing.T) {
+func skipAIChatIntegration(t *testing.T) {
 	t.Helper()
-	if !config.Conf.AI.Enable {
-		t.Skip("skip ai integration test: ai.enable=false")
+	if !config.Conf.AI.Chat.Enable {
+		t.Skip("skip ai chat integration test: ai.chat.enable=false")
+	}
+}
+
+func skipAIEmbeddingIntegration(t *testing.T) {
+	t.Helper()
+	if !config.Conf.AI.Embedding.Enable {
+		t.Skip("skip ai embedding integration test: ai.embedding.enable=false")
+	}
+}
+
+func skipAIVectorIntegration(t *testing.T) {
+	t.Helper()
+	skipAIEmbeddingIntegration(t)
+	if !config.Conf.DB.Enable {
+		t.Skip("skip ai vector integration test: db.enable=false")
 	}
 }
 
 func TestStreamChat(t *testing.T) {
-	skipAIIntegration(t)
+	skipAIChatIntegration(t)
 	// 1. 生成测试 Token (虽然这个测试是直接调用 pkg 方法不涉及 Handler，但为了符合规范演示 Token 生成)
 	token, err := jwtx.GenTestToken("test_user_id", jwtx.COMMON_USER)
 	if err != nil {
@@ -75,7 +90,7 @@ func TestStreamChat(t *testing.T) {
 }
 
 func TestEmbedding(t *testing.T) {
-	skipAIIntegration(t)
+	skipAIEmbeddingIntegration(t)
 	// 1. 初始化 AIX
 	ai, err := aix.NewAIX(config.Conf.AI, nil, "")
 	if err != nil {
@@ -98,12 +113,11 @@ func TestEmbedding(t *testing.T) {
 	if len(vector) == 0 {
 		t.Error("Vector is empty")
 	}
-	// 智谱 embedding-3 默认维度通常是 2048，embedding-2 是 1024
 	t.Logf("Vector (first 5 elements): %v", vector[:5])
 }
 
 func TestSimilaritySearch(t *testing.T) {
-	skipAIIntegration(t)
+	skipAIVectorIntegration(t)
 	// 1. 初始化 (确保 Global AIX 被正确初始化，且包含 DB 连接)
 	var err error
 	// 必须传入有效的 DSN，否则无法连接向量库

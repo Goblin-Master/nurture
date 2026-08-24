@@ -395,7 +395,7 @@ func (r *PostRepo) listRecommend(ctx context.Context, userID string, page, pageS
 	if profileText == "" {
 		return nil, false, ErrParamsType
 	}
-	if global.AIX == nil {
+	if global.AIX == nil || !global.AIX.EmbeddingEnabled() {
 		return nil, false, ErrParamsType
 	}
 	topK := 200
@@ -521,7 +521,7 @@ func (r *PostRepo) TouchUserRecommendProfile(ctx context.Context, userID string,
 }
 
 func (r *PostRepo) IndexPostForRecommend(ctx context.Context, postID string) error {
-	if global.AIX == nil {
+	if global.AIX == nil || !global.AIX.EmbeddingEnabled() {
 		return nil
 	}
 	var pid pgtype.UUID

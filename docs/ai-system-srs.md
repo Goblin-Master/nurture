@@ -460,16 +460,22 @@ type AIX struct {
 
 // NewAIX 创建 AIX 实例
 func NewAIX(cfg config.AI, rdb redis.Cmdable, pgConnURL string) (*AIX, error) {
-    // 初始化 Chat 模型
-    chatModel, err := newChatModel(cfg.Chat)
-    if err != nil {
-        return nil, err
+    var chatModel llms.Model
+    if cfg.Chat.Enable {
+        var err error
+        chatModel, err = newChatModel(cfg.Chat)
+        if err != nil {
+            return nil, err
+        }
     }
 
-    // 初始化 Embedding 模型
-    embedder, err := newEmbedder(cfg.Embedding)
-    if err != nil {
-        return nil, err
+    var embedder embeddings.Embedder
+    if cfg.Embedding.Enable {
+        var err error
+        embedder, err = newEmbeddingModel(cfg.Embedding)
+        if err != nil {
+            return nil, err
+        }
     }
 
     return &AIX{
@@ -1128,11 +1134,16 @@ func Init() {
     DB = pgsqlx.InitPgsql()
     RDB = redisx.InitRedis()
 
-    // 初始化 AIX
-    var err error
-    AIX, err = aix.NewAIX(config.Conf.AI, RDB, config.Conf.DB.DSN())
-    if err != nil {
-        panic("AIX init failed: " + err.Error())
+    if config.Conf.AI.Enabled() {
+        pgConnURL := ""
+        if config.Conf.DB.Enable {
+            pgConnURL = config.Conf.DB.DSN()
+        }
+        var err error
+        AIX, err = aix.NewAIX(config.Conf.AI, RDB, pgConnURL)
+        if err != nil {
+            panic("AIX init failed: " + err.Error())
+        }
     }
 }
 ```
@@ -1165,6 +1176,7 @@ type AI struct {
 }
 
 type ChatModel struct {
+    Enable   bool   `mapstructure:"enable"`
     Provider string `mapstructure:"provider"`
     Model    string `mapstructure:"model"`
     APIKey   string `mapstructure:"api_key"`
@@ -1172,6 +1184,7 @@ type ChatModel struct {
 }
 
 type EmbeddingModel struct {
+    Enable   bool   `mapstructure:"enable"`
     Provider string `mapstructure:"provider"`
     Model    string `mapstructure:"model"`
     APIKey   string `mapstructure:"api_key"`
@@ -1223,15 +1236,17 @@ redis:
 
 ai:
   chat:
+    enable: false
     provider: openai
     model: gpt-4
     api_key: ${CHAT_API_KEY}
     base_url: ""
   embedding:
-    provider: openai
-    model: text-embedding-ada-002
+    enable: false
+    provider: siliconflow
+    model: BAAI/bge-m3
     api_key: ${EMBEDDING_API_KEY}
-    base_url: ""
+    base_url: https://api.siliconflow.cn/v1
   chunking:
     chunk_size: 1000
     chunk_overlap: 200

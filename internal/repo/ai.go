@@ -29,7 +29,7 @@ func NewAIRepo() *AIRepo {
 var _ IAIRepo = (*AIRepo)(nil)
 
 func (r *AIRepo) AddDocument(ctx context.Context, collectionName, content string) error {
-	if global.AIX == nil {
+	if global.AIX == nil || !global.AIX.EmbeddingEnabled() {
 		return ErrDocumentAdd
 	}
 	err := global.AIX.AddDocument(ctx, collectionName, content)
@@ -44,7 +44,7 @@ func (r *AIRepo) AddDocument(ctx context.Context, collectionName, content string
 
 func (r *AIRepo) SimilaritySearch(ctx context.Context, query string,
 	collections []string, topK int) ([]schema.Document, error) {
-	if global.AIX == nil {
+	if global.AIX == nil || !global.AIX.EmbeddingEnabled() {
 		return nil, ErrDocumentSearch
 	}
 	docs, err := global.AIX.SimilaritySearch(ctx, query, collections, topK)
