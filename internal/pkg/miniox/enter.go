@@ -9,6 +9,9 @@ import (
 )
 
 func InitMinio() *minio.Client {
+	if !config.Conf.Minio.Enable {
+		return nil
+	}
 	client, err := minio.New(config.Conf.Minio.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(config.Conf.Minio.AccessKey, config.Conf.Minio.SecretKey, ""),
 		Secure: config.Conf.Minio.UseSSL,

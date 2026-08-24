@@ -2,21 +2,35 @@ package emailx
 
 import (
 	"context"
+	"errors"
 	"nurture/internal/config"
 	"nurture/internal/pkg/redisx"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEmailSend(t *testing.T) {
-	if os.Getenv("NURTURE_RUN_INTEGRATION_TESTS") != "1" {
-		t.Skip("skip integration test: set NURTURE_RUN_INTEGRATION_TESTS=1 to run")
+func TestSendRegisterCodeDisabled(t *testing.T) {
+	ex := &EmailX{
+		config: config.Email{Enable: false},
 	}
+
+	err := ex.SendRegisterCode(context.Background(), "to@example.com", "123456")
+	if !errors.Is(err, ErrEmailDisabled) {
+		t.Fatalf("SendRegisterCode() error = %v, want ErrEmailDisabled", err)
+	}
+}
+
+func TestEmailSend(t *testing.T) {
 	// 加载配置
 	config.LoadConfig()
+	if !config.Conf.Email.Enable {
+		t.Skip("skip email integration test: email.enable=false")
+	}
+	if !config.Conf.Redis.Enable {
+		t.Skip("skip email integration test: redis.enable=false")
+	}
 	rdb := redisx.InitRedis()
 	if rdb == nil {
 		t.Fatal("redis is disabled")

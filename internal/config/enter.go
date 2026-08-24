@@ -21,6 +21,7 @@ type Config struct {
 
 // AI 配置
 type AI struct {
+	Enable    bool           `mapstructure:"enable"`
 	Chat      ChatModel      `mapstructure:"chat"`
 	Embedding EmbeddingModel `mapstructure:"embedding"`
 	Chunking  Chunking       `mapstructure:"chunking"`
@@ -72,6 +73,7 @@ func (app *App) Link() string {
 }
 
 type DB struct {
+	Enable   bool   `mapstructure:"enable"`
 	Host     string `mapstructure:"host"`
 	Port     int    `mapstructure:"port"`
 	Username string `mapstructure:"username"`
@@ -128,6 +130,7 @@ func (rabbitmq *RabbitMQ) DSN() string {
 }
 
 type Minio struct {
+	Enable    bool   `mapstructure:"enable"`
 	Endpoint  string `mapstructure:"endpoint"`
 	AccessKey string `mapstructure:"access_key"`
 	SecretKey string `mapstructure:"secret_key"`
@@ -142,6 +145,7 @@ type Auth struct {
 }
 
 type Email struct {
+	Enable       bool   `mapstructure:"enable"`
 	Domain       string `mapstructure:"domain"`
 	Port         int    `mapstructure:"port"`
 	SendEmail    string `mapstructure:"send_email"`
@@ -153,6 +157,7 @@ type Email struct {
 }
 
 type SMS struct {
+	Enable   bool   `mapstructure:"enable"`
 	Key      string `mapstructure:"key"`
 	Endpoint string `mapstructure:"endpoint"`
 	Name     string `mapstructure:"name"`

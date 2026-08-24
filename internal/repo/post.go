@@ -395,6 +395,9 @@ func (r *PostRepo) listRecommend(ctx context.Context, userID string, page, pageS
 	if profileText == "" {
 		return nil, false, ErrParamsType
 	}
+	if global.AIX == nil {
+		return nil, false, ErrParamsType
+	}
 	topK := 200
 	docs, err := global.AIX.SimilaritySearch(ctx, profileText, []string{constant.COLLECTION_POST_RECOMMEND}, topK)
 	if err != nil {
@@ -518,6 +521,9 @@ func (r *PostRepo) TouchUserRecommendProfile(ctx context.Context, userID string,
 }
 
 func (r *PostRepo) IndexPostForRecommend(ctx context.Context, postID string) error {
+	if global.AIX == nil {
+		return nil
+	}
 	var pid pgtype.UUID
 	if err := pid.Scan(postID); err != nil {
 		return ErrParamsType

@@ -18,6 +18,7 @@ import (
 )
 
 var (
+	ErrSMSDisabled      = errors.New("短信服务未启用")
 	ErrSMSConfigMissing = errors.New("短信配置缺失")
 	ErrSMSSendFailed    = errors.New("短信发送失败")
 )
@@ -58,6 +59,9 @@ func (sx *SmsX) SendRebindPhoneCode(ctx context.Context, phone string, code stri
 }
 
 func (sx *SmsX) sendAndStore(ctx context.Context, redisKey string, phone string, code string) error {
+	if !sx.config.Enable {
+		return ErrSMSDisabled
+	}
 	if sx.rdb == nil {
 		return ErrSMSSendFailed
 	}

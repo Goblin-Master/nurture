@@ -31,10 +31,12 @@ func Init() {
 	RMQ = rabbitmqx.InitRabbitMQ(Log)
 	MIO = miniox.InitMinio()
 
-	// 初始化 AIX
-	var err error
-	AIX, err = aix.NewAIX(config.Conf.AI, RDB, config.Conf.DB.DSN())
-	if err != nil {
-		panic("AIX init failed: " + err.Error())
+	AIX = nil
+	if config.Conf.AI.Enable {
+		var err error
+		AIX, err = aix.NewAIX(config.Conf.AI, RDB, config.Conf.DB.DSN())
+		if err != nil {
+			panic("AIX init failed: " + err.Error())
+		}
 	}
 }

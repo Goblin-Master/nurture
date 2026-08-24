@@ -7,6 +7,7 @@ auth:
   access_secret: nurture
   access_expire: 86400
 db:
+  enable: false
   host: nurture-pg  # 数据库容器名
   port: 5432
   username: nurture
@@ -26,12 +27,14 @@ rabbitmq:
   vhost: /
   enable: true
 minio:
+  enable: false
   endpoint: "xxxxxx" # minio 地址, 格式: ip:port,千万不要暴露地址
   access_key: "xxxxxx" # minio 登录账号
   secret_key: "xxxxxx" # minio 登录密码
   use_ssl: false
   bucket: "xxxxxx" # minio 存储桶名称
 email:
+  enable: false
   domain: "smtp.qq.com"
   port: 587
   send_email: "xxxxxx" # 发送邮箱
@@ -42,10 +45,12 @@ email:
   tls: false
 
 sms:
+  enable: false
   key: "xxxxxx"
   endpoint: "https://push.spug.cc/send/%s"
 
 ai:
+  enable: false
   chat:
     provider: openai
     model: glm-4v-flash

@@ -9,6 +9,9 @@ import (
 )
 
 func InitPgsql() *pgxpool.Pool {
+	if !config.Conf.DB.Enable {
+		return nil
+	}
 	dsn := config.Conf.DB.DSN()
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)

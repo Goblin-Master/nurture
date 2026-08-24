@@ -3,19 +3,30 @@ package miniox
 import (
 	"context"
 	"nurture/internal/config"
-	"os"
 	"testing"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMinio(t *testing.T) {
-	if os.Getenv("NURTURE_RUN_INTEGRATION_TESTS") != "1" {
-		t.Skip("skip integration test: set NURTURE_RUN_INTEGRATION_TESTS=1 to run")
+func TestInitMinioDisabled(t *testing.T) {
+	old := config.Conf.Minio
+	t.Cleanup(func() {
+		config.Conf.Minio = old
+	})
+	config.Conf.Minio = config.Minio{Enable: false}
+
+	if client := InitMinio(); client != nil {
+		t.Fatal("InitMinio() returned client when minio is disabled")
 	}
+}
+
+func TestMinio(t *testing.T) {
 	// 加载配置
 	config.LoadConfig()
+	if !config.Conf.Minio.Enable {
+		t.Skip("skip minio integration test: minio.enable=false")
+	}
 
 	// 初始化 minio
 	client := InitMinio()

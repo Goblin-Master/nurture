@@ -18,7 +18,9 @@ import (
 )
 
 var (
-	ErrSendOverTime = errors.New("邮件发送超时")
+	ErrEmailDisabled = errors.New("邮件服务未启用")
+	ErrEmailStore    = errors.New("邮件验证码保存失败")
+	ErrSendOverTime  = errors.New("邮件发送超时")
 )
 
 //go:embed scripts/verify.lua
@@ -44,7 +46,7 @@ func (ex *EmailX) SendLoginCode(ctx context.Context, to string, code string) err
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	return ex.rdb.Set(ctx, fmt.Sprintf(constant.LOGIN_CODE_KEY, to), code, ex.ttl).Err()
+	return ex.storeCode(ctx, fmt.Sprintf(constant.LOGIN_CODE_KEY, to), code)
 }
 func (ex *EmailX) SendResetPwdCode(ctx context.Context, to string, code string) error {
 	subject := fmt.Sprintf("[%s]重置密码", ex.config.Subject)
@@ -52,7 +54,7 @@ func (ex *EmailX) SendResetPwdCode(ctx context.Context, to string, code string) 
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	return ex.rdb.Set(ctx, fmt.Sprintf(constant.RESET_PWD_CODE_KEY, to), code, ex.ttl).Err()
+	return ex.storeCode(ctx, fmt.Sprintf(constant.RESET_PWD_CODE_KEY, to), code)
 }
 
 func (ex *EmailX) SendRegisterCode(ctx context.Context, to string, code string) error {
@@ -61,7 +63,7 @@ func (ex *EmailX) SendRegisterCode(ctx context.Context, to string, code string) 
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	return ex.rdb.Set(ctx, fmt.Sprintf(constant.REGISTER_CODE_KEY, to), code, ex.ttl).Err()
+	return ex.storeCode(ctx, fmt.Sprintf(constant.REGISTER_CODE_KEY, to), code)
 }
 
 func (ex *EmailX) SendBindEmailCode(ctx context.Context, to string, code string) error {
@@ -70,7 +72,7 @@ func (ex *EmailX) SendBindEmailCode(ctx context.Context, to string, code string)
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	return ex.rdb.Set(ctx, fmt.Sprintf(constant.BIND_EMAIL_CODE_KEY, to), code, ex.ttl).Err()
+	return ex.storeCode(ctx, fmt.Sprintf(constant.BIND_EMAIL_CODE_KEY, to), code)
 }
 
 func (ex *EmailX) SendRebindEmailCode(ctx context.Context, to string, code string) error {
@@ -79,10 +81,20 @@ func (ex *EmailX) SendRebindEmailCode(ctx context.Context, to string, code strin
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	return ex.rdb.Set(ctx, fmt.Sprintf(constant.REBIND_EMAIL_CODE_KEY, to), code, ex.ttl).Err()
+	return ex.storeCode(ctx, fmt.Sprintf(constant.REBIND_EMAIL_CODE_KEY, to), code)
+}
+
+func (ex *EmailX) storeCode(ctx context.Context, key string, code string) error {
+	if ex.rdb == nil {
+		return ErrEmailStore
+	}
+	return ex.rdb.Set(ctx, key, code, ex.ttl).Err()
 }
 
 func (ex *EmailX) sendEmail(ctx context.Context, to, subject, text string) error {
+	if !ex.config.Enable {
+		return ErrEmailDisabled
+	}
 	e := email.NewEmail()
 	e.From = fmt.Sprintf("%s <%s>", ex.config.SendNickname, ex.config.SendEmail)
 	e.To = []string{to}

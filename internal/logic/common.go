@@ -46,7 +46,25 @@ func NewCommonLogic() *CommonLogic {
 
 var _ ICommonLogic = (*CommonLogic)(nil)
 
+func aiAvailable() bool {
+	return config.Conf.AI.Enable && global.AIX != nil
+}
+
+func streamAIUnavailable(streamFunc func(event dto.SSEEvent)) {
+	if streamFunc == nil {
+		return
+	}
+	streamFunc(dto.SSEEvent{
+		Type:  constant.SSE_TYPE_ERROR,
+		Error: ErrChatStream.Error(),
+	})
+}
+
 func (l *CommonLogic) UploadFile(ctx context.Context, file multipart.File, header *multipart.FileHeader) (string, error) {
+	if !config.Conf.Minio.Enable || global.MIO == nil {
+		return "", ErrFileUpload
+	}
+
 	// 1. Calculate MD5
 	hash := md5.New()
 	if _, err := io.Copy(hash, file); err != nil {
@@ -93,6 +111,10 @@ func (l *CommonLogic) UploadFile(ctx context.Context, file multipart.File, heade
 // ChatStream 流式对话
 func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.ChatStreamReq,
 	streamFunc func(event dto.SSEEvent)) error {
+	if !aiAvailable() {
+		streamAIUnavailable(streamFunc)
+		return ErrChatStream
+	}
 
 	// 1. 获取最近 3 轮对话历史（6 条消息）作为 AI 上下文
 	history, err := l.aiRepo.GetRecentHistory(ctx, userID, req.SessionID, constant.AI_CONTEXT_MESSAGES)
@@ -255,6 +277,10 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 
 // UploadKnowledge 上传知识库
 func (l *CommonLogic) UploadKnowledge(ctx context.Context, userID string, req dto.KnowledgeUploadReq) error {
+	if !aiAvailable() {
+		return ErrKnowledgeUpload
+	}
+
 	// 构建 CollectionName
 	var collectionName string
 	switch req.SpaceType {
@@ -326,6 +352,10 @@ func (l *CommonLogic) GrowthAnalysisStream(ctx context.Context, userID string, r
 		if req.Unit != "kg" {
 			return fmt.Errorf("invalid unit for %s: expected kg, got %s", req.Metric, req.Unit)
 		}
+	}
+	if !aiAvailable() {
+		streamAIUnavailable(streamFunc)
+		return ErrChatStream
 	}
 
 	// 2. 构建提示词
@@ -467,6 +497,11 @@ func (l *CommonLogic) GrowthReport(ctx context.Context, userID string, req dto.G
 			Weight:            analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.Weight }),
 			HeadCircumference: analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.HeadCircumference }),
 		},
+	}
+
+	if !aiAvailable() {
+		resp.Markdown = buildGrowthReportFallbackMarkdown(resp.Data, req.Language)
+		return resp, nil
 	}
 
 	systemPrompt, userPrompt := buildGrowthReportPrompts(resp.Data, req.Language)
