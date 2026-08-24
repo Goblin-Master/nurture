@@ -31,16 +31,13 @@ func Init() {
 	RMQ = rabbitmqx.InitRabbitMQ(Log)
 	MIO = miniox.InitMinio()
 
-	AIX = nil
-	if config.Conf.AI.Enabled() {
-		var err error
-		pgConnURL := ""
-		if config.Conf.DB.Enable {
-			pgConnURL = config.Conf.DB.DSN()
-		}
-		AIX, err = aix.NewAIX(config.Conf.AI, RDB, pgConnURL)
-		if err != nil {
-			panic("AIX init failed: " + err.Error())
-		}
+	pgConnURL := ""
+	if config.Conf.DB.Enable {
+		pgConnURL = config.Conf.DB.DSN()
+	}
+	var err error
+	AIX, err = aix.NewAIX(config.Conf.AI, RDB, pgConnURL)
+	if err != nil {
+		panic("AIX init failed: " + err.Error())
 	}
 }

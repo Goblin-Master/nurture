@@ -459,7 +459,7 @@ type AIX struct {
 }
 
 // NewAIX 创建 AIX 实例
-func NewAIX(cfg config.AI, rdb redis.Cmdable, pgConnURL string) (*AIX, error) {
+func NewAIX(cfg config.AI, rdb redis.Cmdable, pgConnURL string, opts ...Option) (*AIX, error) {
     var chatModel llms.Model
     if cfg.Chat.Enable {
         var err error
@@ -1134,16 +1134,14 @@ func Init() {
     DB = pgsqlx.InitPgsql()
     RDB = redisx.InitRedis()
 
-    if config.Conf.AI.Enabled() {
-        pgConnURL := ""
-        if config.Conf.DB.Enable {
-            pgConnURL = config.Conf.DB.DSN()
-        }
-        var err error
-        AIX, err = aix.NewAIX(config.Conf.AI, RDB, pgConnURL)
-        if err != nil {
-            panic("AIX init failed: " + err.Error())
-        }
+    pgConnURL := ""
+    if config.Conf.DB.Enable {
+        pgConnURL = config.Conf.DB.DSN()
+    }
+    var err error
+    AIX, err = aix.NewAIX(config.Conf.AI, RDB, pgConnURL)
+    if err != nil {
+        panic("AIX init failed: " + err.Error())
     }
 }
 ```

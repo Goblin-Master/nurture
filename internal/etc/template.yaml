@@ -53,7 +53,7 @@ ai:
   chat:
     enable: false
     provider: openai
-    model: glm-4.6v-flash
+    model: glm-4v-flash
     api_key: xxxxxx
     base_url: https://open.bigmodel.cn/api/paas/v4/
     timeout: 3000

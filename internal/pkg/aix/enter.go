@@ -8,6 +8,14 @@ import (
 	"github.com/tmc/langchaingo/llms"
 )
 
+type EmbeddingProviderFactory func(config.EmbeddingModel) (embeddings.Embedder, error)
+
+type Option func(*options)
+
+type options struct {
+	embeddingProviders map[string]EmbeddingProviderFactory
+}
+
 // AIX 封装所有 AI 相关功能
 type AIX struct {
 	chatModel llms.Model
@@ -18,7 +26,12 @@ type AIX struct {
 }
 
 // NewAIX 创建 AIX 实例
-func NewAIX(cfg config.AI, rdb redis.Cmdable, pgConnURL string) (*AIX, error) {
+func NewAIX(cfg config.AI, rdb redis.Cmdable, pgConnURL string, opts ...Option) (*AIX, error) {
+	option := defaultOptions()
+	for _, opt := range opts {
+		opt(&option)
+	}
+
 	var chatModel llms.Model
 	if cfg.Chat.Enable {
 		var err error
@@ -31,7 +44,7 @@ func NewAIX(cfg config.AI, rdb redis.Cmdable, pgConnURL string) (*AIX, error) {
 	var embedder embeddings.Embedder
 	if cfg.Embedding.Enable {
 		var err error
-		embedder, err = newEmbeddingModel(cfg.Embedding)
+		embedder, err = newEmbeddingModel(cfg.Embedding, option.embeddingProviders)
 		if err != nil {
 			return nil, err
 		}
@@ -52,4 +65,24 @@ func (a *AIX) ChatEnabled() bool {
 
 func (a *AIX) EmbeddingEnabled() bool {
 	return a != nil && a.embedder != nil
+}
+
+func WithEmbeddingProvider(provider string, factory EmbeddingProviderFactory) Option {
+	return func(opts *options) {
+		provider = normalizeProvider(provider)
+		if provider == "" || factory == nil {
+			return
+		}
+		opts.embeddingProviders[provider] = factory
+	}
+}
+
+func defaultOptions() options {
+	return options{
+		embeddingProviders: map[string]EmbeddingProviderFactory{
+			ProviderOpenAI:      newOpenAICompatibleEmbedder,
+			ProviderSiliconFlow: newSiliconFlowEmbedder,
+			ProviderZhipu:       newZhipuEmbedder,
+		},
+	}
 }

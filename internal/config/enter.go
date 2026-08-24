@@ -28,10 +28,6 @@ type AI struct {
 	KBConfig  KBConfig       `mapstructure:"kb_config"`
 }
 
-func (ai AI) Enabled() bool {
-	return ai.Chat.Enable || ai.Embedding.Enable
-}
-
 type ChatModel struct {
 	Enable   bool   `mapstructure:"enable"`
 	Provider string `mapstructure:"provider"`
