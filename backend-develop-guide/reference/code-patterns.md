@@ -74,6 +74,28 @@ func NewEmailX() *EmailX {
 }
 ```
 
+### pkg 脚本资源
+
+pkg 自己使用的 Lua、SQL 片段、模板等脚本资源必须放在当前 pkg 的 `scripts/` 目录下，并通过 `go:embed` 嵌入代码。不要把多行脚本直接内联在 `enter.go` 或业务方法里。
+
+```text
+internal/pkg/emailx/
+├── enter.go
+└── scripts/
+    └── verify.lua
+```
+
+```go
+package emailx
+
+import _ "embed"
+
+//go:embed scripts/verify.lua
+var verifyScript string
+```
+
+脚本归属哪个 pkg，就放在哪个 pkg 自己的 `scripts/` 下；不要放进 `internal/test`、业务模块或共享杂物目录。
+
 ## 2. 接口定义模式
 
 Logic 层和 Repo 层必须定义接口，便于测试和解耦。

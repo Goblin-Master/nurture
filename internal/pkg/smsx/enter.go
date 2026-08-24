@@ -3,6 +3,7 @@ package smsx
 import (
 	"context"
 	"crypto/rand"
+	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -23,12 +24,8 @@ var (
 	ErrSMSSendFailed    = errors.New("短信发送失败")
 )
 
-const verifyScript = `if redis.call("GET", KEYS[1]) == ARGV[1] then
-    return redis.call("DEL", KEYS[1])
-else
-    return 0
-end
-`
+//go:embed scripts/verify.lua
+var verifyScript string
 
 type SmsX struct {
 	config config.SMS
