@@ -1050,6 +1050,18 @@ func registerRoutes(r *gin.Engine) {
 }
 ```
 
+**文件**：`internal/router/health.go`
+
+```go
+package router
+
+func registerHealthRoutes(r *gin.Engine) {
+    r.GET("/healthz", func(c *gin.Context) {
+        response.Response(c, "ok", nil)
+    })
+}
+```
+
 **文件**：`internal/router/common.go`
 
 ```go
@@ -1057,11 +1069,6 @@ package router
 
 func registerCommonRoutes(rg *gin.RouterGroup) {
     commonHandler := handler.NewCommonHandler()
-
-    // 健康检查
-    rg.GET("/ping", func(c *gin.Context) {
-        response.Response(c, "pong", nil)
-    })
 
     // AI 相关接口
     ai := rg.Group("/ai")

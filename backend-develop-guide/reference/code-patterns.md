@@ -396,6 +396,7 @@ func LoadConfig() {
 ```go
 // router/enter.go
 func registerRoutes(r *gin.Engine) {
+    registerHealthRoutes(r)
     api := r.Group("/api")
     registerCommonRoutes(api.Group("/common"))
     registerUserRoutes(api.Group("/user"))
@@ -409,11 +410,15 @@ func requestGlobalMiddleware(r *gin.Engine) {
 模块路由按文件拆分在 `internal/router/` 下：
 
 ```go
+// router/health.go
+func registerHealthRoutes(r *gin.Engine) {
+    r.GET("/healthz", func(c *gin.Context) {
+        response.Response(c, "ok", nil)
+    })
+}
+
 // router/common.go
 func registerCommonRoutes(rg *gin.RouterGroup) {
-    rg.GET("/ping", func(c *gin.Context) {
-        response.Response(c, "pong", nil)
-    })
     commonHandler := handler.NewCommonHandler()
     rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
 }

@@ -328,6 +328,7 @@ func main() {
 
 ```go
 func registerRoutes(r *gin.Engine) {
+    registerHealthRoutes(r)
     api := r.Group("/api")
 
     registerUserRoutes(api.Group("/user"))
@@ -340,8 +341,13 @@ func registerUserRoutes(rg *gin.RouterGroup) {
 }
 
 func registerCommonRoutes(rg *gin.RouterGroup) {
-    rg.GET("/ping", func(c *gin.Context) {
-        response.Response(c, "pong", nil)
+    commonHandler := handler.NewCommonHandler()
+    rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
+}
+
+func registerHealthRoutes(r *gin.Engine) {
+    r.GET("/healthz", func(c *gin.Context) {
+        response.Response(c, "ok", nil)
     })
 }
 ```

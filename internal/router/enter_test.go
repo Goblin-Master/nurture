@@ -54,6 +54,13 @@ func TestListenHealthzWithDBDisabled(t *testing.T) {
 	if body.Code != 0 || body.Message != "OK" || body.Data != "ok" {
 		t.Fatalf("healthz body = %+v", body)
 	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/common/ping", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("ping status = %d, want %d", w.Code, http.StatusNotFound)
+	}
 }
 
 func TestDBRoutesReturnUnavailableWhenDBDisabled(t *testing.T) {

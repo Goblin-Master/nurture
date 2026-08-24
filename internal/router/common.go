@@ -5,21 +5,11 @@ import (
 	"nurture/internal/handler"
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
-	"nurture/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
 )
 
-func registerHealthRoutes(r *gin.Engine) {
-	r.GET("/healthz", func(c *gin.Context) {
-		response.Response(c, "ok", nil)
-	})
-}
-
 func registerCommonRoutes(rg *gin.RouterGroup) {
-	rg.GET("/ping", func(c *gin.Context) {
-		response.Response(c, "pong", nil)
-	})
 	commonHandler := handler.NewCommonHandler()
 	rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
 
