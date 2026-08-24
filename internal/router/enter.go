@@ -38,8 +38,11 @@ func requestGlobalMiddleware(r *gin.Engine) {
 
 // registerRoutes 注册各业务路由的具体处理函数
 func registerRoutes(r *gin.Engine) {
+	registerHealthRoutes(r)
+
 	api := r.Group("/api")
 	ws := r.Group("/ws")
+	dbRequired := middleware.RequireDB()
 
 	registerCommonRoutes(api.Group("/common"))
 	chat.NewModule(chat.Deps{
@@ -49,9 +52,9 @@ func registerRoutes(r *gin.Engine) {
 		Log:           global.Log,
 		AuthUser:      middleware.Authentication(jwtx.COMMON_USER),
 		RateLimitUser: middleware.RateLimitUser,
-	}).RegisterRoutes(api.Group("/chat"), ws)
-	registerUserRoutes(api.Group("/user"))
-	registerBabyRoutes(api.Group("/baby"))
-	registerPostRoutes(api.Group("/post"))
-	registerAdminRoutes(api.Group("/admin"))
+	}).RegisterRoutes(api.Group("/chat", dbRequired), ws.Group("", dbRequired))
+	registerUserRoutes(api.Group("/user", dbRequired))
+	registerBabyRoutes(api.Group("/baby", dbRequired))
+	registerPostRoutes(api.Group("/post", dbRequired))
+	registerAdminRoutes(api.Group("/admin", dbRequired))
 }

@@ -50,6 +50,10 @@ func aiAvailable() bool {
 	return config.Conf.AI.Enable && global.AIX != nil
 }
 
+func dbAvailable() bool {
+	return config.Conf.DB.Enable && global.DB != nil
+}
+
 func streamAIUnavailable(streamFunc func(event dto.SSEEvent)) {
 	if streamFunc == nil {
 		return
@@ -126,6 +130,13 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 
 	var extraContext string
 	if req.AutoContext && strings.TrimSpace(req.BabyID) != "" {
+		if !dbAvailable() {
+			streamFunc(dto.SSEEvent{
+				Type:  constant.SSE_TYPE_ERROR,
+				Error: ErrDatabaseUnavailable.Error(),
+			})
+			return ErrDatabaseUnavailable
+		}
 		days := req.ContextDays
 		if days <= 0 || days > 180 {
 			days = 30
@@ -280,6 +291,9 @@ func (l *CommonLogic) UploadKnowledge(ctx context.Context, userID string, req dt
 	if !aiAvailable() {
 		return ErrKnowledgeUpload
 	}
+	if !dbAvailable() {
+		return ErrDatabaseUnavailable
+	}
 
 	// 构建 CollectionName
 	var collectionName string
@@ -421,6 +435,9 @@ func (l *CommonLogic) GrowthReport(ctx context.Context, userID string, req dto.G
 	var resp dto.GrowthReportResp
 	if strings.TrimSpace(req.BabyID) == "" {
 		return resp, ErrParamsType
+	}
+	if !dbAvailable() {
+		return resp, ErrDatabaseUnavailable
 	}
 	days := req.RangeDays
 	if days <= 0 || days > 365 {

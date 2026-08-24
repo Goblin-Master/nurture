@@ -10,6 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func registerHealthRoutes(r *gin.Engine) {
+	r.GET("/healthz", func(c *gin.Context) {
+		response.Response(c, "ok", nil)
+	})
+}
+
 func registerCommonRoutes(rg *gin.RouterGroup) {
 	rg.GET("/ping", func(c *gin.Context) {
 		response.Response(c, "pong", nil)

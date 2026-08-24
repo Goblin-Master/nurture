@@ -45,9 +45,13 @@ func NewModule(deps Deps) *Module {
 	}
 	hub := session.NewHub()
 	go hub.Run()
-	worker.NewWorker(deps.RabbitMQ, hub, deps.Log).Start(context.Background())
 	chatRepo := repo.NewChatRepo(deps.DB, deps.RDB, deps.Log)
-	worker.NewOutboxWorker(chatRepo, deps.RabbitMQ, deps.Log).Start(context.Background())
+	if deps.RabbitMQ != nil {
+		worker.NewWorker(deps.RabbitMQ, hub, deps.Log).Start(context.Background())
+	}
+	if deps.DB != nil && deps.RabbitMQ != nil {
+		worker.NewOutboxWorker(chatRepo, deps.RabbitMQ, deps.Log).Start(context.Background())
+	}
 	chatLogic := logic.NewChatLogic(chatRepo, ratelimitx.NewLimiter(deps.RDB))
 
 	return &Module{

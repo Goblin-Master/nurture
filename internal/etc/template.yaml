@@ -53,15 +53,15 @@ ai:
   enable: false
   chat:
     provider: openai
-    model: glm-4v-flash
+    model: glm-4.6v-flash
     api_key: xxxxxx
     base_url: https://open.bigmodel.cn/api/paas/v4/
     timeout: 3000
   embedding:
     provider: openai
-    model: embedding-3
+    model: BAAI/bge-m3
     api_key: xxxxxx
-    base_url: https://open.bigmodel.cn/api/paas/v4/
+    base_url: https://api.siliconflow.cn/v1/embedding
   chunking:
     chunk_size: 1000
     chunk_overlap: 200
