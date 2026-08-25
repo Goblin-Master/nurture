@@ -20,16 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type EmailSender interface {
-	SendCode(ctx context.Context, to string, title string, text string, key string, code string) error
-	VerifyCode(ctx context.Context, key string, code string) (bool, error)
-}
-
-type SMSSender interface {
-	SendCode(ctx context.Context, key string, phone string, code string) error
-	VerifyCode(ctx context.Context, key string, code string) (bool, error)
-}
-
 type BabySyncer interface {
 	SyncPartnerBabies(ctx context.Context, fatherUserID string, motherUserID string) error
 }
@@ -66,13 +56,13 @@ type IUserLogic interface {
 }
 type UserLogic struct {
 	userRepo   repo.IUserRepo
-	email      EmailSender
-	sms        SMSSender
+	email      emailx.Sender
+	sms        smsx.Sender
 	babySyncer BabySyncer
 	log        *zap.SugaredLogger
 }
 
-func NewUserLogic(userRepo repo.IUserRepo, email EmailSender, sms SMSSender, babySyncer BabySyncer, log *zap.SugaredLogger) *UserLogic {
+func NewUserLogic(userRepo repo.IUserRepo, email emailx.Sender, sms smsx.Sender, babySyncer BabySyncer, log *zap.SugaredLogger) *UserLogic {
 	return &UserLogic{
 		userRepo:   userRepo,
 		email:      email,

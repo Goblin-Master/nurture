@@ -8,6 +8,10 @@ import (
 	"testing"
 )
 
+func TestSmsXImplementsSender(t *testing.T) {
+	var _ Sender = (*SmsX)(nil)
+}
+
 func TestSendRegisterCodeDisabled(t *testing.T) {
 	sx := &SmsX{
 		config: config.SMS{Enable: false},

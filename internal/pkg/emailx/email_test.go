@@ -11,6 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestEmailXImplementsSender(t *testing.T) {
+	var _ Sender = (*EmailX)(nil)
+}
+
 func TestSendRegisterCodeDisabled(t *testing.T) {
 	ex := &EmailX{
 		config: config.Email{Enable: false},

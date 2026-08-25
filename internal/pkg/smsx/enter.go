@@ -26,12 +26,19 @@ var (
 //go:embed scripts/verify.lua
 var verifyScript string
 
+type Sender interface {
+	SendCode(ctx context.Context, key string, phone string, code string) error
+	VerifyCode(ctx context.Context, key string, code string) (bool, error)
+}
+
 type SmsX struct {
 	config config.SMS
 	ttl    time.Duration
 	rdb    redis.Cmdable
 	client *http.Client
 }
+
+var _ Sender = (*SmsX)(nil)
 
 func NewSmsX() *SmsX {
 	return &SmsX{

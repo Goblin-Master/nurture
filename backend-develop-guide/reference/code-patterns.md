@@ -156,6 +156,8 @@ var _ IUserRepo = (*UserRepo)(nil)
 - 对已有稳定横切能力，例如 `middleware.Authentication`、`middleware.GetBind`、`jwtx.GetUserID`、`response.Response`，优先直接复用原包。
 - 不要为了“看起来可注入”而额外定义 `AuthUserFunc`、`RespondFunc`、`GetUserIDFunc` 这类只有一处调用且没有替换需求的包装类型。
 - 只有当业务层确实需要 fake、替换实现或隔离外部系统时，才在使用方定义小接口。
+- 对稳定可复用的 pkg 基础设施能力，可以在 provider 包暴露能力接口，例如 `emailx.Sender`、`smsx.Sender`。业务模块不要重复定义同一份 pkg 能力接口。
+- 对业务模块之间的调用，接口仍然放在 consumer 侧，例如 user logic 需要 baby 同步时定义自己的 `BabySyncer`。
 
 ## 3. DTO 定义模式
 

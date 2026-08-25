@@ -16,8 +16,8 @@ type Deps struct {
 	DB         *pgxpool.Pool
 	RDB        redis.Cmdable
 	Log        *zap.SugaredLogger
-	Email      logic.EmailSender
-	SMS        logic.SMSSender
+	Email      emailx.Sender
+	SMS        smsx.Sender
 	BabySyncer logic.BabySyncer
 }
 

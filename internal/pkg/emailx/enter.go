@@ -25,11 +25,18 @@ var (
 //go:embed scripts/verify.lua
 var verifyScript string
 
+type Sender interface {
+	SendCode(ctx context.Context, to string, title string, text string, key string, code string) error
+	VerifyCode(ctx context.Context, key string, code string) (bool, error)
+}
+
 type EmailX struct {
 	config config.Email
 	ttl    time.Duration
 	rdb    redis.Cmdable
 }
+
+var _ Sender = (*EmailX)(nil)
 
 func NewEmailX() *EmailX {
 	return &EmailX{
