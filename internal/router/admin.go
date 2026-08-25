@@ -11,7 +11,6 @@ import (
 
 func registerAdminRoutes(rg *gin.RouterGroup) {
 	userHandler := handler.NewUserHandler()
-	postHandler := handler.NewPostHandler()
 
 	rg.GET("/users/list",
 		middleware.Authentication(jwtx.ADMIN),
@@ -22,15 +21,5 @@ func registerAdminRoutes(rg *gin.RouterGroup) {
 		middleware.Authentication(jwtx.ADMIN),
 		middleware.BindUriMiddleware[dto.AdminPromoteUri],
 		userHandler.AdminPromoteToAdmin,
-	)
-	rg.POST("/tags",
-		middleware.Authentication(jwtx.ADMIN),
-		middleware.BindJsonMiddleware[dto.AdminTagCreateReq],
-		postHandler.AdminCreateTag,
-	)
-	rg.DELETE("/tags/:tag_id",
-		middleware.Authentication(jwtx.ADMIN),
-		middleware.BindUriMiddleware[dto.AdminTagDeleteUri],
-		postHandler.AdminDeleteTag,
 	)
 }

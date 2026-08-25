@@ -22,10 +22,8 @@ const (
 	SPACE_TYPE_PUBLIC  = "public"
 
 	// CollectionName 模板
-	COLLECTION_USER_PREFIX    = "knowledge_user_%s" //user_id
-	COLLECTION_PUBLIC         = "knowledge_public"
-	COLLECTION_POST_RECOMMEND = "post_recommend"
-
+	COLLECTION_USER_PREFIX = "knowledge_user_%s" //user_id
+	COLLECTION_PUBLIC      = "knowledge_public"
 	// Redis Key
 	CHAT_HISTORY_KEY = "chat:history:%s:%s" // user_id:session_id
 
@@ -45,18 +43,6 @@ const (
 
 	USER_TAG_PREF_KEY = "user:tag_pref:%s"
 	USER_TAG_PREF_TTL = 30 * 24 * 3600
-
-	// 帖子缓存 Key
-	POST_HOT_LIST_KEY       = "post:list:hot:%d:%d"
-	POST_HOT_LIST_BY_TAG    = "post:list:hot:tag:%s:%d:%d"
-	POST_HOT_DETAIL_KEY     = "post:detail:hot:%s"
-	POST_HOT_COMMENTS_KEY   = "post:comments:hot:%s:%s:%d:%d"
-	COMMENT_HOT_REPLIES_KEY = "comment:replies:hot:%s:%s:%d:%d"
-	// 帖子缓存 TTL（秒）
-	POST_HOT_LIST_TTL       = 2 * 60
-	POST_HOT_DETAIL_TTL     = 10 * 60
-	POST_HOT_COMMENTS_TTL   = 2 * 60
-	COMMENT_HOT_REPLIES_TTL = 2 * 60
 
 	// SSE 事件类型
 	SSE_TYPE_CONTENT = "content"

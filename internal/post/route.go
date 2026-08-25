@@ -1,16 +1,15 @@
-package router
+package post
 
 import (
-	"nurture/internal/dto"
-	"nurture/internal/handler"
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
+	"nurture/internal/post/dto"
 
 	"github.com/gin-gonic/gin"
 )
 
-func registerPostRoutes(rg *gin.RouterGroup) {
-	postHandler := handler.NewPostHandler()
+func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
+	postHandler := m.handler
 
 	rg.GET("",
 		middleware.BindQueryMiddleware[dto.PostHomeListReq],
@@ -140,5 +139,18 @@ func registerPostRoutes(rg *gin.RouterGroup) {
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindUriMiddleware[dto.CommentLikeReq],
 		postHandler.UnlikeComment,
+	)
+}
+
+func (m *Module) RegisterAdminRoutes(rg *gin.RouterGroup) {
+	rg.POST("/tags",
+		middleware.Authentication(jwtx.ADMIN),
+		middleware.BindJsonMiddleware[dto.AdminTagCreateReq],
+		m.handler.AdminCreateTag,
+	)
+	rg.DELETE("/tags/:tag_id",
+		middleware.Authentication(jwtx.ADMIN),
+		middleware.BindUriMiddleware[dto.AdminTagDeleteUri],
+		m.handler.AdminDeleteTag,
 	)
 }

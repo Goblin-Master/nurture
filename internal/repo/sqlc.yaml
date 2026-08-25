@@ -8,14 +8,3 @@ sql:
         package: "user"
         out: "user"
         sql_package: "pgx/v5"
-  - engine: "postgresql"
-    queries: "sql/post.sql"
-    schema:
-      - "../../deploy/schema/post.sql"
-      - "../../deploy/schema/user.sql"
-      - "../../deploy/schema/baby.sql"
-    gen:
-      go:
-        package: "post"
-        out: "post"
-        sql_package: "pgx/v5"

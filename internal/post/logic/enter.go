@@ -5,15 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"nurture/internal/dto"
-	"nurture/internal/global"
-	"nurture/internal/repo"
+	"nurture/internal/post/dto"
+	"nurture/internal/post/repo"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
+
+type FollowReader interface {
+	IsFollowing(ctx context.Context, followerID, followeeID string) (bool, error)
+}
 
 type IPostLogic interface {
 	Home(ctx context.Context, userID string, req dto.PostHomeListReq) (dto.PostListResp, error)
@@ -49,16 +53,26 @@ type IPostLogic interface {
 }
 
 type PostLogic struct {
-	postRepo *repo.PostRepo
+	postRepo     repo.IPostRepo
+	followReader FollowReader
+	log          *zap.SugaredLogger
 }
 
-func NewPostLogic() *PostLogic {
+func NewPostLogic(postRepo repo.IPostRepo, followReader FollowReader, log *zap.SugaredLogger) *PostLogic {
 	return &PostLogic{
-		postRepo: repo.NewPostRepo(),
+		postRepo:     postRepo,
+		followReader: followReader,
+		log:          log,
 	}
 }
 
 var _ IPostLogic = (*PostLogic)(nil)
+
+func (l *PostLogic) logError(err error) {
+	if l.log != nil {
+		l.log.Error(err)
+	}
+}
 
 func (l *PostLogic) Home(ctx context.Context, userID string, req dto.PostHomeListReq) (dto.PostListResp, error) {
 	var resp dto.PostListResp
@@ -73,7 +87,7 @@ func (l *PostLogic) Home(ctx context.Context, userID string, req dto.PostHomeLis
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.PostItem, 0, len(items))
@@ -123,7 +137,7 @@ func (l *PostLogic) Following(ctx context.Context, userID string, req dto.PostMy
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.PostItem, 0, len(items))
@@ -168,7 +182,7 @@ func (l *PostLogic) DeleteComment(ctx context.Context, userID string, uri dto.Co
 		if errors.Is(err, repo.ErrInvalidPostStatus) {
 			return ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrDefault
 	}
 	return nil
@@ -181,7 +195,7 @@ func (l *PostLogic) LikeComment(ctx context.Context, userID string, uri dto.Comm
 		if errors.Is(err, repo.ErrInvalidPostStatus) {
 			return ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrDefault
 	}
 	return nil
@@ -191,7 +205,7 @@ func (l *PostLogic) UnlikeComment(ctx context.Context, userID string, uri dto.Co
 		return ErrParamsType
 	}
 	if err := l.postRepo.UnlikeComment(ctx, uri.CommentID, userID); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrDefault
 	}
 	return nil
@@ -205,14 +219,14 @@ func (l *PostLogic) LikePost(ctx context.Context, userID string, uri dto.PostDet
 		if errors.Is(err, repo.ErrInvalidPostStatus) {
 			return ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrDefault
 	}
 	if err := l.postRepo.TouchUserRecommendProfile(ctx, userID, uri.PostID); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 	}
 	if err := l.postRepo.TouchUserTagPref(ctx, userID, uri.PostID, 3); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 	}
 	return nil
 }
@@ -221,11 +235,11 @@ func (l *PostLogic) UnlikePost(ctx context.Context, userID string, uri dto.PostD
 		return ErrParamsType
 	}
 	if err := l.postRepo.UnlikePost(ctx, uri.PostID, userID); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrDefault
 	}
 	if err := l.postRepo.TouchUserTagPref(ctx, userID, uri.PostID, -3); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 	}
 	return nil
 }
@@ -240,14 +254,14 @@ func (l *PostLogic) CollectPost(ctx context.Context, userID string, uri dto.Post
 		if errors.Is(err, repo.ErrInvalidPostStatus) {
 			return resp, ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if err := l.postRepo.TouchUserRecommendProfile(ctx, userID, uri.PostID); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 	}
 	if err := l.postRepo.TouchUserTagPref(ctx, userID, uri.PostID, 4); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 	}
 	resp.CollectionID = cid
 	resp.Message = "OK"
@@ -268,7 +282,7 @@ func (l *PostLogic) AdminCreateTag(ctx context.Context, req dto.AdminTagCreateRe
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.TagID = row.TagID
@@ -285,7 +299,7 @@ func (l *PostLogic) AdminDeleteTag(ctx context.Context, uri dto.AdminTagDeleteUr
 		if errors.Is(err, repo.ErrParamsType) {
 			return ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrDefault
 	}
 	return nil
@@ -304,7 +318,7 @@ func (l *PostLogic) ListTags(ctx context.Context, req dto.TagListReq) (dto.TagLi
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.TagItem, 0, len(items))
@@ -326,11 +340,11 @@ func (l *PostLogic) UncollectPost(ctx context.Context, userID string, uri dto.Po
 		return resp, ErrParamsType
 	}
 	if err := l.postRepo.UncollectPost(ctx, uri.PostID, userID); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if err := l.postRepo.TouchUserTagPref(ctx, userID, uri.PostID, -4); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 	}
 	resp.Message = "OK"
 	return resp, nil
@@ -349,7 +363,7 @@ func (l *PostLogic) ListMyCollections(ctx context.Context, userID string, req dt
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.PostItem, 0, len(items))
@@ -398,11 +412,12 @@ func (l *PostLogic) UpdateComment(ctx context.Context, userID string, uri dto.Co
 		if errors.Is(err, repo.ErrInvalidPostStatus) {
 			return ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrDefault
 	}
 	return nil
 }
+
 func (l *PostLogic) ListReplies(ctx context.Context, userID string, uri dto.CommentRepliesReq, req dto.CommentListReq) (dto.CommentListResp, error) {
 	var resp dto.CommentListResp
 	if strings.TrimSpace(uri.PostID) == "" || strings.TrimSpace(uri.CommentID) == "" {
@@ -419,7 +434,7 @@ func (l *PostLogic) ListReplies(ctx context.Context, userID string, uri dto.Comm
 		if errors.Is(err, repo.ErrPostNotExist) {
 			return resp, ErrPostNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if status != "published" {
@@ -427,7 +442,7 @@ func (l *PostLogic) ListReplies(ctx context.Context, userID string, uri dto.Comm
 	}
 	pPostID, pStatus, err := l.postRepo.GetCommentParentInfo(ctx, uri.CommentID)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if pPostID != uri.PostID {
@@ -438,7 +453,7 @@ func (l *PostLogic) ListReplies(ctx context.Context, userID string, uri dto.Comm
 	}
 	rows, hasMore, err := l.postRepo.ListRepliesByComment(ctx, uri.CommentID, userID, req.Page, req.PageSize, req.Strategy)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.CommentItem, 0, len(rows))
@@ -475,7 +490,7 @@ func (l *PostLogic) ListByTag(ctx context.Context, userID string, req dto.PostTa
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.PostItem, 0, len(items))
@@ -525,7 +540,7 @@ func (l *PostLogic) Search(ctx context.Context, userID string, req dto.PostSearc
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.PostItem, 0, len(items))
@@ -575,7 +590,7 @@ func (l *PostLogic) ListMyPosts(ctx context.Context, userID string, req dto.Post
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.PostItem, 0, len(items))
@@ -625,7 +640,7 @@ func (l *PostLogic) ListMyDrafts(ctx context.Context, userID string, req dto.Pos
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.PostItem, 0, len(items))
@@ -675,7 +690,7 @@ func (l *PostLogic) ListMyMilestones(ctx context.Context, userID string, req dto
 		if errors.Is(err, repo.ErrParamsType) {
 			return resp, ErrParamsType
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.PostItem, 0, len(items))
@@ -708,6 +723,7 @@ func (l *PostLogic) ListMyMilestones(ctx context.Context, userID string, req dto
 	resp.HasMore = hasMore
 	return resp, nil
 }
+
 func (l *PostLogic) Publish(ctx context.Context, userID string, req dto.PublishPostReq) (dto.PublishPostResp, error) {
 	var resp dto.PublishPostResp
 	if strings.TrimSpace(req.PostID) == "" {
@@ -721,17 +737,18 @@ func (l *PostLogic) Publish(ctx context.Context, userID string, req dto.PublishP
 		if errors.Is(err, repo.ErrPostNotDraft) {
 			return resp, ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if err := l.postRepo.IndexPostForRecommend(ctx, req.PostID); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 	}
 	resp.PostID = req.PostID
 	resp.Status = "published"
 	resp.Message = "发布成功"
 	return resp, nil
 }
+
 func (l *PostLogic) UpdateDraft(ctx context.Context, userID string, uri dto.PostDetailReq, req dto.UpdateDraftReq) (dto.UpdateDraftResp, error) {
 	var resp dto.UpdateDraftResp
 	if strings.TrimSpace(uri.PostID) == "" {
@@ -749,7 +766,7 @@ func (l *PostLogic) UpdateDraft(ctx context.Context, userID string, uri dto.Post
 		if errors.Is(err, repo.ErrPostNotDraft) {
 			return resp, ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.PostID = uri.PostID
@@ -757,6 +774,7 @@ func (l *PostLogic) UpdateDraft(ctx context.Context, userID string, uri dto.Post
 	resp.Message = "更新成功"
 	return resp, nil
 }
+
 func (l *PostLogic) DeleteDraft(ctx context.Context, userID string, uri dto.PostDetailReq) error {
 	if strings.TrimSpace(uri.PostID) == "" {
 		return ErrParamsType
@@ -769,7 +787,7 @@ func (l *PostLogic) DeleteDraft(ctx context.Context, userID string, uri dto.Post
 		if errors.Is(err, repo.ErrInvalidPostStatus) {
 			return ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrDefault
 	}
 	return nil
@@ -787,7 +805,7 @@ func (l *PostLogic) DeletePost(ctx context.Context, userID string, uri dto.PostD
 		if errors.Is(err, repo.ErrInvalidPostStatus) {
 			return ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrDefault
 	}
 	return nil
@@ -810,12 +828,12 @@ func (l *PostLogic) NewPost(ctx context.Context, userID string, req dto.CreatePo
 		if errors.Is(err, repo.ErrInvalidPostStatus) {
 			return resp, ErrInvalidPostStatus
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if status == "published" || status == "milestone" {
 		if err := l.postRepo.IndexPostForRecommend(ctx, postID); err != nil {
-			global.Log.Error(err)
+			l.logError(err)
 		}
 	}
 	resp.PostID = postID
@@ -834,7 +852,7 @@ func (l *PostLogic) CreateComment(ctx context.Context, userID string, postID str
 		if errors.Is(err, repo.ErrPostNotExist) {
 			return resp, ErrPostNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if status != "published" {
@@ -844,7 +862,7 @@ func (l *PostLogic) CreateComment(ctx context.Context, userID string, postID str
 	if parentID != "" {
 		pPostID, pStatus, err := l.postRepo.GetCommentParentInfo(ctx, parentID)
 		if err != nil {
-			global.Log.Error(err)
+			l.logError(err)
 			return resp, ErrDefault
 		}
 		if pPostID != postID {
@@ -857,14 +875,14 @@ func (l *PostLogic) CreateComment(ctx context.Context, userID string, postID str
 	commentID := uuid.NewString()
 	now := time.Now().UnixMilli()
 	if err := l.postRepo.CreateComment(ctx, commentID, postID, userID, ifNonEmptyPtr(parentID), string(req.Content), now); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if err := l.postRepo.TouchUserRecommendProfile(ctx, userID, postID); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 	}
 	if err := l.postRepo.TouchUserTagPref(ctx, userID, postID, 5); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 	}
 	resp.CommentID = commentID
 	resp.Message = "创建成功"
@@ -877,6 +895,7 @@ func ifNonEmptyPtr(s string) *string {
 	}
 	return &s
 }
+
 func (l *PostLogic) ListComments(ctx context.Context, userID string, postID string, req dto.CommentListReq) (dto.CommentListResp, error) {
 	var resp dto.CommentListResp
 	if strings.TrimSpace(postID) == "" {
@@ -893,7 +912,7 @@ func (l *PostLogic) ListComments(ctx context.Context, userID string, postID stri
 		if errors.Is(err, repo.ErrPostNotExist) {
 			return resp, ErrPostNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if status != "published" {
@@ -901,7 +920,7 @@ func (l *PostLogic) ListComments(ctx context.Context, userID string, postID stri
 	}
 	rows, hasMore, err := l.postRepo.ListCommentsByPost(ctx, postID, userID, req.Page, req.PageSize, req.Strategy)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Items = make([]dto.CommentItem, 0, len(rows))
@@ -924,6 +943,7 @@ func (l *PostLogic) ListComments(ctx context.Context, userID string, postID stri
 	resp.HasMore = hasMore
 	return resp, nil
 }
+
 func (l *PostLogic) Detail(ctx context.Context, userID string, req dto.PostDetailReq) (dto.PostDetailResp, error) {
 	var resp dto.PostDetailResp
 	if strings.TrimSpace(req.PostID) == "" {
@@ -934,7 +954,7 @@ func (l *PostLogic) Detail(ctx context.Context, userID string, req dto.PostDetai
 		if errors.Is(err, repo.ErrPostNotExist) {
 			return resp, ErrPostNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	y, m, ageText := calcAge(row.Birthday, time.Now())
@@ -962,18 +982,17 @@ func (l *PostLogic) Detail(ctx context.Context, userID string, req dto.PostDetai
 		BabyAgeMonth:   m,
 		BabyAgeText:    ageText,
 	}
-	// compute is_follow
-	if userID != "" && userID != row.AuthorID {
-		ur := repo.NewUserRepo()
-		ok, e := ur.IsFollowing(ctx, userID, row.AuthorID)
+	if userID != "" && userID != row.AuthorID && l.followReader != nil {
+		ok, e := l.followReader.IsFollowing(ctx, userID, row.AuthorID)
 		if e != nil {
-			global.Log.Error(e)
+			l.logError(e)
 		} else {
 			resp.Post.IsFollow = ok
 		}
 	}
 	return resp, nil
 }
+
 func calcAge(birthdayMs int64, now time.Time) (int, int, string) {
 	if birthdayMs <= 0 {
 		return 0, 0, ""

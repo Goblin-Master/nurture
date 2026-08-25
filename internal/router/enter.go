@@ -8,6 +8,7 @@ import (
 	"nurture/internal/global"
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
+	"nurture/internal/post"
 	"nurture/internal/repo"
 
 	"github.com/gin-gonic/gin"
@@ -51,6 +52,13 @@ func registerRoutes(r *gin.Engine) {
 		Log:           global.Log,
 		PartnerReader: repo.NewUserRepo(),
 	})
+	postModule := post.NewModule(post.Deps{
+		DB:           global.DB,
+		RDB:          global.RDB,
+		Log:          global.Log,
+		AI:           global.AIX,
+		FollowReader: repo.NewUserRepo(),
+	})
 
 	registerCommonRoutes(api.Group("/common"))
 	chat.NewModule(chat.Deps{
@@ -63,8 +71,9 @@ func registerRoutes(r *gin.Engine) {
 	}).RegisterRoutes(api.Group("/chat", dbRequired), ws.Group("", dbRequired))
 	registerUserRoutes(api.Group("/user", dbRequired))
 	babyModule.RegisterRoutes(api.Group("/baby", dbRequired))
-	registerPostRoutes(api.Group("/post", dbRequired))
+	postModule.RegisterRoutes(api.Group("/post", dbRequired))
 	admin := api.Group("/admin", dbRequired)
 	registerAdminRoutes(admin)
 	babyModule.RegisterAdminRoutes(admin)
+	postModule.RegisterAdminRoutes(admin)
 }

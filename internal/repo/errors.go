@@ -18,9 +18,4 @@ var (
 	ErrEmailIsUsed   = errors.New("邮箱已经被使用")
 	ErrPhoneIsUsed   = errors.New("手机号已经被使用")
 	ErrAccountOrPwd  = errors.New("账号或密码错误")
-
-	// Post related errors
-	ErrPostNotExist      = errors.New("帖子不存在")
-	ErrInvalidPostStatus = errors.New("帖子状态非法")
-	ErrPostNotDraft      = errors.New("帖子不是草稿，无法发布")
 )

@@ -22,11 +22,6 @@ var (
 )
 
 var (
-	ErrPostNotExist      = errors.New("帖子不存在")
-	ErrInvalidPostStatus = errors.New("帖子状态非法")
-)
-
-var (
 	ErrLoginWithFailedWay = errors.New("暂不支持这种登录方式")
 	ErrAccountOrPassword  = errors.New("账号或密码错误")
 	ErrEmail              = errors.New("邮箱错误")
