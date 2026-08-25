@@ -330,7 +330,7 @@ response.Response(c, resp, err)
 
 ## AI 模块开发规范
 
-- **文档参考**：AI 系统详细设计参考 `docs/ai-system-srs.md`。
+- **文档参考**：AI 系统主要链路参考 `internal/ai/doc/README.md`。
 - **接口位置**：AI 相关接口统一放在 `/api/ai/` 路由组下。
 - **鉴权**：所有 AI 接口强制鉴权，`UserID` 从 Token 获取，`SessionID` 由前端生成并传递。
 - **配置**：AI 模型密钥（API Key）必须从 `config` 读取，禁止硬编码。
