@@ -668,7 +668,11 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 	if existingPID != "" {
 		if existingPID == ub.UserID {
 			resp.PartnerID = ub.UserID
-			profile, _ := ul.userRepo.GetMyProfile(ctx, ub.UserID)
+			profile, err := ul.userRepo.GetMyProfile(ctx, ub.UserID)
+			if err != nil {
+				ul.log.Error(err)
+				return resp, ErrDefault
+			}
 			resp.PartnerUsername = profile.Username
 			resp.PartnerAvatar = profile.Avatar
 			return resp, nil
@@ -691,7 +695,11 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 		return resp, ErrDefault
 	}
 	resp.PartnerID = ub.UserID
-	profile, _ := ul.userRepo.GetMyProfile(ctx, ub.UserID)
+	profile, err := ul.userRepo.GetMyProfile(ctx, ub.UserID)
+	if err != nil {
+		ul.log.Error(err)
+		return resp, ErrDefault
+	}
 	resp.PartnerUsername = profile.Username
 	resp.PartnerAvatar = profile.Avatar
 	return resp, nil

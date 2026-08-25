@@ -125,6 +125,26 @@ func TestBindPartnerRejectsDifferentExistingPartner(t *testing.T) {
 	}
 }
 
+func TestBindPartnerMapsPartnerProfileError(t *testing.T) {
+	userID := "11111111-1111-1111-1111-111111111111"
+	partnerID := "22222222-2222-2222-2222-222222222222"
+	repo := &userRepoFake{
+		loginWithAccountRow: userrepo.UserBaseRow{UserID: partnerID, Gender: "female"},
+		getUserByIDRow:      userrepo.UserBaseRow{UserID: userID, Gender: "male"},
+		profileErr:          userrepo.ErrDefault,
+	}
+	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, &babySyncerFake{}, nil)
+
+	_, err := l.BindPartner(context.Background(), userID, userdto.PartnerBindReq{
+		Account:  "partner",
+		Password: "Aa123456",
+	})
+
+	if !errors.Is(err, userlogic.ErrDefault) {
+		t.Fatalf("BindPartner() error = %v, want %v", err, userlogic.ErrDefault)
+	}
+}
+
 func TestUpdateProfileMapsUpdateFailure(t *testing.T) {
 	repo := &userRepoFake{updateAdditionErr: userrepo.ErrUserUpdateFailed}
 	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, nil, nil)
