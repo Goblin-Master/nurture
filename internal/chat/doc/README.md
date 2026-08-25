@@ -17,9 +17,9 @@ sequenceDiagram
   participant Outbox as chat.worker.OutboxWorker
   participant MQ as RabbitMQ
 
-  Router->>Module: NewModule(DB, RDB, RMQ, Log, middleware)
+  Router->>Module: NewModule(DB, RDB, RMQ, Log, middleware, Context?)
   Module->>Hub: NewHub()
-  Module->>Hub: Run()
+  Module->>Hub: Run(module ctx)
   Module->>Repo: NewChatRepo(DB, RDB, Log)
   Module->>Logic: NewChatLogic(repo, limiter)
   Module->>Handler: NewChatHandler(logic, hub)
@@ -29,6 +29,10 @@ sequenceDiagram
   Outbox->>MQ: DeclareTopicExchange(chat.event)
   Router->>Module: RegisterRoutes(api.Group('/chat'), ws)
   Module-->>Router: register HTTP and WS routes
+  Router->>Module: Close()
+  Module->>Hub: cancel module ctx
+  Module->>Consumer: stop consume loop
+  Module->>Outbox: stop outbox loop
 ```
 
 ## 私聊发送链路

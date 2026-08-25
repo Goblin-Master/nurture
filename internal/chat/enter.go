@@ -26,15 +26,23 @@ type Deps struct {
 	Log           *zap.SugaredLogger
 	AuthUser      gin.HandlerFunc
 	RateLimitUser RateLimitUserFunc
+	Context       context.Context
 }
 
 type Module struct {
 	handler       *handler.ChatHandler
 	authUser      gin.HandlerFunc
 	rateLimitUser RateLimitUserFunc
+	cancel        context.CancelFunc
+	done          <-chan struct{}
 }
 
 func NewModule(deps Deps) *Module {
+	ctx := deps.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(ctx)
 	authUser := deps.AuthUser
 	if authUser == nil {
 		authUser = noopMiddleware
@@ -44,13 +52,13 @@ func NewModule(deps Deps) *Module {
 		rateLimitUser = noopRateLimit
 	}
 	hub := session.NewHub()
-	go hub.Run()
+	go hub.Run(ctx)
 	chatRepo := repo.NewChatRepo(deps.DB, deps.RDB, deps.Log)
 	if deps.RabbitMQ != nil {
-		worker.NewWorker(deps.RabbitMQ, hub, deps.Log).Start(context.Background())
+		worker.NewWorker(deps.RabbitMQ, hub, deps.Log).Start(ctx)
 	}
 	if deps.DB != nil && deps.RabbitMQ != nil {
-		worker.NewOutboxWorker(chatRepo, deps.RabbitMQ, deps.Log).Start(context.Background())
+		worker.NewOutboxWorker(chatRepo, deps.RabbitMQ, deps.Log).Start(ctx)
 	}
 	chatLogic := logic.NewChatLogic(chatRepo, ratelimitx.NewLimiter(deps.RDB))
 
@@ -58,7 +66,23 @@ func NewModule(deps Deps) *Module {
 		handler:       handler.NewChatHandler(chatLogic, hub),
 		authUser:      authUser,
 		rateLimitUser: rateLimitUser,
+		cancel:        cancel,
+		done:          hub.Done(),
 	}
+}
+
+func (m *Module) Close() {
+	if m == nil || m.cancel == nil {
+		return
+	}
+	m.cancel()
+}
+
+func (m *Module) Done() <-chan struct{} {
+	if m == nil {
+		return nil
+	}
+	return m.done
 }
 
 func noopMiddleware(c *gin.Context) {

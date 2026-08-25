@@ -1,5 +1,10 @@
 package session
 
+import (
+	"context"
+	"sync"
+)
+
 type subscription struct {
 	client *Client
 	roomID string
@@ -28,6 +33,8 @@ type Hub struct {
 	unsubscribe chan subscription
 	sendUser    chan userMessage
 	broadcast   chan roomMessage
+	done        chan struct{}
+	stopOnce    sync.Once
 }
 
 func NewHub() *Hub {
@@ -40,12 +47,24 @@ func NewHub() *Hub {
 		unsubscribe: make(chan subscription),
 		sendUser:    make(chan userMessage),
 		broadcast:   make(chan roomMessage),
+		done:        make(chan struct{}),
 	}
 }
 
-func (h *Hub) Run() {
+func (h *Hub) Run(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	defer func() {
+		h.stopOnce.Do(func() {
+			h.closeAllClients()
+			close(h.done)
+		})
+	}()
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case client := <-h.register:
 			h.addClient(client)
 		case client := <-h.unregister:
@@ -62,36 +81,64 @@ func (h *Hub) Run() {
 	}
 }
 
+func (h *Hub) Done() <-chan struct{} {
+	return h.done
+}
+
 func (h *Hub) Register(client *Client) {
-	h.register <- client
+	select {
+	case h.register <- client:
+	case <-h.done:
+	}
 }
 
 func (h *Hub) Unregister(client *Client) {
-	h.unregister <- client
+	select {
+	case h.unregister <- client:
+	case <-h.done:
+	}
 }
 
 func (h *Hub) Subscribe(client *Client, roomID string) {
-	h.subscribe <- subscription{client: client, roomID: roomID}
+	select {
+	case h.subscribe <- subscription{client: client, roomID: roomID}:
+	case <-h.done:
+	}
 }
 
 func (h *Hub) Unsubscribe(client *Client, roomID string) {
-	h.unsubscribe <- subscription{client: client, roomID: roomID}
+	select {
+	case h.unsubscribe <- subscription{client: client, roomID: roomID}:
+	case <-h.done:
+	}
 }
 
 func (h *Hub) SendToUser(channel, userID string, data []byte) {
-	h.sendUser <- userMessage{channel: channel, userID: userID, data: data}
+	select {
+	case h.sendUser <- userMessage{channel: channel, userID: userID, data: data}:
+	case <-h.done:
+	}
 }
 
 func (h *Hub) DeliverToUser(channel, userID, eventID string, data []byte) {
-	h.sendUser <- userMessage{channel: channel, userID: userID, eventID: eventID, data: data}
+	select {
+	case h.sendUser <- userMessage{channel: channel, userID: userID, eventID: eventID, data: data}:
+	case <-h.done:
+	}
 }
 
 func (h *Hub) Broadcast(roomID string, data []byte) {
-	h.broadcast <- roomMessage{roomID: roomID, data: data}
+	select {
+	case h.broadcast <- roomMessage{roomID: roomID, data: data}:
+	case <-h.done:
+	}
 }
 
 func (h *Hub) DeliverToRoom(roomID, eventID string, data []byte) {
-	h.broadcast <- roomMessage{roomID: roomID, eventID: eventID, data: data}
+	select {
+	case h.broadcast <- roomMessage{roomID: roomID, eventID: eventID, data: data}:
+	case <-h.done:
+	}
 }
 
 func (h *Hub) addClient(client *Client) {
@@ -188,4 +235,19 @@ func (h *Hub) send(client *Client, eventID string, data []byte) {
 			_ = client.Conn.Close()
 		}
 	}
+}
+
+func (h *Hub) closeAllClients() {
+	for _, byChannel := range h.clients {
+		for _, byUser := range byChannel {
+			for client := range byUser {
+				close(client.Send)
+				if client.Conn != nil {
+					_ = client.Conn.Close()
+				}
+			}
+		}
+	}
+	h.clients = make(map[string]map[string]map[*Client]struct{})
+	h.rooms = make(map[string]map[*Client]struct{})
 }

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"nurture/internal/chat/constant"
 	"nurture/internal/chat/session"
 	"testing"
@@ -9,7 +10,7 @@ import (
 
 func TestSessionHubSendToUserByChannel(t *testing.T) {
 	hub := session.NewHub()
-	go hub.Run()
+	go hub.Run(t.Context())
 
 	directClient := session.NewClient(hub, nil, "user-1", constant.ChannelDirect)
 	groupClient := session.NewClient(hub, nil, "user-1", constant.ChannelGroup)
@@ -27,7 +28,7 @@ func TestSessionHubSendToUserByChannel(t *testing.T) {
 
 func TestSessionHubBroadcastToSubscribedRoom(t *testing.T) {
 	hub := session.NewHub()
-	go hub.Run()
+	go hub.Run(t.Context())
 
 	subscriber := session.NewClient(hub, nil, "user-1", constant.ChannelGroup)
 	outsider := session.NewClient(hub, nil, "user-2", constant.ChannelGroup)
@@ -46,7 +47,7 @@ func TestSessionHubBroadcastToSubscribedRoom(t *testing.T) {
 
 func TestSessionHubSkipsDuplicateDeliveryEvent(t *testing.T) {
 	hub := session.NewHub()
-	go hub.Run()
+	go hub.Run(t.Context())
 
 	client := session.NewClient(hub, nil, "user-1", constant.ChannelDirect)
 	hub.Register(client)
@@ -59,6 +60,47 @@ func TestSessionHubSkipsDuplicateDeliveryEvent(t *testing.T) {
 		t.Fatalf("got %q, want message-1", got)
 	}
 	assertNoSessionMessage(t, client.Send)
+}
+
+func TestSessionHubStopsWhenContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	hub := session.NewHub()
+	go hub.Run(ctx)
+
+	cancel()
+
+	select {
+	case <-hub.Done():
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for hub shutdown")
+	}
+}
+
+func TestSessionHubCallsDoNotBlockAfterStop(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	hub := session.NewHub()
+	go hub.Run(ctx)
+	cancel()
+
+	select {
+	case <-hub.Done():
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for hub shutdown")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		client := session.NewClient(hub, nil, "user-1", constant.ChannelDirect)
+		hub.Register(client)
+		hub.SendToUser(constant.ChannelDirect, "user-1", []byte("message"))
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("hub calls blocked after shutdown")
+	}
 }
 
 func readSessionMessage(t *testing.T, ch <-chan []byte) []byte {
