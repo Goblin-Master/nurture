@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"nurture/internal/config"
@@ -22,6 +23,10 @@ var (
 	ErrSMSConfigMissing = errors.New("短信配置缺失")
 	ErrSMSSendFailed    = errors.New("短信发送失败")
 )
+
+const codeLength = 6
+
+var codeRandReader = rand.Reader
 
 //go:embed scripts/verify.lua
 var verifyScript string
@@ -122,11 +127,14 @@ func (sx *SmsX) VerifyCode(ctx context.Context, key, code string) (bool, error) 
 	return false, nil
 }
 
-func GenCode() string {
-	b := make([]byte, 6)
-	rand.Read(b)
+func GenCode() (string, error) {
+	b := make([]byte, codeLength)
 	for i := range b {
-		b[i] = b[i]%10 + '0'
+		n, err := rand.Int(codeRandReader, big.NewInt(10))
+		if err != nil {
+			return "", err
+		}
+		b[i] = byte(n.Int64()) + '0'
 	}
-	return string(b)
+	return string(b), nil
 }

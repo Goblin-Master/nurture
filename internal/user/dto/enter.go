@@ -18,7 +18,7 @@ type (
 		Email string `json:"email"`
 	}
 	GetCodeResp struct {
-		Code string `json:"code"`
+		Message string `json:"message"`
 	}
 	GetSMSCodeReq struct {
 		Phone string `json:"phone"`

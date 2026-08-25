@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	userconstant "nurture/internal/user/constant"
@@ -46,8 +47,15 @@ func TestGetRegisterCodeUsesUserCodeKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRegisterCode() error = %v", err)
 	}
-	if len(resp.Code) != 6 {
-		t.Fatalf("GetRegisterCode() code length = %d, want 6", len(resp.Code))
+	if resp.Message != "OK" {
+		t.Fatalf("GetRegisterCode() message = %q, want OK", resp.Message)
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("Marshal response failed: %v", err)
+	}
+	if strings.Contains(string(data), "code") {
+		t.Fatalf("GetRegisterCode() response exposes code: %s", data)
 	}
 	wantKey := fmt.Sprintf(userconstant.RegisterCodeKey, req.Email)
 	if email.sendKey != wantKey {
@@ -56,7 +64,7 @@ func TestGetRegisterCodeUsesUserCodeKey(t *testing.T) {
 	if email.sendTitle != "注册账号" {
 		t.Fatalf("SendCode() title = %q, want 注册账号", email.sendTitle)
 	}
-	if email.sendCode != resp.Code || !strings.Contains(email.sendText, resp.Code) {
+	if len(email.sendCode) != 6 || !strings.Contains(email.sendText, email.sendCode) {
 		t.Fatalf("SendCode() did not receive generated code")
 	}
 }

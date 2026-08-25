@@ -237,8 +237,12 @@ func (ul *UserLogic) ResetPassword(ctx context.Context, req dto.ResetPasswordReq
 
 func (ul *UserLogic) GetLoginCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
-	c := emailx.GenCode()
-	err := ul.email.SendCode(
+	c, err := emailx.GenCode()
+	if err != nil {
+		ul.log.Error(err)
+		return resp, ErrCodeGet
+	}
+	err = ul.email.SendCode(
 		ctx,
 		req.Email,
 		"邮箱登录",
@@ -250,14 +254,18 @@ func (ul *UserLogic) GetLoginCode(ctx context.Context, req dto.GetCodeReq) (dto.
 		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
-	resp.Code = c
+	resp.Message = "OK"
 	return resp, nil
 }
 
 func (ul *UserLogic) GetRegisterCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
-	c := emailx.GenCode()
-	err := ul.email.SendCode(
+	c, err := emailx.GenCode()
+	if err != nil {
+		ul.log.Error(err)
+		return resp, ErrCodeGet
+	}
+	err = ul.email.SendCode(
 		ctx,
 		req.Email,
 		"注册账号",
@@ -269,7 +277,7 @@ func (ul *UserLogic) GetRegisterCode(ctx context.Context, req dto.GetCodeReq) (d
 		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
-	resp.Code = c
+	resp.Message = "OK"
 	return resp, nil
 }
 
@@ -279,20 +287,28 @@ func (ul *UserLogic) GetRegisterSMSCode(ctx context.Context, req dto.GetSMSCodeR
 	if !isValidPhone(phone) {
 		return resp, ErrInvalidPhone
 	}
-	c := smsx.GenCode()
-	err := ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.RegisterSMSCodeKey, phone), phone, c)
+	c, err := smsx.GenCode()
 	if err != nil {
 		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
-	resp.Code = c
+	err = ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.RegisterSMSCodeKey, phone), phone, c)
+	if err != nil {
+		ul.log.Error(err)
+		return resp, ErrCodeGet
+	}
+	resp.Message = "OK"
 	return resp, nil
 }
 
 func (ul *UserLogic) GetResetCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
-	c := emailx.GenCode()
-	err := ul.email.SendCode(
+	c, err := emailx.GenCode()
+	if err != nil {
+		ul.log.Error(err)
+		return resp, ErrCodeGet
+	}
+	err = ul.email.SendCode(
 		ctx,
 		req.Email,
 		"重置密码",
@@ -304,7 +320,7 @@ func (ul *UserLogic) GetResetCode(ctx context.Context, req dto.GetCodeReq) (dto.
 		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
-	resp.Code = c
+	resp.Message = "OK"
 	return resp, nil
 }
 
@@ -372,13 +388,17 @@ func (ul *UserLogic) GetBindPhoneCode(ctx context.Context, userID string, req dt
 	if used {
 		return resp, ErrPhoneIsUsed
 	}
-	c := smsx.GenCode()
+	c, err := smsx.GenCode()
+	if err != nil {
+		ul.log.Error(err)
+		return resp, ErrCodeGet
+	}
 	err = ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.BindPhoneCodeKey, phone), phone, c)
 	if err != nil {
 		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
-	resp.Code = c
+	resp.Message = "OK"
 	return resp, nil
 }
 
@@ -421,8 +441,12 @@ func (ul *UserLogic) BindPhone(ctx context.Context, userID string, req dto.BindP
 
 func (ul *UserLogic) GetBindEmailCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
-	c := emailx.GenCode()
-	err := ul.email.SendCode(
+	c, err := emailx.GenCode()
+	if err != nil {
+		ul.log.Error(err)
+		return resp, ErrCodeGet
+	}
+	err = ul.email.SendCode(
 		ctx,
 		req.Email,
 		"绑定邮箱",
@@ -434,7 +458,7 @@ func (ul *UserLogic) GetBindEmailCode(ctx context.Context, req dto.GetCodeReq) (
 		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
-	resp.Code = c
+	resp.Message = "OK"
 	return resp, nil
 }
 
@@ -477,13 +501,17 @@ func (ul *UserLogic) GetRebindPhoneCode(ctx context.Context, userID string, req 
 	if used {
 		return resp, ErrPhoneIsUsed
 	}
-	c := smsx.GenCode()
+	c, err := smsx.GenCode()
+	if err != nil {
+		ul.log.Error(err)
+		return resp, ErrCodeGet
+	}
 	err = ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.RebindPhoneCodeKey, phone), phone, c)
 	if err != nil {
 		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
-	resp.Code = c
+	resp.Message = "OK"
 	return resp, nil
 }
 
@@ -526,8 +554,12 @@ func (ul *UserLogic) RebindPhone(ctx context.Context, userID string, req dto.Bin
 
 func (ul *UserLogic) GetRebindEmailCode(ctx context.Context, userID string, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
-	c := emailx.GenCode()
-	err := ul.email.SendCode(
+	c, err := emailx.GenCode()
+	if err != nil {
+		ul.log.Error(err)
+		return resp, ErrCodeGet
+	}
+	err = ul.email.SendCode(
 		ctx,
 		req.Email,
 		"换绑邮箱",
@@ -539,7 +571,7 @@ func (ul *UserLogic) GetRebindEmailCode(ctx context.Context, userID string, req 
 		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
-	resp.Code = c
+	resp.Message = "OK"
 	return resp, nil
 }
 

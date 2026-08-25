@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/smtp"
 	"nurture/internal/config"
 	"nurture/internal/global"
@@ -21,6 +22,10 @@ var (
 	ErrEmailStore    = errors.New("邮件验证码保存失败")
 	ErrSendOverTime  = errors.New("邮件发送超时")
 )
+
+const codeLength = 6
+
+var codeRandReader = rand.Reader
 
 //go:embed scripts/verify.lua
 var verifyScript string
@@ -111,6 +116,9 @@ func (ex *EmailX) sendEmail(ctx context.Context, to, subject, text string) error
 }
 
 func (ex *EmailX) VerifyCode(ctx context.Context, key, code string) (bool, error) {
+	if ex.rdb == nil {
+		return false, nil
+	}
 	res, err := ex.rdb.Eval(ctx, verifyScript, []string{key}, code).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
@@ -124,11 +132,14 @@ func (ex *EmailX) VerifyCode(ctx context.Context, key, code string) (bool, error
 	return false, nil
 }
 
-func GenCode() string {
-	b := make([]byte, 6)
-	rand.Read(b)
+func GenCode() (string, error) {
+	b := make([]byte, codeLength)
 	for i := range b {
-		b[i] = b[i]%10 + '0'
+		n, err := rand.Int(codeRandReader, big.NewInt(10))
+		if err != nil {
+			return "", err
+		}
+		b[i] = byte(n.Int64()) + '0'
 	}
-	return string(b)
+	return string(b), nil
 }
