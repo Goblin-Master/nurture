@@ -3,7 +3,7 @@
 //   sqlc v1.30.0
 // source: baby.sql
 
-package baby
+package dao
 
 import (
 	"context"

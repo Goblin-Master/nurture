@@ -3,15 +3,19 @@ package logic
 import (
 	"context"
 	"errors"
-	"nurture/internal/constant"
-	"nurture/internal/dto"
-	"nurture/internal/global"
-	"nurture/internal/repo"
+	babyconstant "nurture/internal/baby/constant"
+	"nurture/internal/baby/dto"
+	"nurture/internal/baby/repo"
 	"sort"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
+
+type PartnerReader interface {
+	GetPartnerByUserID(ctx context.Context, userID string) (string, error)
+}
 
 type IBabyLogic interface {
 	ChangeBaby(ctx context.Context, userID string, req dto.ChangeBabyReq) (dto.ChangeBabyResp, error)
@@ -41,21 +45,30 @@ type IBabyLogic interface {
 	CreateDiaper(ctx context.Context, userID string, uri dto.DiaperCreateUri, req dto.DiaperCreateReq) (dto.DiaperCreateResp, error)
 	UpdateDiaper(ctx context.Context, userID string, uri dto.DiaperUpdateUri, req dto.DiaperUpdateReq) (dto.DiaperUpdateResp, error)
 	GetDiaperAt(ctx context.Context, userID string, uri dto.DiaperGetAtUri, req dto.DiaperGetAtReq) (dto.DiaperRecordResp, error)
+	ListDiaperAt(ctx context.Context, userID string, uri dto.DiaperListAtUri, req dto.DiaperListAtReq) (dto.DiaperListAtResp, error)
 }
 
 type BabyLogic struct {
-	babyRepo *repo.BabyRepo
-	userRepo *repo.UserRepo
+	babyRepo      repo.IBabyRepo
+	partnerReader PartnerReader
+	log           *zap.SugaredLogger
 }
 
-func NewBabyLogic() *BabyLogic {
+func NewBabyLogic(babyRepo repo.IBabyRepo, partnerReader PartnerReader, log *zap.SugaredLogger) *BabyLogic {
 	return &BabyLogic{
-		babyRepo: repo.NewBabyRepo(),
-		userRepo: repo.NewUserRepo(),
+		babyRepo:      babyRepo,
+		partnerReader: partnerReader,
+		log:           log,
 	}
 }
 
 var _ IBabyLogic = (*BabyLogic)(nil)
+
+func (l *BabyLogic) logError(err error) {
+	if l.log != nil {
+		l.log.Error(err)
+	}
+}
 
 func (l *BabyLogic) SleepStart(ctx context.Context, userID string, uri dto.SleepStartUri) (dto.SleepStartResp, error) {
 	_, err := l.babyRepo.GetBabyByIDAndUser(ctx, uri.BabyID, userID)
@@ -63,12 +76,12 @@ func (l *BabyLogic) SleepStart(ctx context.Context, userID string, uri dto.Sleep
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.SleepStartResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.SleepStartResp{}, ErrDefault
 	}
 	sessionID, startedAt, e := l.babyRepo.StartSleep(ctx, uri.BabyID, userID)
 	if e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.SleepStartResp{}, ErrDefault
 	}
 	return dto.SleepStartResp{
@@ -83,12 +96,12 @@ func (l *BabyLogic) SleepStop(ctx context.Context, userID string, uri dto.SleepS
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.SleepStopResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.SleepStopResp{}, ErrDefault
 	}
 	sid, start, end, dur, e := l.babyRepo.StopSleep(ctx, req.SessionID)
 	if e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.SleepStopResp{}, ErrDefault
 	}
 	return dto.SleepStopResp{
@@ -105,12 +118,12 @@ func (l *BabyLogic) SleepActive(ctx context.Context, userID string, uri dto.Slee
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.SleepActiveResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.SleepActiveResp{}, ErrDefault
 	}
 	sid, startedAt, e := l.babyRepo.GetActiveSleep(ctx, uri.BabyID, userID)
 	if e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.SleepActiveResp{}, ErrDefault
 	}
 	if sid == "" {
@@ -128,7 +141,7 @@ func (l *BabyLogic) ListSleepAt(ctx context.Context, userID string, uri dto.Slee
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.SleepListAtResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.SleepListAtResp{}, ErrDefault
 	}
 	if req.Date == "" {
@@ -142,7 +155,7 @@ func (l *BabyLogic) ListSleepAt(ctx context.Context, userID string, uri dto.Slee
 	to := t.Add(24 * time.Hour).Add(-time.Millisecond).UnixMilli()
 	rows, e := l.babyRepo.ListSleepBetween(ctx, uri.BabyID, from, to)
 	if e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.SleepListAtResp{}, ErrDefault
 	}
 	var items []dto.SleepItem
@@ -163,10 +176,10 @@ func (l *BabyLogic) CreateFeeding(ctx context.Context, userID string, uri dto.Fe
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.FeedingCreateResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.FeedingCreateResp{}, ErrDefault
 	}
-	if req.FeedType != constant.FEED_BREAST_MILK && req.FeedType != constant.FEED_FORMULA && req.FeedType != constant.FEED_SOLID {
+	if req.FeedType != babyconstant.FeedBreastMilk && req.FeedType != babyconstant.FeedFormula && req.FeedType != babyconstant.FeedSolid {
 		return dto.FeedingCreateResp{}, ErrParamsType
 	}
 	if req.FeedTime <= 0 {
@@ -175,7 +188,7 @@ func (l *BabyLogic) CreateFeeding(ctx context.Context, userID string, uri dto.Fe
 	now := time.Now().UnixMilli()
 	id, e := l.babyRepo.CreateFeeding(ctx, uri.BabyID, userID, req.FeedTime, req.FeedType, req.Remark, now)
 	if e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.FeedingCreateResp{}, ErrDefault
 	}
 	return dto.FeedingCreateResp{
@@ -190,10 +203,10 @@ func (l *BabyLogic) UpdateFeeding(ctx context.Context, userID string, uri dto.Fe
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.FeedingUpdateResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.FeedingUpdateResp{}, ErrDefault
 	}
-	if req.FeedType != constant.FEED_BREAST_MILK && req.FeedType != constant.FEED_FORMULA && req.FeedType != constant.FEED_SOLID {
+	if req.FeedType != babyconstant.FeedBreastMilk && req.FeedType != babyconstant.FeedFormula && req.FeedType != babyconstant.FeedSolid {
 		return dto.FeedingUpdateResp{}, ErrParamsType
 	}
 	if req.FeedTime <= 0 {
@@ -201,7 +214,7 @@ func (l *BabyLogic) UpdateFeeding(ctx context.Context, userID string, uri dto.Fe
 	}
 	now := time.Now().UnixMilli()
 	if e := l.babyRepo.UpdateFeeding(ctx, uri.BabyID, uri.FeedingID, req.FeedType, req.FeedTime, req.Remark, now); e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.FeedingUpdateResp{}, ErrDefault
 	}
 	return dto.FeedingUpdateResp{
@@ -215,7 +228,7 @@ func (l *BabyLogic) ListFeedingAt(ctx context.Context, userID string, uri dto.Fe
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.FeedingListAtResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.FeedingListAtResp{}, ErrDefault
 	}
 	if req.Date == "" {
@@ -229,7 +242,7 @@ func (l *BabyLogic) ListFeedingAt(ctx context.Context, userID string, uri dto.Fe
 	to := t.Add(24 * time.Hour).Add(-time.Millisecond).UnixMilli()
 	rows, e := l.babyRepo.ListFeedingBetween(ctx, uri.BabyID, from, to)
 	if e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.FeedingListAtResp{}, ErrDefault
 	}
 	var items []dto.FeedingItem
@@ -250,7 +263,7 @@ func (l *BabyLogic) CreateDiaper(ctx context.Context, userID string, uri dto.Dia
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.DiaperCreateResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.DiaperCreateResp{}, ErrDefault
 	}
 	if req.ChangeTime <= 0 {
@@ -262,7 +275,7 @@ func (l *BabyLogic) CreateDiaper(ctx context.Context, userID string, uri dto.Dia
 	now := time.Now().UnixMilli()
 	id, err := l.babyRepo.CreateDiaper(ctx, uri.BabyID, userID, req.ChangeTime, req.DiaperType, req.PeeColor, req.PoopColor, req.PoopConsistency, req.Remark, now)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.DiaperCreateResp{}, ErrDefault
 	}
 	return dto.DiaperCreateResp{DiaperID: id, Message: "创建成功"}, nil
@@ -274,7 +287,7 @@ func (l *BabyLogic) UpdateDiaper(ctx context.Context, userID string, uri dto.Dia
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.DiaperUpdateResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.DiaperUpdateResp{}, ErrDefault
 	}
 	if req.ChangeTime <= 0 {
@@ -285,7 +298,7 @@ func (l *BabyLogic) UpdateDiaper(ctx context.Context, userID string, uri dto.Dia
 	}
 	now := time.Now().UnixMilli()
 	if err := l.babyRepo.UpdateDiaper(ctx, uri.BabyID, uri.DiaperID, req.DiaperType, req.ChangeTime, req.PeeColor, req.PoopColor, req.PoopConsistency, req.Remark, now); err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.DiaperUpdateResp{}, ErrDefault
 	}
 	return dto.DiaperUpdateResp{Message: "更新成功"}, nil
@@ -297,7 +310,7 @@ func (l *BabyLogic) GetDiaperAt(ctx context.Context, userID string, uri dto.Diap
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.DiaperRecordResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.DiaperRecordResp{}, ErrDefault
 	}
 	if req.Date == "" {
@@ -311,7 +324,7 @@ func (l *BabyLogic) GetDiaperAt(ctx context.Context, userID string, uri dto.Diap
 	to := t.Add(24 * time.Hour).Add(-time.Millisecond).UnixMilli()
 	row, ok, e := l.babyRepo.GetDiaperBetween(ctx, uri.BabyID, from, to)
 	if e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.DiaperRecordResp{}, ErrDefault
 	}
 	if !ok {
@@ -334,7 +347,7 @@ func (l *BabyLogic) ListDiaperAt(ctx context.Context, userID string, uri dto.Dia
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.DiaperListAtResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.DiaperListAtResp{}, ErrDefault
 	}
 	if req.Date == "" {
@@ -348,7 +361,7 @@ func (l *BabyLogic) ListDiaperAt(ctx context.Context, userID string, uri dto.Dia
 	to := t.Add(24 * time.Hour).Add(-time.Millisecond).UnixMilli()
 	rows, e := l.babyRepo.ListDiaperBetween(ctx, uri.BabyID, from, to)
 	if e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.DiaperListAtResp{}, ErrDefault
 	}
 	var items []dto.DiaperItem
@@ -372,7 +385,7 @@ func (l *BabyLogic) DailyStats(ctx context.Context, userID string, uri dto.Daily
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return dto.DailyStatsResp{}, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return dto.DailyStatsResp{}, ErrDefault
 	}
 	if req.Date == "" {
@@ -386,22 +399,22 @@ func (l *BabyLogic) DailyStats(ctx context.Context, userID string, uri dto.Daily
 	to := t.Add(24 * time.Hour).Add(-time.Millisecond).UnixMilli()
 	s, e := l.babyRepo.GetDailyStats(ctx, uri.BabyID, from, to)
 	if e != nil {
-		global.Log.Error(e)
+		l.logError(e)
 		return dto.DailyStatsResp{}, ErrDefault
 	}
 	feedRows, fe := l.babyRepo.ListFeedingBetween(ctx, uri.BabyID, from, to)
 	if fe != nil {
-		global.Log.Error(fe)
+		l.logError(fe)
 		return dto.DailyStatsResp{}, ErrDefault
 	}
 	diaperRows, de := l.babyRepo.ListDiaperBetween(ctx, uri.BabyID, from, to)
 	if de != nil {
-		global.Log.Error(de)
+		l.logError(de)
 		return dto.DailyStatsResp{}, ErrDefault
 	}
 	sleepRows, se := l.babyRepo.ListSleepBetween(ctx, uri.BabyID, from, to)
 	if se != nil {
-		global.Log.Error(se)
+		l.logError(se)
 		return dto.DailyStatsResp{}, ErrDefault
 	}
 	items := make([]dto.DailyRecordItem, 0, len(feedRows)+len(diaperRows)+len(sleepRows))
@@ -594,7 +607,7 @@ func (l *BabyLogic) CreateGrowth(ctx context.Context, userID string, req dto.Cre
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	h := req.Height
@@ -602,7 +615,7 @@ func (l *BabyLogic) CreateGrowth(ctx context.Context, userID string, req dto.Cre
 	hc := req.HeadCircumference
 	gr, e := l.babyRepo.GetLatestGrowthByBabyID(ctx, req.BabyID)
 	if e != nil && !errors.Is(e, repo.ErrBabyGrowthNotExist) {
-		global.Log.Error(e)
+		l.logError(e)
 		return resp, ErrDefault
 	}
 	if e == nil {
@@ -619,7 +632,7 @@ func (l *BabyLogic) CreateGrowth(ctx context.Context, userID string, req dto.Cre
 		grDay := time.UnixMilli(gr.RecordTime).UTC().Truncate(24 * time.Hour).UnixMilli()
 		if rtDay == grDay {
 			if err := l.babyRepo.UpdateGrowthByRecordID(ctx, gr.RecordID.String(), req.RecordTime, h, w, hc, req.Remark, userID); err != nil {
-				global.Log.Error(err)
+				l.logError(err)
 				return resp, ErrDefault
 			}
 			resp.RecordID = gr.RecordID.String()
@@ -629,7 +642,7 @@ func (l *BabyLogic) CreateGrowth(ctx context.Context, userID string, req dto.Cre
 	}
 	rid, err := l.babyRepo.CreateGrowthRecord(ctx, req.BabyID, userID, req.RecordTime, h, w, hc, req.Remark)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.RecordID = rid
@@ -641,15 +654,19 @@ func (l *BabyLogic) NewBaby(ctx context.Context, userID string, req dto.NewBabyR
 	var resp dto.NewBabyResp
 	babyID := uuid.NewString()
 	now := time.Now().UnixMilli()
-	partnerID, err := l.userRepo.GetPartnerByUserID(ctx, userID)
-	if err != nil {
-		global.Log.Error(err)
-		return resp, ErrDefault
+	var partnerID string
+	if l.partnerReader != nil {
+		var err error
+		partnerID, err = l.partnerReader.GetPartnerByUserID(ctx, userID)
+		if err != nil {
+			l.logError(err)
+			return resp, ErrDefault
+		}
 	}
-	err = l.babyRepo.CreateBabyWithInit(ctx, userID, partnerID, babyID, req.Name, req.Gender, req.Birthday, req.Avatar,
+	err := l.babyRepo.CreateBabyWithInit(ctx, userID, partnerID, babyID, req.Name, req.Gender, req.Birthday, req.Avatar,
 		now, req.Height, req.Weight, req.HeadCircumference, req.Remark)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.BabyID = babyID
@@ -664,12 +681,12 @@ func (l *BabyLogic) GetProfile(ctx context.Context, userID string, req dto.BabyP
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	gr, err := l.babyRepo.GetLatestGrowthByBabyID(ctx, req.BabyID)
 	if err != nil && !errors.Is(err, repo.ErrBabyGrowthNotExist) {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.BabyID = b.BabyID.String()
@@ -699,7 +716,7 @@ func (l *BabyLogic) GetGrowthAt(ctx context.Context, userID string, req dto.Grow
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	dayStart := time.UnixMilli(req.Time).UTC().Truncate(24 * time.Hour)
@@ -710,7 +727,7 @@ func (l *BabyLogic) GetGrowthAt(ctx context.Context, userID string, req dto.Grow
 		if errors.Is(e, repo.ErrBabyGrowthNotExist) {
 			return resp, nil
 		}
-		global.Log.Error(e)
+		l.logError(e)
 		return resp, ErrDefault
 	}
 	resp.RecordID = gr.RecordID.String()
@@ -750,7 +767,7 @@ func (l *BabyLogic) GrowthCurve(ctx context.Context, userID string, req dto.Grow
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	now := time.Now().UnixMilli()
@@ -778,7 +795,7 @@ func (l *BabyLogic) GrowthCurve(ctx context.Context, userID string, req dto.Grow
 		return resp, ErrParamsType
 	}
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	if req.GroupBy == "month" && len(rows) > 0 {
@@ -838,12 +855,12 @@ func (l *BabyLogic) GetVaccineList(ctx context.Context, userID string, req dto.G
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	rows, err := l.babyRepo.ListVaccineRecordsByBaby(ctx, req.BabyID)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	items := make([]dto.VaccineItem, 0, len(rows))
@@ -885,7 +902,7 @@ func (l *BabyLogic) AdminCreateVaccine(ctx context.Context, req dto.AdminCreateV
 	}
 	vid, created, err := l.babyRepo.AdminCreateVaccine(ctx, vaccineID, req.Name, req.Disease, req.Link, doses)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.VaccineID = vid
@@ -907,7 +924,7 @@ func (l *BabyLogic) ChangeVaccineStatus(ctx context.Context, userID string, req 
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	now := time.Now().UnixMilli()
@@ -917,7 +934,7 @@ func (l *BabyLogic) ChangeVaccineStatus(ctx context.Context, userID string, req 
 		_, err = l.babyRepo.UpdateVaccineStatusNotGiven(ctx, b.BabyID.String(), req.DoseID, now)
 	}
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "操作成功"
@@ -931,13 +948,13 @@ func (l *BabyLogic) UploadBabyPhotos(ctx context.Context, userID string, req dto
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	now := time.Now().UnixMilli()
 	rows, err := l.babyRepo.UploadPhotos(ctx, req.BabyID, req.Links, now)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	items := make([]dto.PhotoItem, 0, len(rows))
@@ -959,12 +976,12 @@ func (l *BabyLogic) DeleteBabyPhotos(ctx context.Context, userID string, req dto
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	n, err := l.babyRepo.DeletePhotos(ctx, req.BabyID, req.PhotoIDs)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Deleted = n
@@ -978,12 +995,12 @@ func (l *BabyLogic) ListBabyPhotos(ctx context.Context, userID string, req dto.L
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	rows, hasMore, err := l.babyRepo.ListPhotos(ctx, req.BabyID, req.Page, req.PageSize)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
 	items := make([]dto.PhotoItem, 0, len(rows))

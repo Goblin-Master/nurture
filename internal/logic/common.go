@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	babyrepo "nurture/internal/baby/repo"
 	"nurture/internal/config"
 	"nurture/internal/constant"
 	"nurture/internal/dto"
@@ -34,13 +35,13 @@ type ICommonLogic interface {
 
 type CommonLogic struct {
 	aiRepo   *repo.AIRepo
-	babyRepo *repo.BabyRepo
+	babyRepo *babyrepo.BabyRepo
 }
 
 func NewCommonLogic() *CommonLogic {
 	return &CommonLogic{
 		aiRepo:   repo.NewAIRepo(),
-		babyRepo: repo.NewBabyRepo(),
+		babyRepo: babyrepo.NewBabyRepo(global.DB, global.RDB, global.Log),
 	}
 }
 
@@ -147,7 +148,7 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 		}
 		b, err := l.babyRepo.GetBabyByIDAndUser(ctx, req.BabyID, userID)
 		if err != nil {
-			if errors.Is(err, repo.ErrBabyNotExist) {
+			if errors.Is(err, babyrepo.ErrBabyNotExist) {
 				return ErrBabyNotExist
 			}
 			global.Log.Error(err)
@@ -452,7 +453,7 @@ func (l *CommonLogic) GrowthReport(ctx context.Context, userID string, req dto.G
 
 	b, err := l.babyRepo.GetBabyByIDAndUser(ctx, req.BabyID, userID)
 	if err != nil {
-		if errors.Is(err, repo.ErrBabyNotExist) {
+		if errors.Is(err, babyrepo.ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
 		global.Log.Error(err)

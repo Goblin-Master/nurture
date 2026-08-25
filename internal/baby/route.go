@@ -1,16 +1,15 @@
-package router
+package baby
 
 import (
-	"nurture/internal/dto"
-	"nurture/internal/handler"
+	"nurture/internal/baby/dto"
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
 
 	"github.com/gin-gonic/gin"
 )
 
-func registerBabyRoutes(rg *gin.RouterGroup) {
-	babyHandler := handler.NewBabyHandler()
+func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
+	babyHandler := m.handler
 
 	rg.GET("/changeBaby",
 		middleware.Authentication(jwtx.COMMON_USER),
@@ -136,5 +135,13 @@ func registerBabyRoutes(rg *gin.RouterGroup) {
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindQueryMiddleware[dto.ListBabyPhotosReq],
 		babyHandler.ListBabyPhotos,
+	)
+}
+
+func (m *Module) RegisterAdminRoutes(rg *gin.RouterGroup) {
+	rg.POST("/vaccines",
+		middleware.Authentication(jwtx.ADMIN),
+		middleware.BindJsonMiddleware[dto.AdminCreateVaccineReq],
+		m.handler.AdminCreateVaccine,
 	)
 }

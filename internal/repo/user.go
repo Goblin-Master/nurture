@@ -3,10 +3,10 @@ package repo
 import (
 	"context"
 	"errors"
+	babydao "nurture/internal/baby/repo/dao"
 	"nurture/internal/constant"
 	"nurture/internal/global"
 	"nurture/internal/pkg/passwordx"
-	"nurture/internal/repo/baby"
 	"nurture/internal/repo/user"
 	"time"
 
@@ -424,7 +424,7 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 	}
 
 	// 2) 同步宝宝：A -> B
-	bq := baby.New(tx)
+	bq := babydao.New(tx)
 	aBabies, err := bq.ListBabiesByUserID(ctx, aUUID)
 	if err != nil {
 		global.Log.Error(err)
@@ -436,7 +436,7 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 		if err := babyID.Scan(row.BabyID); err != nil {
 			return err
 		}
-		full, err := bq.GetBabyByIDAndUser(ctx, baby.GetBabyByIDAndUserParams{
+		full, err := bq.GetBabyByIDAndUser(ctx, babydao.GetBabyByIDAndUserParams{
 			BabyID: babyID,
 			UserID: aUUID,
 		})
@@ -445,7 +445,7 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 			return ErrDefault
 		}
 		// 插入到 B（幂等：若已存在则忽略）
-		err = bq.CreateBaby(ctx, baby.CreateBabyParams{
+		err = bq.CreateBaby(ctx, babydao.CreateBabyParams{
 			BabyID:   full.BabyID,
 			UserID:   bUUID,
 			Name:     full.Name,
@@ -475,7 +475,7 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 		if err := babyID.Scan(row.BabyID); err != nil {
 			return err
 		}
-		full, err := bq.GetBabyByIDAndUser(ctx, baby.GetBabyByIDAndUserParams{
+		full, err := bq.GetBabyByIDAndUser(ctx, babydao.GetBabyByIDAndUserParams{
 			BabyID: babyID,
 			UserID: bUUID,
 		})
@@ -483,7 +483,7 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 			global.Log.Error(err)
 			return ErrDefault
 		}
-		err = bq.CreateBaby(ctx, baby.CreateBabyParams{
+		err = bq.CreateBaby(ctx, babydao.CreateBabyParams{
 			BabyID:   full.BabyID,
 			UserID:   aUUID,
 			Name:     full.Name,

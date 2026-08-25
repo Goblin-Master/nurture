@@ -19,11 +19,6 @@ var (
 	ErrPhoneIsUsed   = errors.New("手机号已经被使用")
 	ErrAccountOrPwd  = errors.New("账号或密码错误")
 
-	// Baby related errors restored
-	ErrBabyNotExist        = errors.New("宝宝不存在")
-	ErrBabyGrowthNotExist  = errors.New("宝宝成长记录不存在")
-	ErrBabyVaccineNotExist = errors.New("宝宝疫苗记录不存在")
-
 	// Post related errors
 	ErrPostNotExist      = errors.New("帖子不存在")
 	ErrInvalidPostStatus = errors.New("帖子状态非法")

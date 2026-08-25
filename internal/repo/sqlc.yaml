@@ -9,14 +9,6 @@ sql:
         out: "user"
         sql_package: "pgx/v5"
   - engine: "postgresql"
-    queries: "sql/baby.sql"
-    schema: "../../deploy/schema/baby.sql"
-    gen:
-      go:
-        package: "baby"
-        out: "baby"
-        sql_package: "pgx/v5"
-  - engine: "postgresql"
     queries: "sql/post.sql"
     schema:
       - "../../deploy/schema/post.sql"

@@ -58,22 +58,8 @@ const (
 	POST_HOT_COMMENTS_TTL   = 2 * 60
 	COMMENT_HOT_REPLIES_TTL = 2 * 60
 
-	// 宝宝缓存 Key
-	BABY_INFO_KEY          = "baby:info:%s:%s"
-	BABY_VACCINE_LIST_KEY  = "baby:vaccine:list:%s"
-	BABY_LATEST_GROWTH_KEY = "baby:growth:latest:%s"
-	// 宝宝缓存 TTL（秒）
-	BABY_INFO_TTL          = 30 * 60
-	BABY_VACCINE_LIST_TTL  = 30 * 60
-	BABY_LATEST_GROWTH_TTL = 5 * 60
-
 	// SSE 事件类型
 	SSE_TYPE_CONTENT = "content"
 	SSE_TYPE_ERROR   = "error"
 	SSE_TYPE_DONE    = "done"
-
-	// 喂养方式
-	FEED_BREAST_MILK = "breast_milk"
-	FEED_FORMULA     = "formula"
-	FEED_SOLID       = "solid"
 )
