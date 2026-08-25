@@ -1,5 +1,7 @@
 package constant
 
+import "time"
+
 const (
 	LoginWithAccount = "account"
 	LoginWithEmail   = "email"
@@ -29,4 +31,12 @@ const (
 	PartnerTTL = 24 * 3600
 	ListTTL    = 5 * 60
 	TagPrefTTL = 30 * 24 * 3600
+)
+
+const (
+	OutboxBatchSize      = 50
+	OutboxMaxAttempts    = 8
+	OutboxPollInterval   = time.Second
+	OutboxRetryBaseDelay = time.Second
+	OutboxClaimTimeout   = time.Minute
 )

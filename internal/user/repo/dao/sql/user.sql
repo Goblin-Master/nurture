@@ -120,6 +120,61 @@ INSERT INTO "user_partner"(father, mother, ctime, utime)
 VALUES ($1, $2, $3, $3)
 ON CONFLICT (father, mother) DO NOTHING;
 
+-- name: CreateUserEventOutbox :execrows
+INSERT INTO "user_event_outbox" (
+  event_id, routing_key, payload, status,
+  attempts, next_retry_at, published_at, ctime, utime
+) VALUES (
+  $1, $2, $3, 'pending',
+  0, 0, 0, $4, $4
+)
+ON CONFLICT (event_id) DO NOTHING;
+
+-- name: ClaimPendingUserEventOutbox :many
+WITH picked AS (
+  SELECT e.id
+  FROM "user_event_outbox" e
+  WHERE (
+    e.status = 'pending'
+    AND e.next_retry_at <= sqlc.arg(retry_before)
+  ) OR (
+    e.status = 'publishing'
+    AND e.utime <= sqlc.arg(stale_before)
+  )
+  ORDER BY e.id ASC
+  LIMIT sqlc.arg(claim_limit)
+  FOR UPDATE SKIP LOCKED
+)
+UPDATE "user_event_outbox" o
+SET status = 'publishing',
+    utime = sqlc.arg(claimed_at)
+FROM picked
+WHERE o.id = picked.id
+RETURNING
+  o.id,
+  o.event_id,
+  o.routing_key,
+  o.payload,
+  o.attempts,
+  o.ctime;
+
+-- name: MarkUserEventOutboxPublished :execrows
+UPDATE "user_event_outbox"
+SET status = 'published',
+    published_at = $2,
+    utime = $2
+WHERE id = $1
+  AND status = 'publishing';
+
+-- name: MarkUserEventOutboxFailed :execrows
+UPDATE "user_event_outbox"
+SET status = CASE WHEN attempts + 1 >= $3 THEN 'failed' ELSE 'pending' END,
+    attempts = attempts + 1,
+    next_retry_at = CASE WHEN attempts + 1 >= $3 THEN 0 ELSE $2 END,
+    utime = $4
+WHERE id = $1
+  AND status = 'publishing';
+
 -- name: GetPartnerByUserID :one
 SELECT father::text AS father, mother::text AS mother
 FROM "user_partner"

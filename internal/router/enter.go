@@ -49,9 +49,10 @@ func registerRoutes(r *gin.Engine) {
 	ws := r.Group("/ws")
 	dbRequired := middleware.RequireDB()
 	userModule := user.NewModule(user.Deps{
-		DB:  global.DB,
-		RDB: global.RDB,
-		Log: global.Log,
+		DB:       global.DB,
+		RDB:      global.RDB,
+		RabbitMQ: global.RMQ,
+		Log:      global.Log,
 	})
 	babyModule := baby.NewModule(baby.Deps{
 		DB:            global.DB,

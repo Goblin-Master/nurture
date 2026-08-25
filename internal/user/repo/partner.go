@@ -41,6 +41,13 @@ func (ur *UserRepo) GetPartnerByUserID(ctx context.Context, userID string) (stri
 }
 
 func (ur *UserRepo) BindPartner(ctx context.Context, fatherUserID, motherUserID string) error {
+	tx, err := ur.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := ur.userDao.WithTx(tx)
 	var aUUID, bUUID pgtype.UUID
 	if scanErr := aUUID.Scan(fatherUserID); scanErr != nil {
 		return scanErr
@@ -48,11 +55,23 @@ func (ur *UserRepo) BindPartner(ctx context.Context, fatherUserID, motherUserID 
 	if scanErr := bUUID.Scan(motherUserID); scanErr != nil {
 		return scanErr
 	}
-	if err := ur.userDao.CreatePartner(ctx, dao.CreatePartnerParams{
+	now := time.Now().UnixMilli()
+	if err := qtx.CreatePartner(ctx, dao.CreatePartnerParams{
 		Father: aUUID,
 		Mother: bUUID,
-		Ctime:  time.Now().UnixMilli(),
+		Ctime:  now,
 	}); err != nil {
+		ur.log.Error(err)
+		return ErrDefault
+	}
+	outbox, err := newPartnerBoundOutbox(fatherUserID, motherUserID, now)
+	if err != nil {
+		return err
+	}
+	if err := ur.CreateUserEventOutbox(ctx, qtx, outbox, now); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		ur.log.Error(err)
 		return ErrDefault
 	}

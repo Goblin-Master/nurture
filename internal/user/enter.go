@@ -1,11 +1,14 @@
 package user
 
 import (
+	"context"
 	"nurture/internal/pkg/emailx"
+	"nurture/internal/pkg/rabbitmqx"
 	"nurture/internal/pkg/smsx"
 	"nurture/internal/user/handler"
 	"nurture/internal/user/logic"
 	"nurture/internal/user/repo"
+	"nurture/internal/user/worker"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,10 +18,12 @@ import (
 type Deps struct {
 	DB         *pgxpool.Pool
 	RDB        redis.Cmdable
+	RabbitMQ   *rabbitmqx.Client
 	Log        *zap.SugaredLogger
 	Email      emailx.Sender
 	SMS        smsx.Sender
 	BabySyncer logic.BabySyncer
+	Context    context.Context
 }
 
 type Module struct {
@@ -28,6 +33,10 @@ type Module struct {
 }
 
 func NewModule(deps Deps) *Module {
+	ctx := deps.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	email := deps.Email
 	if email == nil {
 		email = emailx.NewEmailX()
@@ -37,6 +46,9 @@ func NewModule(deps Deps) *Module {
 		sms = smsx.NewSmsX()
 	}
 	userRepo := repo.NewUserRepo(deps.DB, deps.RDB, deps.Log)
+	if deps.DB != nil && deps.RabbitMQ != nil {
+		worker.NewOutboxWorker(userRepo, deps.RabbitMQ, deps.Log).Start(ctx)
+	}
 	userLogic := logic.NewUserLogic(userRepo, email, sms, deps.BabySyncer, deps.Log)
 	return &Module{
 		userLogic: userLogic,

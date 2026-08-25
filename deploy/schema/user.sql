@@ -75,6 +75,33 @@ COMMENT ON COLUMN "user_partner".mother IS '母亲用户UUID';
 COMMENT ON COLUMN "user_partner".ctime IS '创建时间戳';
 COMMENT ON COLUMN "user_partner".utime IS '更新时间戳';
 
+CREATE TABLE IF NOT EXISTS "user_event_outbox" (
+  id            BIGSERIAL PRIMARY KEY,
+  event_id      VARCHAR(128) UNIQUE NOT NULL,
+  routing_key   VARCHAR(64) NOT NULL,
+  payload       TEXT NOT NULL,
+  status        VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','publishing','published','failed')),
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  next_retry_at BIGINT NOT NULL DEFAULT 0,
+  published_at  BIGINT NOT NULL DEFAULT 0,
+  ctime         BIGINT NOT NULL,
+  utime         BIGINT NOT NULL
+);
+
+COMMENT ON TABLE "user_event_outbox" IS '用户事件 outbox 表';
+COMMENT ON COLUMN "user_event_outbox".id IS '主键ID';
+COMMENT ON COLUMN "user_event_outbox".event_id IS '事件ID(幂等)';
+COMMENT ON COLUMN "user_event_outbox".routing_key IS 'RabbitMQ 路由键';
+COMMENT ON COLUMN "user_event_outbox".payload IS '事件载荷(JSON字符串)';
+COMMENT ON COLUMN "user_event_outbox".status IS '事件状态(pending/publishing/published/failed)';
+COMMENT ON COLUMN "user_event_outbox".attempts IS '发布尝试次数';
+COMMENT ON COLUMN "user_event_outbox".next_retry_at IS '下一次重试时间戳(毫秒)';
+COMMENT ON COLUMN "user_event_outbox".published_at IS '发布时间戳(毫秒)';
+COMMENT ON COLUMN "user_event_outbox".ctime IS '创建时间戳(毫秒)';
+COMMENT ON COLUMN "user_event_outbox".utime IS '更新时间戳(毫秒)';
+
+CREATE INDEX IF NOT EXISTS idx_user_event_outbox_pending ON "user_event_outbox"(status, next_retry_at, id);
+
 -- 6. 用户关注关系表
 CREATE TABLE IF NOT EXISTS "user_follow" (
   id        BIGSERIAL PRIMARY KEY,
