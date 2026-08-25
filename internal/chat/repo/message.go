@@ -26,7 +26,7 @@ func (r *ChatRepo) SaveMessage(ctx context.Context, groupID, messageID, fromUser
 	}
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return false, ErrDefault
 	}
 	defer tx.Rollback(ctx)
@@ -41,7 +41,7 @@ func (r *ChatRepo) SaveMessage(ctx context.Context, groupID, messageID, fromUser
 		Ctime:      now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return false, ErrDefault
 	}
 	if aff == 0 {
@@ -69,7 +69,7 @@ func (r *ChatRepo) SaveDirectMessage(ctx context.Context, messageID, fromUserID,
 	}
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return false, ErrDefault
 	}
 	defer tx.Rollback(ctx)
@@ -84,7 +84,7 @@ func (r *ChatRepo) SaveDirectMessage(ctx context.Context, messageID, fromUserID,
 		Ctime:      now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return false, ErrDefault
 	}
 	if aff == 0 {
@@ -110,7 +110,7 @@ func (r *ChatRepo) createOutbox(ctx context.Context, q *dao.Queries, outbox Chat
 		Ctime:      outbox.Ctime,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	if aff == 0 {
@@ -132,7 +132,7 @@ func (r *ChatRepo) ListMessagesLatest(ctx context.Context, groupID string, limit
 		Limit:   int32(limit),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]ChatGroupMessageItem, 0, len(rows))
@@ -167,7 +167,7 @@ func (r *ChatRepo) ListMessagesBefore(ctx context.Context, groupID string, befor
 		Limit:     int32(limit),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]ChatGroupMessageItem, 0, len(rows))
@@ -202,7 +202,7 @@ func (r *ChatRepo) ListMessagesAfter(ctx context.Context, groupID string, afterC
 		Limit:     int32(limit),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]ChatGroupMessageItem, 0, len(rows))
@@ -236,7 +236,7 @@ func (r *ChatRepo) ListDirectMessagesLatest(ctx context.Context, userID, partner
 		Limit:      int32(limit),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]ChatDirectMessageItem, 0, len(rows))
@@ -275,7 +275,7 @@ func (r *ChatRepo) ListDirectMessagesBefore(ctx context.Context, userID, partner
 		Limit:      int32(limit),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]ChatDirectMessageItem, 0, len(rows))
@@ -314,7 +314,7 @@ func (r *ChatRepo) ListDirectMessagesAfter(ctx context.Context, userID, partnerI
 		Limit:      int32(limit),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]ChatDirectMessageItem, 0, len(rows))
@@ -351,7 +351,7 @@ func (r *ChatRepo) MarkDirectSeen(ctx context.Context, userID, partnerID string,
 		LastSeenTime:  lastSeenTime,
 		Ctime:         now,
 	}); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	return nil
@@ -373,7 +373,7 @@ func (r *ChatRepo) GetMemberRole(ctx context.Context, groupID, userID string) (s
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrNotMember
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return "", ErrDefault
 	}
 	return role, nil

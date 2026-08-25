@@ -78,16 +78,6 @@ func (ul *UserLogic) SetBabySyncer(syncer BabySyncer) {
 	ul.babySyncer = syncer
 }
 
-func (ul *UserLogic) logError(err error) {
-	if err != nil {
-		ul.log.Error(err)
-	}
-}
-
-func (ul *UserLogic) logWarnf(template string, args ...interface{}) {
-	ul.log.Warnf(template, args...)
-}
-
 func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error) {
 	var resp dto.LoginResp
 	switch req.LoginType {
@@ -101,7 +91,7 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 			Role:   jwtx.Role(data.Role),
 		})
 		if err != nil {
-			ul.logError(err)
+			ul.log.Error(err)
 			return resp, ErrDefault
 		}
 		resp.Token = token
@@ -109,7 +99,7 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 	case userconstant.LoginWithEmail:
 		ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.LoginCodeKey, req.Email), req.Code)
 		if err != nil {
-			ul.logError(err)
+			ul.log.Error(err)
 			return resp, ErrCodeVerify
 		}
 		if !ok {
@@ -124,13 +114,13 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 			Role:   jwtx.Role(data.Role),
 		})
 		if err != nil {
-			ul.logError(err)
+			ul.log.Error(err)
 			return resp, ErrDefault
 		}
 		resp.Token = token
 		return resp, nil
 	default:
-		ul.logWarnf("错误的登录方式:%s", req.LoginType)
+		ul.log.Warnf("错误的登录方式:%s", req.LoginType)
 		return resp, ErrLoginWithFailedWay
 	}
 }
@@ -139,7 +129,7 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
 	var resp dto.RegisterResp
 	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.RegisterCodeKey, req.Email), req.Code)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -162,7 +152,7 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
 		} else if errors.Is(err, repo.ErrAccountIsUsed) {
 			return resp, ErrAccountIsUsed
 		} else {
-			ul.logError(err)
+			ul.log.Error(err)
 			return resp, ErrDefault
 		}
 	}
@@ -185,7 +175,7 @@ func (ul *UserLogic) RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (d
 	}
 	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(userconstant.RegisterSMSCodeKey, phone), req.Code)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -206,7 +196,7 @@ func (ul *UserLogic) RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (d
 		if errors.Is(err, repo.ErrAccountIsUsed) {
 			return resp, ErrAccountIsUsed
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	_ = ul.userRepo.UpdateAdditionByID(ctx, userID, nil, &phone, nil, nil, nil, nil)
@@ -218,7 +208,7 @@ func (ul *UserLogic) ResetPassword(ctx context.Context, req dto.ResetPasswordReq
 	var resp dto.ResetPasswordResp
 	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.ResetPwdCodeKey, req.Email), req.Code)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -238,7 +228,7 @@ func (ul *UserLogic) ResetPassword(ctx context.Context, req dto.ResetPasswordReq
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "重置密码成功！"
@@ -257,7 +247,7 @@ func (ul *UserLogic) GetLoginCode(ctx context.Context, req dto.GetCodeReq) (dto.
 		c,
 	)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -276,7 +266,7 @@ func (ul *UserLogic) GetRegisterCode(ctx context.Context, req dto.GetCodeReq) (d
 		c,
 	)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -292,7 +282,7 @@ func (ul *UserLogic) GetRegisterSMSCode(ctx context.Context, req dto.GetSMSCodeR
 	c := smsx.GenCode()
 	err := ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.RegisterSMSCodeKey, phone), phone, c)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -311,7 +301,7 @@ func (ul *UserLogic) GetResetCode(ctx context.Context, req dto.GetCodeReq) (dto.
 		c,
 	)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -332,7 +322,7 @@ func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.U
 			if errors.Is(err, repo.ErrUserUpdateFailed) {
 				return resp, ErrProfileUpdateFailed
 			}
-			ul.logError(err)
+			ul.log.Error(err)
 			return resp, ErrDefault
 		}
 	}
@@ -361,7 +351,7 @@ func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.U
 		if errors.Is(err, repo.ErrUserUpdateFailed) {
 			return resp, ErrProfileUpdateFailed
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -376,7 +366,7 @@ func (ul *UserLogic) GetBindPhoneCode(ctx context.Context, userID string, req dt
 	}
 	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	if used {
@@ -385,7 +375,7 @@ func (ul *UserLogic) GetBindPhoneCode(ctx context.Context, userID string, req dt
 	c := smsx.GenCode()
 	err = ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.BindPhoneCodeKey, phone), phone, c)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -400,7 +390,7 @@ func (ul *UserLogic) BindPhone(ctx context.Context, userID string, req dto.BindP
 	}
 	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(userconstant.BindPhoneCodeKey, phone), req.Code)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -408,7 +398,7 @@ func (ul *UserLogic) BindPhone(ctx context.Context, userID string, req dto.BindP
 	}
 	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	if used {
@@ -422,7 +412,7 @@ func (ul *UserLogic) BindPhone(ctx context.Context, userID string, req dto.BindP
 		if errors.Is(err, repo.ErrUserUpdateFailed) {
 			return resp, ErrProfileUpdateFailed
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -441,7 +431,7 @@ func (ul *UserLogic) GetBindEmailCode(ctx context.Context, req dto.GetCodeReq) (
 		c,
 	)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -452,7 +442,7 @@ func (ul *UserLogic) BindEmail(ctx context.Context, userID string, req dto.BindE
 	var resp dto.BindContactResp
 	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.BindEmailCodeKey, req.Email), req.Code)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -466,7 +456,7 @@ func (ul *UserLogic) BindEmail(ctx context.Context, userID string, req dto.BindE
 		if errors.Is(err, repo.ErrEmailIsUsed) {
 			return resp, ErrEmailIsUsed
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -481,7 +471,7 @@ func (ul *UserLogic) GetRebindPhoneCode(ctx context.Context, userID string, req 
 	}
 	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	if used {
@@ -490,7 +480,7 @@ func (ul *UserLogic) GetRebindPhoneCode(ctx context.Context, userID string, req 
 	c := smsx.GenCode()
 	err = ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.RebindPhoneCodeKey, phone), phone, c)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -505,7 +495,7 @@ func (ul *UserLogic) RebindPhone(ctx context.Context, userID string, req dto.Bin
 	}
 	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(userconstant.RebindPhoneCodeKey, phone), req.Code)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -513,7 +503,7 @@ func (ul *UserLogic) RebindPhone(ctx context.Context, userID string, req dto.Bin
 	}
 	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	if used {
@@ -527,7 +517,7 @@ func (ul *UserLogic) RebindPhone(ctx context.Context, userID string, req dto.Bin
 		if errors.Is(err, repo.ErrUserUpdateFailed) {
 			return resp, ErrProfileUpdateFailed
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -546,7 +536,7 @@ func (ul *UserLogic) GetRebindEmailCode(ctx context.Context, userID string, req 
 		c,
 	)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -557,7 +547,7 @@ func (ul *UserLogic) RebindEmail(ctx context.Context, userID string, req dto.Bin
 	var resp dto.BindContactResp
 	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.RebindEmailCodeKey, req.Email), req.Code)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -571,7 +561,7 @@ func (ul *UserLogic) RebindEmail(ctx context.Context, userID string, req dto.Bin
 		if errors.Is(err, repo.ErrEmailIsUsed) {
 			return resp, ErrEmailIsUsed
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -605,7 +595,7 @@ func (ul *UserLogic) UpdateAvatar(ctx context.Context, userID string, req dto.Up
 		if errors.Is(err, repo.ErrUserUpdateFailed) {
 			return resp, ErrProfileUpdateFailed
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -619,7 +609,7 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 		if errors.Is(err, repo.ErrUserNotExist) || errors.Is(err, repo.ErrAccountOrPwd) {
 			return resp, ErrAccountOrPassword
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	if ub.UserID == userID {
@@ -631,7 +621,7 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	if self.Gender == ub.Gender {
@@ -640,7 +630,7 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 	// 已绑定校验：若已绑定不同对象则拒绝；若已绑定同一对象则幂等返回
 	existingPID, e1 := ul.userRepo.GetPartnerByUserID(ctx, userID)
 	if e1 != nil {
-		ul.logError(e1)
+		ul.log.Error(e1)
 		return resp, ErrDefault
 	}
 	if existingPID != "" {
@@ -658,14 +648,14 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 		fatherID, motherID = ub.UserID, userID
 	}
 	if err = ul.userRepo.BindPartner(ctx, fatherID, motherID); err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	if ul.babySyncer != nil {
 		err = ul.babySyncer.SyncPartnerBabies(ctx, fatherID, motherID)
 	}
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.PartnerID = ub.UserID
@@ -679,7 +669,7 @@ func (ul *UserLogic) GetPartner(ctx context.Context, userID string) (dto.Partner
 	var resp dto.PartnerGetResp
 	pid, err := ul.userRepo.GetPartnerByUserID(ctx, userID)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.PartnerID = pid
@@ -689,7 +679,7 @@ func (ul *UserLogic) GetPartner(ctx context.Context, userID string) (dto.Partner
 			if errors.Is(e, repo.ErrUserNotExist) {
 				return resp, ErrUserNotExist
 			}
-			ul.logError(e)
+			ul.log.Error(e)
 			return resp, ErrDefault
 		}
 		resp.PartnerUsername = row.Username
@@ -705,7 +695,7 @@ func (ul *UserLogic) MyProfile(ctx context.Context, userID string) (dto.MyProfil
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.UserID = row.UserID
@@ -723,7 +713,7 @@ func (ul *UserLogic) MyProfile(ctx context.Context, userID string) (dto.MyProfil
 	resp.Utime = row.Utime
 	pid, err := ul.userRepo.GetPartnerByUserID(ctx, userID)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.PartnerID = pid
@@ -741,12 +731,12 @@ func (ul *UserLogic) Follow(ctx context.Context, userID string, uri dto.FollowRe
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	if err := ul.userRepo.FollowUser(ctx, userID, target); err != nil {
 		if errors.Is(err, repo.ErrDefault) {
-			ul.logError(err)
+			ul.log.Error(err)
 			return resp, ErrDefault
 		}
 	}
@@ -761,7 +751,7 @@ func (ul *UserLogic) Unfollow(ctx context.Context, userID string, uri dto.Follow
 		return resp, ErrParamsType
 	}
 	if err := ul.userRepo.UnfollowUser(ctx, userID, target); err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -784,7 +774,7 @@ func (ul *UserLogic) ListFollowing(ctx context.Context, userID string, req dto.F
 	}
 	rows, hasMore, err := ul.userRepo.ListFollowing(ctx, viewID, page, pageSize)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	items := make([]dto.FollowingUserItem, 0, len(rows))
@@ -817,7 +807,7 @@ func (ul *UserLogic) ListFollowers(ctx context.Context, userID string, req dto.F
 	}
 	rows, hasMore, err := ul.userRepo.ListFollowers(ctx, viewID, page, pageSize)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	items := make([]dto.FollowingUserItem, 0, len(rows))
@@ -847,7 +837,7 @@ func (ul *UserLogic) AdminListUsers(ctx context.Context, req dto.AdminListUsersR
 	}
 	rows, hasMore, err := ul.userRepo.AdminListUsers(ctx, req.Keyword, page, pageSize)
 	if err != nil {
-		ul.logError(err)
+		ul.log.Error(err)
 		return resp, ErrDefault
 	}
 	items := make([]dto.AdminUserItem, 0, len(rows))
@@ -870,7 +860,7 @@ func (ul *UserLogic) AdminPromoteToAdmin(ctx context.Context, userID string) (st
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return "", ErrUserNotExist
 		}
-		ul.logError(err)
+		ul.log.Error(err)
 		return "", ErrDefault
 	}
 	return "OK", nil

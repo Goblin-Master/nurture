@@ -107,12 +107,6 @@ func NewPostRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger, ai
 
 var _ IPostRepo = (*PostRepo)(nil)
 
-func (r *PostRepo) logError(err error) {
-	if err != nil {
-		r.log.Error(err)
-	}
-}
-
 func (r *PostRepo) CreateTag(ctx context.Context, tagID, name, description string, now int64) (TagRow, error) {
 	var tid pgtype.UUID
 	if err := tid.Scan(tagID); err != nil {
@@ -129,7 +123,7 @@ func (r *PostRepo) CreateTag(ctx context.Context, tagID, name, description strin
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return TagRow{}, ErrDefault
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return TagRow{}, ErrDefault
 	}
 	return TagRow{TagID: row.TagID, Name: row.TagName, Description: row.Description}, nil
@@ -147,12 +141,12 @@ func (r *PostRepo) DeleteTag(ctx context.Context, tagID string) error {
 		return ErrParamsType
 	}
 	if _, err := qtx.DeletePostTagsByTagID(ctx, tid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if _, err := qtx.DeleteTagByID(ctx, tid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -168,7 +162,7 @@ func (r *PostRepo) ListTags(ctx context.Context, keyword string, page, pageSize 
 		Offset:  offset,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	hasMore := int32(len(rows)) >= limit
@@ -206,7 +200,7 @@ func (r *PostRepo) GetDetail(ctx context.Context, userID, postID string) (PostRo
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PostRow{}, ErrPostNotExist
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return PostRow{}, ErrDefault
 	}
 	var tags []string
@@ -331,7 +325,7 @@ func (r *PostRepo) ListHome(ctx context.Context, userID string, page, pageSize i
 			return rows, hasMore, nil
 		}
 		if !errors.Is(err, ErrParamsType) && !errors.Is(err, ErrPostNotExist) {
-			r.logError(err)
+			r.log.Error(err)
 		}
 		fallthrough
 	case "hot":
@@ -366,7 +360,7 @@ func (r *PostRepo) ListHome(ctx context.Context, userID string, page, pageSize i
 		})
 	}
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]PostRow, 0, pageSize)
@@ -408,7 +402,7 @@ func (r *PostRepo) listRecommend(ctx context.Context, userID string, page, pageS
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, false, ErrParamsType
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	profileText = strings.TrimSpace(profileText)
@@ -421,7 +415,7 @@ func (r *PostRepo) listRecommend(ctx context.Context, userID string, page, pageS
 	topK := 200
 	docs, err := r.ai.SimilaritySearch(ctx, profileText, []string{postconstant.RecommendCollection}, topK)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	postIDs := extractPostIDs(docs)
@@ -453,7 +447,7 @@ func (r *PostRepo) listRecommend(ctx context.Context, userID string, page, pageS
 		Column2: userID,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]PostRow, 0, len(rows))
@@ -511,7 +505,7 @@ func (r *PostRepo) TouchUserRecommendProfile(ctx context.Context, userID string,
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrPostNotExist
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	var tags string
@@ -534,7 +528,7 @@ func (r *PostRepo) TouchUserRecommendProfile(ctx context.Context, userID string,
 		Utime:       now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	return nil
@@ -553,7 +547,7 @@ func (r *PostRepo) IndexPostForRecommend(ctx context.Context, postID string) err
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrPostNotExist
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	var tags string
@@ -573,7 +567,7 @@ func (r *PostRepo) IndexPostForRecommend(ctx context.Context, postID string) err
 		"post_id": row.PostID,
 	}, false)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	return nil
@@ -592,7 +586,7 @@ func (r *PostRepo) TouchUserTagPref(ctx context.Context, userID string, postID s
 	}
 	tags, err := r.dao.ListTagNamesByPost(ctx, pid)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	if len(tags) == 0 {
@@ -629,7 +623,7 @@ func (r *PostRepo) ListFollowing(ctx context.Context, userID string, page, pageS
 			Offset:  offset,
 		})
 		if err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			return nil, false, ErrDefault
 		}
 		res := make([]PostRow, 0, pageSize)
@@ -652,7 +646,7 @@ func (r *PostRepo) ListFollowing(ctx context.Context, userID string, page, pageS
 		Offset:  offset,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]PostRow, 0, pageSize)
@@ -687,7 +681,7 @@ func (r *PostRepo) DeleteComment(ctx context.Context, commentID, userID string) 
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -706,7 +700,7 @@ func (r *PostRepo) DeleteComment(ctx context.Context, commentID, userID string) 
 		UserID:    uid,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -717,7 +711,7 @@ func (r *PostRepo) DeleteComment(ctx context.Context, commentID, userID string) 
 	// adjust counters
 	if meta.ParentID.Valid {
 		if _, err := qtx.DecCommentReplyCount(ctx, meta.ParentID); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -728,7 +722,7 @@ func (r *PostRepo) DeleteComment(ctx context.Context, commentID, userID string) 
 			return err
 		}
 		if _, err := qtx.DecPostCommentCount(ctx, pid); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -751,7 +745,7 @@ func (r *PostRepo) UpdateComment(ctx context.Context, commentID, userID, content
 		UserID:    uid,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	if aff == 0 {
@@ -771,7 +765,7 @@ func (r *PostRepo) LikeComment(ctx context.Context, commentID, userID string) er
 	// check status visible
 	meta, err := r.dao.GetCommentMetaByID(ctx, cid)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	if meta.Status != "visible" {
@@ -789,13 +783,13 @@ func (r *PostRepo) LikeComment(ctx context.Context, commentID, userID string) er
 		Ctime:     now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if aff > 0 {
 		if _, err := qtx.IncCommentLikeCount(ctx, cid); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -813,7 +807,7 @@ func (r *PostRepo) LikePost(ctx context.Context, postID, userID string) error {
 	}
 	status, err := r.dao.GetPostStatusByID(ctx, pid)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	if status != "published" {
@@ -831,13 +825,13 @@ func (r *PostRepo) LikePost(ctx context.Context, postID, userID string) error {
 		Ctime:  now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if aff > 0 {
 		if _, err := qtx.IncPostLikeCount(ctx, pid); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -868,13 +862,13 @@ func (r *PostRepo) UnlikePost(ctx context.Context, postID, userID string) error 
 		PostID: pid,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if aff > 0 {
 		if _, err := qtx.DecPostLikeCount(ctx, pid); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -905,13 +899,13 @@ func (r *PostRepo) UnlikeComment(ctx context.Context, commentID, userID string) 
 		CommentID: cid,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if aff > 0 {
 		if _, err := qtx.DecCommentLikeCount(ctx, cid); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -945,7 +939,7 @@ func (r *PostRepo) ListRepliesByComment(ctx context.Context, commentID string, u
 			Column4:  userID,
 		})
 		if err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			return nil, false, ErrDefault
 		}
 		res := make([]CommentRow, 0, pageSize)
@@ -977,7 +971,7 @@ func (r *PostRepo) ListRepliesByComment(ctx context.Context, commentID string, u
 		Column4:  userID,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]CommentRow, 0, pageSize)
@@ -1044,7 +1038,7 @@ func (r *PostRepo) ListByTag(ctx context.Context, userID, tagID string, page, pa
 		err = e
 	}
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]PostRow, 0, pageSize)
@@ -1187,7 +1181,7 @@ func (r *PostRepo) Search(ctx context.Context, userID, keyword, tagID, strategy 
 		}
 	}
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	return resRows, hasMore, nil
@@ -1219,7 +1213,7 @@ func (r *PostRepo) ListByAuthor(ctx context.Context, authorID string, page, page
 		})
 	}
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]PostRow, 0, pageSize)
@@ -1246,7 +1240,7 @@ func (r *PostRepo) ListDraftsByAuthor(ctx context.Context, authorID string, page
 		Offset:  offset,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]PostRow, 0, pageSize)
@@ -1273,7 +1267,7 @@ func (r *PostRepo) ListMilestonesByAuthor(ctx context.Context, authorID string, 
 		Offset:  offset,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]PostRow, 0, pageSize)
@@ -1324,7 +1318,7 @@ func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, cont
 			_ = tx.Rollback(ctx)
 			return ErrInvalidPostStatus
 		}
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -1338,7 +1332,7 @@ func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, cont
 		}
 		exists, err := qtx.TagExists(ctx, tg)
 		if err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -1350,7 +1344,7 @@ func (r *PostRepo) CreatePost(ctx context.Context, postID, authorID, title, cont
 			PostID: pid,
 			TagID:  tg,
 		}); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -1371,7 +1365,7 @@ func (r *PostRepo) CollectPost(ctx context.Context, postID, userID, collectionID
 	}
 	status, err := r.dao.GetPostStatusByID(ctx, pid)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	if status != "published" {
@@ -1390,13 +1384,13 @@ func (r *PostRepo) CollectPost(ctx context.Context, postID, userID, collectionID
 		Ctime:        now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if aff > 0 {
 		if _, err := qtx.IncPostCollectCount(ctx, pid); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -1427,13 +1421,13 @@ func (r *PostRepo) UncollectPost(ctx context.Context, postID, userID string) err
 		PostID: pid,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if aff > 0 {
 		if _, err := qtx.DecPostCollectCount(ctx, pid); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -1460,7 +1454,7 @@ func (r *PostRepo) DeleteDraft(ctx context.Context, postID, authorID string) err
 	}
 	qtx := r.dao.WithTx(tx)
 	if err := qtx.DeletePostTagsByPost(ctx, pid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -1469,7 +1463,7 @@ func (r *PostRepo) DeleteDraft(ctx context.Context, postID, authorID string) err
 		AuthorID: aid,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -1493,7 +1487,7 @@ func (r *PostRepo) DeletePost(ctx context.Context, postID, authorID string) erro
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrPostNotExist
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	if status == "draft" {
@@ -1505,32 +1499,32 @@ func (r *PostRepo) DeletePost(ctx context.Context, postID, authorID string) erro
 	}
 	qtx := r.dao.WithTx(tx)
 	if err := qtx.DeleteCommentLikesByPost(ctx, pid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if err := qtx.DeleteCommentClosuresByPost(ctx, pid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if err := qtx.DeleteCommentsByPost(ctx, pid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if err := qtx.DeletePostLikesByPost(ctx, pid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if err := qtx.DeleteCollectionsByPost(ctx, pid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if err := qtx.DeletePostTagsByPost(ctx, pid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -1539,7 +1533,7 @@ func (r *PostRepo) DeletePost(ctx context.Context, postID, authorID string) erro
 		AuthorID: aid,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -1571,7 +1565,7 @@ func (r *PostRepo) ListMyCollections(ctx context.Context, userID string, page, p
 			Offset:  offset,
 		})
 		if err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			return nil, false, ErrDefault
 		}
 		res := make([]PostRow, 0, pageSize)
@@ -1594,7 +1588,7 @@ func (r *PostRepo) ListMyCollections(ctx context.Context, userID string, page, p
 		Offset:  offset,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]PostRow, 0, pageSize)
@@ -1626,7 +1620,7 @@ func (r *PostRepo) Publish(ctx context.Context, postID, userID string) error {
 		Utime:    time.Now().UnixMilli(),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	if count == 0 {
@@ -1656,7 +1650,7 @@ func (r *PostRepo) UpdateDraft(ctx context.Context, postID, userID, title, conte
 		Utime:    time.Now().UnixMilli(),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -1665,7 +1659,7 @@ func (r *PostRepo) UpdateDraft(ctx context.Context, postID, userID, title, conte
 		return ErrPostNotDraft
 	}
 	if err := qtx.DeletePostTagsByPost(ctx, pid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -1679,7 +1673,7 @@ func (r *PostRepo) UpdateDraft(ctx context.Context, postID, userID, title, conte
 		}
 		exists, err := qtx.TagExists(ctx, tg)
 		if err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -1691,7 +1685,7 @@ func (r *PostRepo) UpdateDraft(ctx context.Context, postID, userID, title, conte
 			PostID: pid,
 			TagID:  tg,
 		}); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -1709,7 +1703,7 @@ func (r *PostRepo) GetPostStatus(ctx context.Context, postID string) (string, er
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrPostNotExist
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return "", ErrDefault
 	}
 	return status, nil
@@ -1725,7 +1719,7 @@ func (r *PostRepo) GetCommentParentInfo(ctx context.Context, commentID string) (
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", "", ErrPostNotExist
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return "", "", ErrDefault
 	}
 	// row has post_id and status
@@ -1771,19 +1765,19 @@ func (r *PostRepo) CreateComment(ctx context.Context, commentID, postID, userID 
 		Ctime:     now,
 		Utime:     now,
 	}); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	if _, err := qtx.IncPostCommentCount(ctx, pid); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
 	// if has parent, inc reply_count
 	if parentID != nil && strings.TrimSpace(*parentID) != "" {
 		if _, err := qtx.IncCommentReplyCount(ctx, pgid); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -1841,7 +1835,7 @@ func (r *PostRepo) ListCommentsByPost(ctx context.Context, postID string, userID
 			Column4: userID,
 		})
 		if err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			return nil, false, ErrDefault
 		}
 		res := make([]CommentRow, 0, pageSize)
@@ -1874,7 +1868,7 @@ func (r *PostRepo) ListCommentsByPost(ctx context.Context, postID string, userID
 		Column4: userID,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	res := make([]CommentRow, 0, pageSize)

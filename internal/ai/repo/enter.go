@@ -38,19 +38,13 @@ func NewAIRepo(ai *aix.AIX, rdb redis.Cmdable, log *zap.SugaredLogger) *AIRepo {
 
 var _ IAIRepo = (*AIRepo)(nil)
 
-func (r *AIRepo) logError(err error) {
-	if err != nil {
-		r.log.Error(err)
-	}
-}
-
 func (r *AIRepo) AddDocument(ctx context.Context, collectionName, content string) error {
 	if r.ai == nil || !r.ai.EmbeddingEnabled() {
 		return ErrDocumentAdd
 	}
 	err := r.ai.AddDocument(ctx, collectionName, content)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDocumentAdd
 	}
 	return nil
@@ -63,7 +57,7 @@ func (r *AIRepo) SimilaritySearch(ctx context.Context, query string,
 	}
 	docs, err := r.ai.SimilaritySearch(ctx, query, collections, topK)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDocumentSearch
 	}
 	return docs, nil
@@ -79,7 +73,7 @@ func (r *AIRepo) GetFullHistory(ctx context.Context, userID, sessionID string) (
 	// 获取所有消息
 	result, err := r.rdb.LRange(ctx, key, 0, -1).Result()
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrHistoryGet
 	}
 
@@ -107,7 +101,7 @@ func (r *AIRepo) GetRecentHistory(ctx context.Context, userID, sessionID string,
 	start := int64(-limit)
 	result, err := r.rdb.LRange(ctx, key, start, -1).Result()
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrHistoryGet
 	}
 
@@ -131,19 +125,19 @@ func (r *AIRepo) SaveMessage(ctx context.Context, userID, sessionID string, msg 
 	key := fmt.Sprintf(aiconstant.ChatHistoryKey, userID, sessionID)
 	data, err := json.Marshal(msg)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrHistorySave
 	}
 
 	// 存入 List 尾部
 	if err := r.rdb.RPush(ctx, key, data).Err(); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrHistorySave
 	}
 
 	// 刷新过期时间
 	if err := r.rdb.Expire(ctx, key, time.Duration(aiconstant.HistoryTTL)*time.Second).Err(); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrHistorySave
 	}
 	return nil

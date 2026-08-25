@@ -99,12 +99,6 @@ func NewUserRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger) *U
 
 var _ IUserRepo = (*UserRepo)(nil)
 
-func (ur *UserRepo) logError(err error) {
-	if err != nil {
-		ur.log.Error(err)
-	}
-}
-
 func (ur *UserRepo) logCacheHit(args ...interface{}) {
 	ur.log.Info(args...)
 }
@@ -164,7 +158,7 @@ func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, passwo
 		if errors.Is(err, pgx.ErrNoRows) {
 			return UserBaseRow{}, ErrUserNotExist
 		}
-		ur.logError(err)
+		ur.log.Error(err)
 		return UserBaseRow{}, ErrDefault
 	}
 	if passwordx.IsBcryptHash(u.Password) {
@@ -172,7 +166,7 @@ func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, passwo
 			if errors.Is(err, passwordx.ErrPasswordMismatch) || errors.Is(err, passwordx.ErrPasswordEmpty) {
 				return UserBaseRow{}, ErrAccountOrPwd
 			}
-			ur.logError(err)
+			ur.log.Error(err)
 			return UserBaseRow{}, ErrDefault
 		}
 		return toUserBaseRow(u), nil
@@ -186,10 +180,10 @@ func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, passwo
 			Password: hashed,
 			Utime:    time.Now().UnixMilli(),
 		}); upErr != nil {
-			ur.logError(upErr)
+			ur.log.Error(upErr)
 		}
 	} else {
-		ur.logError(err)
+		ur.log.Error(err)
 	}
 	return toUserBaseRow(u), nil
 }
@@ -212,7 +206,7 @@ func (ur *UserRepo) GetMyProfile(ctx context.Context, userID string) (ProfileRow
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ProfileRow{}, ErrUserNotExist
 		}
-		ur.logError(err)
+		ur.log.Error(err)
 		return ProfileRow{}, ErrDefault
 	}
 	ret := toProfileRow(p)
@@ -234,7 +228,7 @@ func (ur *UserRepo) FollowUser(ctx context.Context, followerID, followeeID strin
 		Ctime:    time.Now().UnixMilli(),
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrDefault
 	}
 	_ = cache.Del(ctx, ur.rdb, cache.ProfileKey(followerID), cache.ProfileKey(followeeID))
@@ -256,7 +250,7 @@ func (ur *UserRepo) UnfollowUser(ctx context.Context, followerID, followeeID str
 		Followee: eUID,
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrDefault
 	}
 	if n == 0 {
@@ -281,7 +275,7 @@ func (ur *UserRepo) IsFollowing(ctx context.Context, followerID, followeeID stri
 		Followee: eUID,
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return false, ErrDefault
 	}
 	return ok, nil
@@ -312,7 +306,7 @@ func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, page
 		Offset:   offset,
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	_ = cache.Del(ctx, ur.rdb, key)
@@ -355,7 +349,7 @@ func (ur *UserRepo) ListFollowers(ctx context.Context, userID string, page, page
 		Offset:   offset,
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	_ = cache.Del(ctx, ur.rdb, key)
@@ -379,7 +373,7 @@ func (ur *UserRepo) LoginWithEmail(ctx context.Context, email string) (UserBaseR
 		if errors.Is(err, pgx.ErrNoRows) {
 			return UserBaseRow{}, ErrUserNotExist
 		}
-		ur.logError(err)
+		ur.log.Error(err)
 		return UserBaseRow{}, ErrDefault
 	}
 	return toUserBaseRow(u), nil
@@ -395,7 +389,7 @@ func (ur *UserRepo) GetUserByID(ctx context.Context, userID string) (UserBaseRow
 		if errors.Is(err, pgx.ErrNoRows) {
 			return UserBaseRow{}, ErrUserNotExist
 		}
-		ur.logError(err)
+		ur.log.Error(err)
 		return UserBaseRow{}, ErrDefault
 	}
 	return toUserBaseRow(u), nil
@@ -436,7 +430,7 @@ func (ur *UserRepo) Register(ctx context.Context, userID, username string, email
 				return ErrEmailIsUsed
 			}
 		}
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrDefault
 	}
 	return nil
@@ -461,7 +455,7 @@ func (ur *UserRepo) UpdateGender(ctx context.Context, userID, gender string) err
 		Utime:  time.Now().UnixMilli(),
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrUserUpdateFailed
 	}
 	if n == 0 {
@@ -473,7 +467,7 @@ func (ur *UserRepo) UpdateGender(ctx context.Context, userID, gender string) err
 		Utime:  time.Now().UnixMilli(),
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrUserUpdateFailed
 	}
 	if n == 0 {
@@ -499,7 +493,7 @@ func (ur *UserRepo) GetPartnerByUserID(ctx context.Context, userID string) (stri
 			_ = cache.SetEX(ctx, ur.rdb, key, "", time.Duration(userconstant.ProfileTTL)*time.Second)
 			return "", nil
 		}
-		ur.logError(err)
+		ur.log.Error(err)
 		return "", ErrDefault
 	}
 	if row.Father == userID {
@@ -523,7 +517,7 @@ func (ur *UserRepo) BindPartner(ctx context.Context, fatherUserID, motherUserID 
 		Mother: bUUID,
 		Ctime:  time.Now().UnixMilli(),
 	}); err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrDefault
 	}
 	_ = cache.Del(ctx, ur.rdb, cache.PartnerKey(fatherUserID), cache.PartnerKey(motherUserID))
@@ -545,7 +539,7 @@ func (ur *UserRepo) ResetPassword(ctx context.Context, email, newPassword string
 		Password: hashed,
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrDefault
 	}
 	if count == 0 {
@@ -573,7 +567,7 @@ func (ur *UserRepo) UpdateAvatarByID(ctx context.Context, userID, url string) er
 		Utime:   time.Now().UnixMilli(),
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrUserUpdateFailed
 	}
 	if count == 0 {
@@ -623,7 +617,7 @@ func (ur *UserRepo) UpdateAdditionByID(ctx context.Context, userID string, occup
 		Utime:   time.Now().UnixMilli(),
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrUserUpdateFailed
 	}
 	if n == 0 {
@@ -643,7 +637,7 @@ func (ur *UserRepo) IsPhoneUsed(ctx context.Context, phone string, excludeUserID
 		UserID: exclude,
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return false, ErrDefault
 	}
 	return exists, nil
@@ -667,7 +661,7 @@ func (ur *UserRepo) BindEmail(ctx context.Context, userID, email string) error {
 				return ErrEmailIsUsed
 			}
 		}
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrUserUpdateFailed
 	}
 	if count == 0 {
@@ -686,7 +680,7 @@ func (ur *UserRepo) AdminListUsers(ctx context.Context, keyword string, page, pa
 		Offset:  offset,
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	hasMore := false
@@ -712,7 +706,7 @@ func (ur *UserRepo) AdminUpdateUserRole(ctx context.Context, userID string, role
 		Utime:  time.Now().UnixMilli(),
 	})
 	if err != nil {
-		ur.logError(err)
+		ur.log.Error(err)
 		return ErrDefault
 	}
 	if n == 0 {

@@ -23,7 +23,7 @@ func (r *ChatRepo) ListPendingOutbox(ctx context.Context, now int64, staleBefore
 		ClaimLimit:  int32(limit),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]ChatOutboxEvent, 0, len(rows))
@@ -49,7 +49,7 @@ func (r *ChatRepo) MarkOutboxPublished(ctx context.Context, id int64, now int64)
 		PublishedAt: now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	return nil
@@ -69,7 +69,7 @@ func (r *ChatRepo) MarkOutboxFailed(ctx context.Context, id int64, nextRetryAt i
 		Utime:       now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	return nil

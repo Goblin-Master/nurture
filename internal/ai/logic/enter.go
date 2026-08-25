@@ -81,16 +81,6 @@ func (l *AILogic) growthAvailable() bool {
 	return l.dbEnabled && l.growthReader != nil
 }
 
-func (l *AILogic) logError(err error) {
-	if err != nil {
-		l.log.Error(err)
-	}
-}
-
-func (l *AILogic) logErrorf(format string, args ...any) {
-	l.log.Errorf(format, args...)
-}
-
 func streamAIUnavailable(streamFunc func(event aidto.SSEEvent)) {
 	if streamFunc == nil {
 		return
@@ -112,7 +102,7 @@ func (l *AILogic) ChatStream(ctx context.Context, userID string, req aidto.ChatS
 	// 1. 获取最近 3 轮对话历史（6 条消息）作为 AI 上下文
 	history, err := l.aiRepo.GetRecentHistory(ctx, userID, req.SessionID, aiconstant.ContextMessages)
 	if err != nil {
-		l.logError(err)
+		l.log.Error(err)
 		// 历史获取失败不阻断，继续对话
 		history = []aix.ChatMessage{}
 	}
@@ -135,14 +125,14 @@ func (l *AILogic) ChatStream(ctx context.Context, userID string, req aidto.ChatS
 			if errors.Is(err, ErrBabyNotExist) {
 				return ErrBabyNotExist
 			}
-			l.logError(err)
+			l.log.Error(err)
 			return ErrDefault
 		}
 		to := time.Now().UnixMilli()
 		from := to - int64(days)*24*60*60*1000
 		rows, err := l.growthReader.ListGrowthRecordsByBabyIDBetween(ctx, req.BabyID, from, to)
 		if err != nil {
-			l.logError(err)
+			l.log.Error(err)
 			return ErrDefault
 		}
 		items := growthItemsFromRecords(rows)
@@ -186,7 +176,7 @@ func (l *AILogic) ChatStream(ctx context.Context, userID string, req aidto.ChatS
 		if bts, e := json.Marshal(payload); e == nil {
 			extraContext = string(bts)
 		} else {
-			l.logError(e)
+			l.log.Error(e)
 		}
 	}
 
@@ -205,7 +195,7 @@ func (l *AILogic) ChatStream(ctx context.Context, userID string, req aidto.ChatS
 		docs, e := l.aiRepo.SimilaritySearch(ctx, req.Message, collections, topK)
 		if e != nil {
 			// 检索失败记录日志，但不阻断对话，仅降级为普通对话
-			l.logErrorf("RAG SimilaritySearch failed: %v", e)
+			l.log.Errorf("RAG SimilaritySearch failed: %v", e)
 		}
 		if len(docs) > 0 {
 			// 拼接检索结果
@@ -228,7 +218,7 @@ func (l *AILogic) ChatStream(ctx context.Context, userID string, req aidto.ChatS
 		})
 	})
 	if err != nil {
-		l.logError(err)
+		l.log.Error(err)
 		streamFunc(aidto.SSEEvent{
 			Type:  aiconstant.SSETypeError,
 			Error: ErrChatStream.Error(),
@@ -281,7 +271,7 @@ func (l *AILogic) UploadKnowledge(ctx context.Context, userID string, req aidto.
 	// 添加文档
 	err := l.aiRepo.AddDocument(ctx, collectionName, req.Content)
 	if err != nil {
-		l.logError(err)
+		l.log.Error(err)
 		return ErrKnowledgeUpload
 	}
 	return nil
@@ -296,7 +286,7 @@ func (l *AILogic) GetChatHistory(ctx context.Context, userID string, req aidto.C
 
 	history, err := l.aiRepo.GetFullHistory(ctx, userID, req.SessionID)
 	if err != nil {
-		l.logError(err)
+		l.log.Error(err)
 		return resp, ErrDefault
 	}
 
@@ -389,7 +379,7 @@ func (l *AILogic) GrowthAnalysisStream(ctx context.Context, userID string, req a
 	})
 
 	if err != nil {
-		l.logError(err)
+		l.log.Error(err)
 		streamFunc(aidto.SSEEvent{
 			Type:  aiconstant.SSETypeError,
 			Error: ErrChatStream.Error(),
@@ -425,12 +415,12 @@ func (l *AILogic) GrowthReport(ctx context.Context, userID string, req aidto.Gro
 		if errors.Is(err, ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		l.logError(err)
+		l.log.Error(err)
 		return resp, ErrDefault
 	}
 	rows, err := l.growthReader.ListGrowthRecordsByBabyIDBetween(ctx, req.BabyID, from, to)
 	if err != nil {
-		l.logError(err)
+		l.log.Error(err)
 		return resp, ErrDefault
 	}
 
@@ -472,7 +462,7 @@ func (l *AILogic) GrowthReport(ctx context.Context, userID string, req aidto.Gro
 	}
 	md, err := l.ai.StreamChat(ctx, messages, func(chunk string) {})
 	if err != nil {
-		l.logError(err)
+		l.log.Error(err)
 		resp.Markdown = buildGrowthReportFallbackMarkdown(resp.Data, req.Language)
 		return resp, nil
 	}

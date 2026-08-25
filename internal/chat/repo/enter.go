@@ -133,15 +133,9 @@ func NewChatRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger) *C
 
 var _ IChatRepo = (*ChatRepo)(nil)
 
-func (r *ChatRepo) logError(err error) {
-	if err != nil {
-		r.log.Error(err)
-	}
-}
-
 func (r *ChatRepo) commit(ctx context.Context, tx pgx.Tx) error {
 	if err := tx.Commit(ctx); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	return nil

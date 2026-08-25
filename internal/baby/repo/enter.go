@@ -83,12 +83,6 @@ type CreatedDose struct {
 	RecommendAgeDays int32
 }
 
-func (r *BabyRepo) logError(err error) {
-	if err != nil {
-		r.log.Error(err)
-	}
-}
-
 func (r *BabyRepo) ListMyBabies(ctx context.Context, userID string) ([]dao.ListBabiesByUserIDRow, error) {
 	var uid pgtype.UUID
 	if err := uid.Scan(userID); err != nil {
@@ -96,7 +90,7 @@ func (r *BabyRepo) ListMyBabies(ctx context.Context, userID string) ([]dao.ListB
 	}
 	rows, err := r.babyDao.ListBabiesByUserID(ctx, uid)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	return rows, nil
@@ -130,7 +124,7 @@ func (r *BabyRepo) SyncPartnerBabies(ctx context.Context, fatherUserID, motherUs
 func (r *BabyRepo) copyBabies(ctx context.Context, qtx *dao.Queries, fromUserID, toUserID pgtype.UUID) error {
 	rows, err := qtx.ListBabiesByUserID(ctx, fromUserID)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	for _, row := range rows {
@@ -143,7 +137,7 @@ func (r *BabyRepo) copyBabies(ctx context.Context, qtx *dao.Queries, fromUserID,
 			UserID: fromUserID,
 		})
 		if err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			return ErrDefault
 		}
 		now := time.Now().UnixMilli()
@@ -157,7 +151,7 @@ func (r *BabyRepo) copyBabies(ctx context.Context, qtx *dao.Queries, fromUserID,
 			Ctime:    now,
 			Utime:    now,
 		}); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			return ErrDefault
 		}
 	}
@@ -199,7 +193,7 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, partnerID, ba
 		Ctime:    ctime,
 		Utime:    utime,
 	}); err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -223,7 +217,7 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, partnerID, ba
 			CreatedBy:         uid,
 		})
 		if err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -231,7 +225,7 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, partnerID, ba
 	// 创建疫苗记录（按剂次）
 	doses, err := qtx.ListAllDoses(ctx)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return ErrDefault
 	}
@@ -250,7 +244,7 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, partnerID, ba
 			Ctime:    ctime,
 			Utime:    utime,
 		}); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -266,7 +260,7 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, partnerID, ba
 			Ctime:    ctime,
 			Utime:    utime,
 		}); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return ErrDefault
 		}
@@ -290,7 +284,7 @@ func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, partnerID, ba
 				CreatedBy:         pid,
 			})
 			if err != nil {
-				r.logError(err)
+				r.log.Error(err)
 				_ = tx.Rollback(ctx)
 				return ErrDefault
 			}
@@ -322,7 +316,7 @@ func (r *BabyRepo) GetBabyByIDAndUser(ctx context.Context, babyID, userID string
 		if errors.Is(err, pgx.ErrNoRows) {
 			return dao.Baby{}, ErrBabyNotExist
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return dao.Baby{}, ErrDefault
 	}
 	_ = cache.SetJSON(ctx, r.rdb, key, b, time.Duration(babyconstant.InfoTTL)*time.Second)
@@ -358,7 +352,7 @@ func (r *BabyRepo) AdminCreateVaccine(ctx context.Context, vaccineID, name, dise
 		Ctime:     now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		_ = tx.Rollback(ctx)
 		return "", nil, ErrDefault
 	}
@@ -377,7 +371,7 @@ func (r *BabyRepo) AdminCreateVaccine(ctx context.Context, vaccineID, name, dise
 			Ctime:            now,
 		})
 		if err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return "", nil, ErrDefault
 		}
@@ -385,7 +379,7 @@ func (r *BabyRepo) AdminCreateVaccine(ctx context.Context, vaccineID, name, dise
 			DoseID: did,
 			Ctime:  now,
 		}); err != nil {
-			r.logError(err)
+			r.log.Error(err)
 			_ = tx.Rollback(ctx)
 			return "", nil, ErrDefault
 		}
@@ -418,7 +412,7 @@ func (r *BabyRepo) GetLatestGrowthByBabyID(ctx context.Context, babyID string) (
 		if errors.Is(err, pgx.ErrNoRows) {
 			return dao.BabyGrowthRecord{}, ErrBabyGrowthNotExist
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return dao.BabyGrowthRecord{}, ErrDefault
 	}
 	_ = cache.SetJSON(ctx, r.rdb, key, gr, time.Duration(babyconstant.LatestGrowthTTL)*time.Second)
@@ -439,7 +433,7 @@ func (r *BabyRepo) GetGrowthByBabyIDBetween(ctx context.Context, babyID string, 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return dao.BabyGrowthRecord{}, ErrBabyGrowthNotExist
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return dao.BabyGrowthRecord{}, ErrDefault
 	}
 	return gr, nil
@@ -456,7 +450,7 @@ func (r *BabyRepo) ListGrowthRecordsByBabyIDBetween(ctx context.Context, babyID 
 		RecordTime_2: end,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	return rows, nil
@@ -482,7 +476,7 @@ func (r *BabyRepo) UpdateGrowthByRecordID(ctx context.Context, recordID string, 
 		Utime:             recordTime,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	if babyID, err := r.babyDao.GetBabyIDByGrowthRecordID(ctx, rid); err == nil {
@@ -520,7 +514,7 @@ func (r *BabyRepo) CreateGrowthRecord(ctx context.Context, babyID, userID string
 		CreatedBy:         uid,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return "", ErrDefault
 	}
 	_ = cache.Del(ctx, r.rdb, cache.LatestGrowthKey(babyID))
@@ -541,7 +535,7 @@ func (r *BabyRepo) ListVaccineRecordsByBaby(ctx context.Context, babyID string) 
 	}
 	rows, err := r.babyDao.ListVaccineRecordsByBabyID(ctx, bid)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	_ = cache.SetJSON(ctx, r.rdb, key, rows, time.Duration(babyconstant.VaccineListTTL)*time.Second)
@@ -563,7 +557,7 @@ func (r *BabyRepo) UpdateVaccineStatusGiven(ctx context.Context, babyID, doseID 
 		Utime:      utime,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return 0, ErrDefault
 	}
 	_ = cache.Del(ctx, r.rdb, cache.VaccineListKey(babyID))
@@ -584,7 +578,7 @@ func (r *BabyRepo) UpdateVaccineStatusNotGiven(ctx context.Context, babyID, dose
 		Utime:  utime,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return 0, ErrDefault
 	}
 	_ = cache.Del(ctx, r.rdb, cache.VaccineListKey(babyID))
@@ -636,7 +630,7 @@ func (r *BabyRepo) UploadPhotos(ctx context.Context, babyID string, links []stri
 		Ctime:   now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	var items []PhotoRow
@@ -668,7 +662,7 @@ func (r *BabyRepo) DeletePhotos(ctx context.Context, babyID string, photoIDs []s
 		Column2: ids,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return 0, ErrDefault
 	}
 	return n, nil
@@ -687,7 +681,7 @@ func (r *BabyRepo) ListPhotos(ctx context.Context, babyID string, page, pageSize
 		Offset: int32(offset),
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, false, ErrDefault
 	}
 	var items []PhotoRow
@@ -717,7 +711,7 @@ func (r *BabyRepo) ListHeightCurveBetween(ctx context.Context, babyID string, fr
 		RecordTime_2: to,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]CurvePoint, 0, len(rows))
@@ -741,7 +735,7 @@ func (r *BabyRepo) ListWeightCurveBetween(ctx context.Context, babyID string, fr
 		RecordTime_2: to,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]CurvePoint, 0, len(rows))
@@ -765,7 +759,7 @@ func (r *BabyRepo) ListHeadCircumferenceCurveBetween(ctx context.Context, babyID
 		RecordTime_2: to,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]CurvePoint, 0, len(rows))
@@ -791,7 +785,7 @@ func (r *BabyRepo) StartSleep(ctx context.Context, babyID, userID string) (strin
 		UserID: uid,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return "", 0, ErrDefault
 	}
 	return row.SleepID, row.StartTime, nil
@@ -804,7 +798,7 @@ func (r *BabyRepo) StopSleep(ctx context.Context, sessionID string) (string, int
 	}
 	row, err := r.babyDao.StopSleep(ctx, sid)
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return "", 0, 0, 0, ErrDefault
 	}
 	return row.SleepID, row.StartTime, row.EndTime.Int64, row.Duration.Int64, nil
@@ -820,7 +814,7 @@ func (r *BabyRepo) ForceStopSleepWithCap(ctx context.Context, sessionID string, 
 		Duration: pgtype.Int8{Int64: capMs, Valid: true},
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return "", 0, 0, 0, ErrDefault
 	}
 	return row.SleepID, row.StartTime, row.EndTime.Int64, row.Duration.Int64, nil
@@ -842,7 +836,7 @@ func (r *BabyRepo) GetActiveSleep(ctx context.Context, babyID, userID string) (s
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", 0, nil
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return "", 0, ErrDefault
 	}
 	return row.SleepID, row.StartTime, nil
@@ -866,7 +860,7 @@ func (r *BabyRepo) ListSleepBetween(ctx context.Context, babyID string, from, to
 		StartTime: to,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]SleepRow, 0, len(rows))
@@ -898,7 +892,7 @@ func (r *BabyRepo) CreateFeeding(ctx context.Context, babyID, userID string, fee
 		Ctime:    now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return "", ErrDefault
 	}
 	return row.FeedingID, nil
@@ -921,7 +915,7 @@ func (r *BabyRepo) UpdateFeeding(ctx context.Context, babyID, feedingID string, 
 		Utime:     now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	return nil
@@ -938,7 +932,7 @@ func (r *BabyRepo) ListFeedingBetween(ctx context.Context, babyID string, from, 
 		FeedTime_2: to,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]FeedingRow, 0, len(rows))
@@ -973,7 +967,7 @@ func (r *BabyRepo) CreateDiaper(ctx context.Context, babyID, userID string, chan
 		Ctime:      now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return "", ErrDefault
 	}
 	return row.DiaperID, nil
@@ -999,7 +993,7 @@ func (r *BabyRepo) UpdateDiaper(ctx context.Context, babyID, diaperID string, di
 		Utime:      now,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return ErrDefault
 	}
 	return nil
@@ -1019,7 +1013,7 @@ func (r *BabyRepo) GetDiaperBetween(ctx context.Context, babyID string, from, to
 		if errors.Is(err, pgx.ErrNoRows) {
 			return DiaperRow{}, false, nil
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return DiaperRow{}, false, ErrDefault
 	}
 	return DiaperRow{
@@ -1044,7 +1038,7 @@ func (r *BabyRepo) ListDiaperBetween(ctx context.Context, babyID string, from, t
 		ChangeTime_2: to,
 	})
 	if err != nil {
-		r.logError(err)
+		r.log.Error(err)
 		return nil, ErrDefault
 	}
 	items := make([]DiaperRow, 0, len(rows))
@@ -1076,7 +1070,7 @@ func (r *BabyRepo) GetDailyStats(ctx context.Context, babyID string, from, to in
 		if errors.Is(err, pgx.ErrNoRows) {
 			return DailyStats{}, nil
 		}
-		r.logError(err)
+		r.log.Error(err)
 		return DailyStats{}, ErrDefault
 	}
 	return DailyStats{

@@ -52,14 +52,14 @@ func (w *OutboxWorker) Start(ctx context.Context) {
 
 func (w *OutboxWorker) publishBatch(ctx context.Context) {
 	if err := w.bus.DeclareTopicExchange(event.Exchange); err != nil {
-		w.logError(err)
+		w.log.Error(err)
 		return
 	}
 	now := time.Now().UnixMilli()
 	staleBefore := time.Now().Add(-constant.OutboxClaimTimeout).UnixMilli()
 	items, err := w.repo.ListPendingOutbox(ctx, now, staleBefore, constant.OutboxBatchSize)
 	if err != nil {
-		w.logError(err)
+		w.log.Error(err)
 		return
 	}
 	for _, item := range items {
@@ -80,15 +80,15 @@ func (w *OutboxWorker) publishOne(ctx context.Context, item repo.ChatOutboxEvent
 		Body:        []byte(item.Payload),
 	})
 	if err != nil {
-		w.logError(err)
+		w.log.Error(err)
 		nextRetryAt := time.Now().Add(outboxRetryDelay(item.Attempts + 1)).UnixMilli()
 		if err := w.repo.MarkOutboxFailed(ctx, item.ID, nextRetryAt, constant.OutboxMaxAttempts, now); err != nil {
-			w.logError(err)
+			w.log.Error(err)
 		}
 		return
 	}
 	if err := w.repo.MarkOutboxPublished(ctx, item.ID, now); err != nil {
-		w.logError(err)
+		w.log.Error(err)
 	}
 }
 
@@ -101,10 +101,4 @@ func outboxRetryDelay(attempt int32) time.Duration {
 		shift = 5
 	}
 	return constant.OutboxRetryBaseDelay * time.Duration(1<<shift)
-}
-
-func (w *OutboxWorker) logError(err error) {
-	if err != nil {
-		w.log.Error(err)
-	}
 }
