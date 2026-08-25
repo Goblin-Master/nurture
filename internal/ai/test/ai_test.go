@@ -3,22 +3,39 @@ package test
 import (
 	"context"
 	"fmt"
+	aiconstant "nurture/internal/ai/constant"
+	aidto "nurture/internal/ai/dto"
+	ailogic "nurture/internal/ai/logic"
+	airepo "nurture/internal/ai/repo"
 	"nurture/internal/config"
-	"nurture/internal/constant"
-	"nurture/internal/dto"
 	"nurture/internal/global"
-	"nurture/internal/logic"
 	"nurture/internal/pkg/jwtx"
-	"nurture/internal/repo"
-	"os"
+	"sync"
 	"testing"
 	"time"
 )
 
-func TestMain(m *testing.M) {
+var (
+	globalInitOnce  sync.Once
+	globalInitPanic any
+)
+
+func loadConfig(t *testing.T) {
+	t.Helper()
 	config.LoadConfig()
-	global.Init()
-	os.Exit(m.Run())
+}
+
+func initGlobal(t *testing.T) {
+	t.Helper()
+	globalInitOnce.Do(func() {
+		defer func() {
+			globalInitPanic = recover()
+		}()
+		global.Init()
+	})
+	if globalInitPanic != nil {
+		t.Fatalf("global.Init failed: %v", globalInitPanic)
+	}
 }
 
 func skipAIChatIntegration(t *testing.T) {
@@ -44,7 +61,10 @@ func skipAIVectorIntegration(t *testing.T) {
 }
 
 func TestStreamChat(t *testing.T) {
+	loadConfig(t)
 	skipAIChatIntegration(t)
+	initGlobal(t)
+
 	// 1. 生成测试 Token (虽然这个测试是直接调用 pkg 方法不涉及 Handler，但为了符合规范演示 Token 生成)
 	token, err := jwtx.GenTestToken("test_user_id", jwtx.COMMON_USER)
 	if err != nil {
@@ -53,10 +73,11 @@ func TestStreamChat(t *testing.T) {
 	t.Logf("Generated Test Token: %s", token)
 
 	// 2. 初始化 Logic
-	commonLogic := logic.NewCommonLogic()
+	aiRepo := airepo.NewAIRepo(global.AIX, global.RDB, global.Log)
+	aiLogic := ailogic.NewAILogic(aiRepo, global.AIX, config.Conf.AI, nil, config.Conf.DB.Enable && global.DB != nil, global.Log)
 
 	// 3. 准备请求数据 (SessionID 为空，测试自动生成)
-	req := dto.ChatStreamReq{
+	req := aidto.ChatStreamReq{
 		SessionID: "",
 		Message:   "你好，请用一句话介绍一下你自己，并告诉我今天是星期几",
 	}
@@ -68,7 +89,7 @@ func TestStreamChat(t *testing.T) {
 	// 4. 调用 Logic 层 ChatStream
 	userID := "test_user_id_from_token"
 
-	err = commonLogic.ChatStream(context.Background(), userID, req, func(event dto.SSEEvent) {
+	err = aiLogic.ChatStream(context.Background(), userID, req, func(event aidto.SSEEvent) {
 		// 实时打印每个 chunk
 		if event.Type == "content" {
 			fmt.Print(event.Content)
@@ -83,7 +104,10 @@ func TestStreamChat(t *testing.T) {
 }
 
 func TestEmbedding(t *testing.T) {
+	loadConfig(t)
 	skipAIEmbeddingIntegration(t)
+	initGlobal(t)
+
 	// 1. 测试文本
 	text := "小王是个大混蛋"
 	fmt.Printf("\n=== Testing Embedding (Model: %s) ===\n", config.Conf.AI.Embedding.Model)
@@ -100,15 +124,18 @@ func TestEmbedding(t *testing.T) {
 	if len(vector) == 0 {
 		t.Error("Vector is empty")
 	}
-	t.Logf("Vector (first 5 elements): %v", vector[:5])
+	preview := min(5, len(vector))
+	t.Logf("Vector (first %d elements): %v", preview, vector[:preview])
 }
 
 func TestSimilaritySearch(t *testing.T) {
+	loadConfig(t)
 	skipAIVectorIntegration(t)
+	initGlobal(t)
 
-	aiRepo := repo.NewAIRepo()
+	aiRepo := airepo.NewAIRepo(global.AIX, global.RDB, global.Log)
 	userID := "test_user_id"
-	collectionName := fmt.Sprintf(constant.COLLECTION_USER_PREFIX, userID)
+	collectionName := fmt.Sprintf(aiconstant.CollectionUserPrefix, userID)
 
 	// 1. 添加文档
 	content := "小王是个大混蛋"

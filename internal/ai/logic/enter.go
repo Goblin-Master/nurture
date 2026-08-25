@@ -5,84 +5,124 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	babyrepo "nurture/internal/baby/repo"
+	aiconstant "nurture/internal/ai/constant"
+	aidto "nurture/internal/ai/dto"
+	airepo "nurture/internal/ai/repo"
 	"nurture/internal/config"
-	"nurture/internal/constant"
-	"nurture/internal/dto"
-	"nurture/internal/global"
 	"nurture/internal/pkg/aix"
-	"nurture/internal/repo"
 	"strings"
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
+	"go.uber.org/zap"
 )
 
-type ICommonLogic interface {
-	ChatStream(ctx context.Context, userID string, req dto.ChatStreamReq, streamFunc func(event dto.SSEEvent)) error
-	UploadKnowledge(ctx context.Context, userID string, req dto.KnowledgeUploadReq) error
-	GetChatHistory(ctx context.Context, userID string, req dto.ChatHistoryReq) (dto.ChatHistoryResp, error)
-	GrowthAnalysisStream(ctx context.Context, userID string, req dto.GrowthAnalysisReq, streamFunc func(event dto.SSEEvent)) error
-	GrowthReport(ctx context.Context, userID string, req dto.GrowthReportReq) (dto.GrowthReportResp, error)
+type BabyGrowthReader interface {
+	GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (BabyProfile, error)
+	ListGrowthRecordsByBabyIDBetween(ctx context.Context, babyID string, from, to int64) ([]GrowthRecord, error)
 }
 
-type CommonLogic struct {
-	aiRepo   *repo.AIRepo
-	babyRepo *babyrepo.BabyRepo
+type BabyProfile struct {
+	BabyID   string
+	Name     string
+	Gender   string
+	Birthday int64
+	Avatar   string
 }
 
-func NewCommonLogic() *CommonLogic {
-	return &CommonLogic{
-		aiRepo:   repo.NewAIRepo(),
-		babyRepo: babyrepo.NewBabyRepo(global.DB, global.RDB, global.Log),
+type GrowthRecord struct {
+	RecordTime        int64
+	Height            *float64
+	Weight            *float64
+	HeadCircumference *float64
+	Remark            string
+}
+
+type IAILogic interface {
+	ChatStream(ctx context.Context, userID string, req aidto.ChatStreamReq, streamFunc func(event aidto.SSEEvent)) error
+	UploadKnowledge(ctx context.Context, userID string, req aidto.KnowledgeUploadReq) error
+	GetChatHistory(ctx context.Context, userID string, req aidto.ChatHistoryReq) (aidto.ChatHistoryResp, error)
+	GrowthAnalysisStream(ctx context.Context, userID string, req aidto.GrowthAnalysisReq, streamFunc func(event aidto.SSEEvent)) error
+	GrowthReport(ctx context.Context, userID string, req aidto.GrowthReportReq) (aidto.GrowthReportResp, error)
+}
+
+type AILogic struct {
+	ai           *aix.AIX
+	aiConfig     config.AI
+	aiRepo       airepo.IAIRepo
+	growthReader BabyGrowthReader
+	dbEnabled    bool
+	log          *zap.SugaredLogger
+}
+
+func NewAILogic(aiRepo airepo.IAIRepo, ai *aix.AIX, cfg config.AI, growthReader BabyGrowthReader, dbEnabled bool, log *zap.SugaredLogger) *AILogic {
+	return &AILogic{
+		ai:           ai,
+		aiConfig:     cfg,
+		aiRepo:       aiRepo,
+		growthReader: growthReader,
+		dbEnabled:    dbEnabled,
+		log:          log,
 	}
 }
 
-var _ ICommonLogic = (*CommonLogic)(nil)
+var _ IAILogic = (*AILogic)(nil)
 
-func chatAvailable() bool {
-	return config.Conf.AI.Chat.Enable && global.AIX != nil && global.AIX.ChatEnabled()
+func (l *AILogic) chatAvailable() bool {
+	return l.aiConfig.Chat.Enable && l.ai != nil && l.ai.ChatEnabled()
 }
 
-func embeddingAvailable() bool {
-	return config.Conf.AI.Embedding.Enable && global.AIX != nil && global.AIX.EmbeddingEnabled()
+func (l *AILogic) embeddingAvailable() bool {
+	return l.aiConfig.Embedding.Enable && l.ai != nil && l.ai.EmbeddingEnabled()
 }
 
-func dbAvailable() bool {
-	return config.Conf.DB.Enable && global.DB != nil
+func (l *AILogic) growthAvailable() bool {
+	return l.dbEnabled && l.growthReader != nil
 }
 
-func streamAIUnavailable(streamFunc func(event dto.SSEEvent)) {
+func (l *AILogic) logError(err error) {
+	if l.log != nil {
+		l.log.Error(err)
+	}
+}
+
+func (l *AILogic) logErrorf(format string, args ...any) {
+	if l.log != nil {
+		l.log.Errorf(format, args...)
+	}
+}
+
+func streamAIUnavailable(streamFunc func(event aidto.SSEEvent)) {
 	if streamFunc == nil {
 		return
 	}
-	streamFunc(dto.SSEEvent{
-		Type:  constant.SSE_TYPE_ERROR,
+	streamFunc(aidto.SSEEvent{
+		Type:  aiconstant.SSETypeError,
 		Error: ErrChatStream.Error(),
 	})
 }
 
 // ChatStream 流式对话
-func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.ChatStreamReq,
-	streamFunc func(event dto.SSEEvent)) error {
-	if !chatAvailable() {
+func (l *AILogic) ChatStream(ctx context.Context, userID string, req aidto.ChatStreamReq,
+	streamFunc func(event aidto.SSEEvent)) error {
+	if !l.chatAvailable() {
 		streamAIUnavailable(streamFunc)
 		return ErrChatStream
 	}
 
 	// 1. 获取最近 3 轮对话历史（6 条消息）作为 AI 上下文
-	history, err := l.aiRepo.GetRecentHistory(ctx, userID, req.SessionID, constant.AI_CONTEXT_MESSAGES)
+	history, err := l.aiRepo.GetRecentHistory(ctx, userID, req.SessionID, aiconstant.ContextMessages)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		// 历史获取失败不阻断，继续对话
 		history = []aix.ChatMessage{}
 	}
 
 	var extraContext string
 	if req.AutoContext && strings.TrimSpace(req.BabyID) != "" {
-		if !dbAvailable() {
-			streamFunc(dto.SSEEvent{
-				Type:  constant.SSE_TYPE_ERROR,
+		if !l.growthAvailable() {
+			streamFunc(aidto.SSEEvent{
+				Type:  aiconstant.SSETypeError,
 				Error: ErrDatabaseUnavailable.Error(),
 			})
 			return ErrDatabaseUnavailable
@@ -91,70 +131,54 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 		if days <= 0 || days > 180 {
 			days = 30
 		}
-		b, err := l.babyRepo.GetBabyByIDAndUser(ctx, req.BabyID, userID)
+		b, err := l.growthReader.GetBabyByIDAndUser(ctx, req.BabyID, userID)
 		if err != nil {
-			if errors.Is(err, babyrepo.ErrBabyNotExist) {
+			if errors.Is(err, ErrBabyNotExist) {
 				return ErrBabyNotExist
 			}
-			global.Log.Error(err)
+			l.logError(err)
 			return ErrDefault
 		}
 		to := time.Now().UnixMilli()
 		from := to - int64(days)*24*60*60*1000
-		rows, err := l.babyRepo.ListGrowthRecordsByBabyIDBetween(ctx, req.BabyID, from, to)
+		rows, err := l.growthReader.ListGrowthRecordsByBabyIDBetween(ctx, req.BabyID, from, to)
 		if err != nil {
-			global.Log.Error(err)
+			l.logError(err)
 			return ErrDefault
 		}
-		items := make([]dto.GrowthReportGrowthItem, 0, len(rows))
-		for _, r := range rows {
-			it := dto.GrowthReportGrowthItem{Time: r.RecordTime}
-			if r.Height.Valid {
-				v := r.Height.Float64
-				it.Height = &v
-			}
-			if r.Weight.Valid {
-				v := r.Weight.Float64
-				it.Weight = &v
-			}
-			if r.HeadCircumference.Valid {
-				v := r.HeadCircumference.Float64
-				it.HeadCircumference = &v
-			}
-			items = append(items, it)
-		}
+		items := growthItemsFromRecords(rows)
 		totalPoints := len(items)
 		truncated := false
 		if len(items) > 60 {
 			items = items[len(items)-60:]
 			truncated = true
 		}
-		data := dto.GrowthReportData{
-			Baby: dto.GrowthReportBaby{
-				BabyID:   b.BabyID.String(),
+		data := aidto.GrowthReportData{
+			Baby: aidto.GrowthReportBaby{
+				BabyID:   b.BabyID,
 				Name:     b.Name,
 				Gender:   b.Gender,
 				Birthday: b.Birthday,
 				Avatar:   b.Avatar,
 			},
-			Range: dto.GrowthReportRange{
+			Range: aidto.GrowthReportRange{
 				From: from,
 				To:   to,
 				Days: days,
 			},
-			Growth: dto.GrowthReportGrowth{
+			Growth: aidto.GrowthReportGrowth{
 				Items: items,
 			},
-			Analysis: dto.GrowthReportAnalysis{
-				Height:            analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.Height }),
-				Weight:            analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.Weight }),
-				HeadCircumference: analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.HeadCircumference }),
+			Analysis: aidto.GrowthReportAnalysis{
+				Height:            analyzeGrowthMetric(items, func(it aidto.GrowthReportGrowthItem) *float64 { return it.Height }),
+				Weight:            analyzeGrowthMetric(items, func(it aidto.GrowthReportGrowthItem) *float64 { return it.Weight }),
+				HeadCircumference: analyzeGrowthMetric(items, func(it aidto.GrowthReportGrowthItem) *float64 { return it.HeadCircumference }),
 			},
 		}
 		payload := struct {
-			Data        dto.GrowthReportData `json:"data"`
-			TotalPoints int                  `json:"total_points"`
-			Truncated   bool                 `json:"truncated"`
+			Data        aidto.GrowthReportData `json:"data"`
+			TotalPoints int                    `json:"total_points"`
+			Truncated   bool                   `json:"truncated"`
 		}{
 			Data:        data,
 			TotalPoints: totalPoints,
@@ -163,7 +187,7 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 		if bts, e := json.Marshal(payload); e == nil {
 			extraContext = string(bts)
 		} else {
-			global.Log.Error(e)
+			l.logError(e)
 		}
 	}
 
@@ -173,16 +197,16 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 	collections := l.buildCollections(userID)
 
 	// 如果有选中的知识库，则进行检索
-	if len(collections) > 0 && embeddingAvailable() {
-		topK := config.Conf.AI.KBConfig.TopK
+	if len(collections) > 0 && l.embeddingAvailable() {
+		topK := l.aiConfig.KBConfig.TopK
 		if topK <= 0 {
-			topK = config.Conf.AI.Retrieval.DefaultTopK
+			topK = l.aiConfig.Retrieval.DefaultTopK
 		}
 
 		docs, e := l.aiRepo.SimilaritySearch(ctx, req.Message, collections, topK)
 		if e != nil {
 			// 检索失败记录日志，但不阻断对话，仅降级为普通对话
-			global.Log.Errorf("RAG SimilaritySearch failed: %v", e)
+			l.logErrorf("RAG SimilaritySearch failed: %v", e)
 		}
 		if len(docs) > 0 {
 			// 拼接检索结果
@@ -195,19 +219,19 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 	}
 
 	// 3. 构建消息
-	messages := global.AIX.BuildMessages(history, req.Message, req.Images, ragContext, extraContext)
+	messages := l.ai.BuildMessages(history, req.Message, req.Images, ragContext, extraContext)
 
 	// 4. 流式对话
-	fullResponse, err := global.AIX.StreamChat(ctx, messages, func(chunk string) {
-		streamFunc(dto.SSEEvent{
-			Type:    constant.SSE_TYPE_CONTENT,
+	fullResponse, err := l.ai.StreamChat(ctx, messages, func(chunk string) {
+		streamFunc(aidto.SSEEvent{
+			Type:    aiconstant.SSETypeContent,
 			Content: chunk,
 		})
 	})
 	if err != nil {
-		global.Log.Error(err)
-		streamFunc(dto.SSEEvent{
-			Type:  constant.SSE_TYPE_ERROR,
+		l.logError(err)
+		streamFunc(aidto.SSEEvent{
+			Type:  aiconstant.SSETypeError,
 			Error: ErrChatStream.Error(),
 		})
 		return ErrChatStream
@@ -228,8 +252,8 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 	})
 
 	// 6. 发送完成事件
-	streamFunc(dto.SSEEvent{
-		Type:      constant.SSE_TYPE_DONE,
+	streamFunc(aidto.SSEEvent{
+		Type:      aiconstant.SSETypeDone,
 		SessionID: req.SessionID,
 	})
 
@@ -237,47 +261,49 @@ func (l *CommonLogic) ChatStream(ctx context.Context, userID string, req dto.Cha
 }
 
 // UploadKnowledge 上传知识库
-func (l *CommonLogic) UploadKnowledge(ctx context.Context, userID string, req dto.KnowledgeUploadReq) error {
-	if !embeddingAvailable() {
-		return ErrKnowledgeUpload
-	}
-	if !dbAvailable() {
-		return ErrDatabaseUnavailable
-	}
-
-	// 构建 CollectionName
+func (l *AILogic) UploadKnowledge(ctx context.Context, userID string, req aidto.KnowledgeUploadReq) error {
 	var collectionName string
 	switch req.SpaceType {
-	case constant.SPACE_TYPE_PRIVATE:
-		collectionName = fmt.Sprintf(constant.COLLECTION_USER_PREFIX, userID)
-	case constant.SPACE_TYPE_PUBLIC:
-		collectionName = constant.COLLECTION_PUBLIC
+	case aiconstant.SpaceTypePrivate:
+		collectionName = fmt.Sprintf(aiconstant.CollectionUserPrefix, userID)
+	case aiconstant.SpaceTypePublic:
+		collectionName = aiconstant.CollectionPublic
 	default:
 		return ErrInvalidSpaceType
+	}
+
+	if !l.embeddingAvailable() || l.aiRepo == nil {
+		return ErrKnowledgeUpload
+	}
+	if !l.dbEnabled {
+		return ErrDatabaseUnavailable
 	}
 
 	// 添加文档
 	err := l.aiRepo.AddDocument(ctx, collectionName, req.Content)
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		return ErrKnowledgeUpload
 	}
 	return nil
 }
 
 // GetChatHistory 获取完整对话历史（供前端展示）
-func (l *CommonLogic) GetChatHistory(ctx context.Context, userID string, req dto.ChatHistoryReq) (dto.ChatHistoryResp, error) {
-	var resp dto.ChatHistoryResp
-
-	history, err := l.aiRepo.GetFullHistory(ctx, userID, req.SessionID)
-	if err != nil {
-		global.Log.Error(err)
+func (l *AILogic) GetChatHistory(ctx context.Context, userID string, req aidto.ChatHistoryReq) (aidto.ChatHistoryResp, error) {
+	var resp aidto.ChatHistoryResp
+	if l.aiRepo == nil {
 		return resp, ErrDefault
 	}
 
-	resp.Messages = make([]dto.ChatMessageItem, len(history))
+	history, err := l.aiRepo.GetFullHistory(ctx, userID, req.SessionID)
+	if err != nil {
+		l.logError(err)
+		return resp, ErrDefault
+	}
+
+	resp.Messages = make([]aidto.ChatMessageItem, len(history))
 	for i, msg := range history {
-		resp.Messages[i] = dto.ChatMessageItem{
+		resp.Messages[i] = aidto.ChatMessageItem{
 			Role:      msg.Role,
 			Content:   msg.Content,
 			Images:    msg.Images,
@@ -288,24 +314,23 @@ func (l *CommonLogic) GetChatHistory(ctx context.Context, userID string, req dto
 	return resp, nil
 }
 
-func (l *CommonLogic) buildCollections(userID string) []string {
+func (l *AILogic) buildCollections(userID string) []string {
 	var collections []string
-	cfg := config.Conf.AI.KBConfig
+	cfg := l.aiConfig.KBConfig
 	if !cfg.Enable {
 		return collections
 	}
 	if cfg.SearchPrivate {
-		collections = append(collections, fmt.Sprintf(constant.COLLECTION_USER_PREFIX, userID))
+		collections = append(collections, fmt.Sprintf(aiconstant.CollectionUserPrefix, userID))
 	}
 	if cfg.SearchPublic {
-		collections = append(collections, constant.COLLECTION_PUBLIC)
+		collections = append(collections, aiconstant.CollectionPublic)
 	}
 	return collections
 }
 
 // GrowthAnalysisStream 成长曲线分析
-func (l *CommonLogic) GrowthAnalysisStream(ctx context.Context, userID string, req dto.GrowthAnalysisReq, streamFunc func(event dto.SSEEvent)) error {
-	// 1. 验证单位
+func (l *AILogic) GrowthAnalysisStream(ctx context.Context, userID string, req aidto.GrowthAnalysisReq, streamFunc func(event aidto.SSEEvent)) error {
 	// 1. 验证单位
 	switch req.Metric {
 	case "height", "head_circumference":
@@ -317,7 +342,7 @@ func (l *CommonLogic) GrowthAnalysisStream(ctx context.Context, userID string, r
 			return fmt.Errorf("invalid unit for %s: expected kg, got %s", req.Metric, req.Unit)
 		}
 	}
-	if !chatAvailable() {
+	if !l.chatAvailable() {
 		streamAIUnavailable(streamFunc)
 		return ErrChatStream
 	}
@@ -357,36 +382,36 @@ func (l *CommonLogic) GrowthAnalysisStream(ctx context.Context, userID string, r
 		llms.TextParts(llms.ChatMessageTypeHuman, prompt),
 	}
 
-	_, err := global.AIX.StreamChat(ctx, messages, func(chunk string) {
-		streamFunc(dto.SSEEvent{
-			Type:    constant.SSE_TYPE_CONTENT,
+	_, err := l.ai.StreamChat(ctx, messages, func(chunk string) {
+		streamFunc(aidto.SSEEvent{
+			Type:    aiconstant.SSETypeContent,
 			Content: chunk,
 		})
 	})
 
 	if err != nil {
-		global.Log.Error(err)
-		streamFunc(dto.SSEEvent{
-			Type:  constant.SSE_TYPE_ERROR,
+		l.logError(err)
+		streamFunc(aidto.SSEEvent{
+			Type:  aiconstant.SSETypeError,
 			Error: ErrChatStream.Error(),
 		})
 		return ErrChatStream
 	}
 
 	// 4. 完成
-	streamFunc(dto.SSEEvent{
-		Type: constant.SSE_TYPE_DONE,
+	streamFunc(aidto.SSEEvent{
+		Type: aiconstant.SSETypeDone,
 	})
 
 	return nil
 }
 
-func (l *CommonLogic) GrowthReport(ctx context.Context, userID string, req dto.GrowthReportReq) (dto.GrowthReportResp, error) {
-	var resp dto.GrowthReportResp
+func (l *AILogic) GrowthReport(ctx context.Context, userID string, req aidto.GrowthReportReq) (aidto.GrowthReportResp, error) {
+	var resp aidto.GrowthReportResp
 	if strings.TrimSpace(req.BabyID) == "" {
 		return resp, ErrParamsType
 	}
-	if !dbAvailable() {
+	if !l.growthAvailable() {
 		return resp, ErrDatabaseUnavailable
 	}
 	days := req.RangeDays
@@ -396,77 +421,47 @@ func (l *CommonLogic) GrowthReport(ctx context.Context, userID string, req dto.G
 	to := time.Now().UnixMilli()
 	from := time.Now().AddDate(0, 0, -days).UnixMilli()
 
-	b, err := l.babyRepo.GetBabyByIDAndUser(ctx, req.BabyID, userID)
+	b, err := l.growthReader.GetBabyByIDAndUser(ctx, req.BabyID, userID)
 	if err != nil {
-		if errors.Is(err, babyrepo.ErrBabyNotExist) {
+		if errors.Is(err, ErrBabyNotExist) {
 			return resp, ErrBabyNotExist
 		}
-		global.Log.Error(err)
+		l.logError(err)
 		return resp, ErrDefault
 	}
-	rows, err := l.babyRepo.ListGrowthRecordsByBabyIDBetween(ctx, req.BabyID, from, to)
+	rows, err := l.growthReader.ListGrowthRecordsByBabyIDBetween(ctx, req.BabyID, from, to)
 	if err != nil {
-		if errors.Is(err, repo.ErrDefault) {
-			global.Log.Error(err)
-		}
+		l.logError(err)
 		return resp, ErrDefault
 	}
 
-	items := make([]dto.GrowthReportGrowthItem, 0, len(rows))
-	for _, r := range rows {
-		var h *float64
-		if r.Height.Valid {
-			v := r.Height.Float64
-			h = &v
-		}
-		var w *float64
-		if r.Weight.Valid {
-			v := r.Weight.Float64
-			w = &v
-		}
-		var hc *float64
-		if r.HeadCircumference.Valid {
-			v := r.HeadCircumference.Float64
-			hc = &v
-		}
-		remark := ""
-		if r.Remark.Valid {
-			remark = r.Remark.String
-		}
-		items = append(items, dto.GrowthReportGrowthItem{
-			Time:              r.RecordTime,
-			Height:            h,
-			Weight:            w,
-			HeadCircumference: hc,
-			Remark:            remark,
-		})
-	}
+	items := growthItemsFromRecords(rows)
 
 	resp.Markdown = ""
-	resp.Data = dto.GrowthReportData{
-		Baby: dto.GrowthReportBaby{
-			BabyID:   b.BabyID.String(),
+	resp.Data = aidto.GrowthReportData{
+		Baby: aidto.GrowthReportBaby{
+			BabyID:   b.BabyID,
 			Name:     b.Name,
 			Gender:   b.Gender,
 			Birthday: b.Birthday,
 			Avatar:   b.Avatar,
 		},
-		Range: dto.GrowthReportRange{
+		Range: aidto.GrowthReportRange{
 			From: from,
 			To:   to,
 			Days: days,
 		},
-		Growth: dto.GrowthReportGrowth{
+		Growth: aidto.GrowthReportGrowth{
 			Items: items,
 		},
-		Analysis: dto.GrowthReportAnalysis{
-			Height:            analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.Height }),
-			Weight:            analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.Weight }),
-			HeadCircumference: analyzeGrowthMetric(items, func(it dto.GrowthReportGrowthItem) *float64 { return it.HeadCircumference }),
+		Analysis: aidto.GrowthReportAnalysis{
+			Height:            analyzeGrowthMetric(items, func(it aidto.GrowthReportGrowthItem) *float64 { return it.Height }),
+			Weight:            analyzeGrowthMetric(items, func(it aidto.GrowthReportGrowthItem) *float64 { return it.Weight }),
+			HeadCircumference: analyzeGrowthMetric(items, func(it aidto.GrowthReportGrowthItem) *float64 { return it.HeadCircumference }),
 		},
 	}
 
-	if !chatAvailable() {
+	if !l.chatAvailable() {
 		resp.Markdown = buildGrowthReportFallbackMarkdown(resp.Data, req.Language)
 		return resp, nil
 	}
@@ -476,9 +471,9 @@ func (l *CommonLogic) GrowthReport(ctx context.Context, userID string, req dto.G
 		llms.TextParts(llms.ChatMessageTypeSystem, systemPrompt),
 		llms.TextParts(llms.ChatMessageTypeHuman, userPrompt),
 	}
-	md, err := global.AIX.StreamChat(ctx, messages, func(chunk string) {})
+	md, err := l.ai.StreamChat(ctx, messages, func(chunk string) {})
 	if err != nil {
-		global.Log.Error(err)
+		l.logError(err)
 		resp.Markdown = buildGrowthReportFallbackMarkdown(resp.Data, req.Language)
 		return resp, nil
 	}
@@ -489,7 +484,7 @@ func (l *CommonLogic) GrowthReport(ctx context.Context, userID string, req dto.G
 	return resp, nil
 }
 
-func buildGrowthReportPrompts(data dto.GrowthReportData, language string) (string, string) {
+func buildGrowthReportPrompts(data aidto.GrowthReportData, language string) (string, string) {
 	lang := strings.TrimSpace(strings.ToLower(language))
 	if lang == "" {
 		lang = "zh"
@@ -531,7 +526,7 @@ JSON:
 	return systemPrompt, userPrompt
 }
 
-func buildGrowthReportFallbackMarkdown(data dto.GrowthReportData, language string) string {
+func buildGrowthReportFallbackMarkdown(data aidto.GrowthReportData, language string) string {
 	lang := strings.TrimSpace(strings.ToLower(language))
 	if lang == "" {
 		lang = "zh"
@@ -565,7 +560,21 @@ func fmtFloatPtr(v *float64) string {
 	return fmt.Sprintf("%.2f", *v)
 }
 
-func analyzeGrowthMetric(items []dto.GrowthReportGrowthItem, pick func(it dto.GrowthReportGrowthItem) *float64) dto.GrowthMetricAnalysis {
+func growthItemsFromRecords(records []GrowthRecord) []aidto.GrowthReportGrowthItem {
+	items := make([]aidto.GrowthReportGrowthItem, 0, len(records))
+	for _, r := range records {
+		items = append(items, aidto.GrowthReportGrowthItem{
+			Time:              r.RecordTime,
+			Height:            r.Height,
+			Weight:            r.Weight,
+			HeadCircumference: r.HeadCircumference,
+			Remark:            r.Remark,
+		})
+	}
+	return items
+}
+
+func analyzeGrowthMetric(items []aidto.GrowthReportGrowthItem, pick func(it aidto.GrowthReportGrowthItem) *float64) aidto.GrowthMetricAnalysis {
 	var firstTime int64
 	var lastTime int64
 	var firstVal float64
@@ -590,7 +599,7 @@ func analyzeGrowthMetric(items []dto.GrowthReportGrowthItem, pick func(it dto.Gr
 		hasLast = true
 	}
 
-	a := dto.GrowthMetricAnalysis{
+	a := aidto.GrowthMetricAnalysis{
 		Points:    points,
 		FirstTime: firstTime,
 		LastTime:  lastTime,
