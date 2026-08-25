@@ -19,6 +19,12 @@ type consumeTopology struct {
 	MainQueueArgs  amqp.Table
 }
 
+type queueOptions struct {
+	durable    bool
+	autoDelete bool
+	exclusive  bool
+}
+
 type discardError struct {
 	err error
 }
@@ -64,6 +70,21 @@ func newConsumeTopology(cfg ConsumeConfig) consumeTopology {
 		MainQueueArgs: amqp.Table{
 			"x-dead-letter-exchange": retryName,
 		},
+	}
+}
+
+func consumeQueueOptions(cfg ConsumeConfig) queueOptions {
+	if cfg.DurableQueue {
+		return queueOptions{
+			durable:    true,
+			autoDelete: false,
+			exclusive:  false,
+		}
+	}
+	return queueOptions{
+		durable:    false,
+		autoDelete: true,
+		exclusive:  true,
 	}
 }
 

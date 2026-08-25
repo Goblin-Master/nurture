@@ -58,6 +58,34 @@ func TestConsumeTopologyRetryDisabledByDefault(t *testing.T) {
 	}
 }
 
+func TestConsumeQueueOptionsDefaultToEphemeralExclusive(t *testing.T) {
+	options := consumeQueueOptions(ConsumeConfig{Queue: "chat.event.node.1"})
+
+	if options.durable {
+		t.Fatal("durable = true, want false")
+	}
+	if !options.autoDelete {
+		t.Fatal("autoDelete = false, want true")
+	}
+	if !options.exclusive {
+		t.Fatal("exclusive = false, want true")
+	}
+}
+
+func TestConsumeQueueOptionsSupportDurableSharedQueue(t *testing.T) {
+	options := consumeQueueOptions(ConsumeConfig{Queue: "baby.partner.bound", DurableQueue: true})
+
+	if !options.durable {
+		t.Fatal("durable = false, want true")
+	}
+	if options.autoDelete {
+		t.Fatal("autoDelete = true, want false")
+	}
+	if options.exclusive {
+		t.Fatal("exclusive = true, want false")
+	}
+}
+
 func TestDeliveryAttemptUsesXDeathForMainQueue(t *testing.T) {
 	headers := amqp.Table{
 		"x-death": []any{

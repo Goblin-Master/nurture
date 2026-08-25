@@ -29,11 +29,12 @@ type RetryConfig struct {
 }
 
 type ConsumeConfig struct {
-	Exchange    string
-	Queue       string
-	Consumer    string
-	RoutingKeys []string
-	Retry       RetryConfig
+	Exchange     string
+	Queue        string
+	Consumer     string
+	RoutingKeys  []string
+	Retry        RetryConfig
+	DurableQueue bool
 }
 
 type Delivery struct {
@@ -141,7 +142,15 @@ func (c *Client) Consume(ctx context.Context, cfg ConsumeConfig, handle func(con
 			return err
 		}
 	}
-	q, err := ch.QueueDeclare(cfg.Queue, false, true, true, false, topology.MainQueueArgs)
+	queueOptions := consumeQueueOptions(cfg)
+	q, err := ch.QueueDeclare(
+		cfg.Queue,
+		queueOptions.durable,
+		queueOptions.autoDelete,
+		queueOptions.exclusive,
+		false,
+		topology.MainQueueArgs,
+	)
 	if err != nil {
 		return err
 	}
