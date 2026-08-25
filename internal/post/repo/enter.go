@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"nurture/internal/pkg/aix"
+	"nurture/internal/pkg/zapx"
 	postconstant "nurture/internal/post/constant"
 	"nurture/internal/post/repo/cache"
 	"nurture/internal/post/repo/dao"
@@ -99,7 +100,7 @@ func NewPostRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger, ai
 		db:  db,
 		dao: dao.New(db),
 		rdb: rdb,
-		log: log,
+		log: zapx.OrNop(log),
 		ai:  ai,
 	}
 }
@@ -107,7 +108,7 @@ func NewPostRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger, ai
 var _ IPostRepo = (*PostRepo)(nil)
 
 func (r *PostRepo) logError(err error) {
-	if r.log != nil {
+	if err != nil {
 		r.log.Error(err)
 	}
 }

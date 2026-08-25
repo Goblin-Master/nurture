@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"nurture/internal/config"
 	"nurture/internal/file/constant"
+	"nurture/internal/pkg/zapx"
 	"path/filepath"
 
 	"github.com/minio/minio-go/v7"
@@ -34,7 +35,7 @@ func NewFileLogic(storage ObjectStorage, cfg config.Minio, log *zap.SugaredLogge
 	return &FileLogic{
 		storage: storage,
 		config:  cfg,
-		log:     log,
+		log:     zapx.OrNop(log),
 	}
 }
 
@@ -53,17 +54,13 @@ func (l *FileLogic) Upload(ctx context.Context, file multipart.File, header *mul
 
 	hash := md5.New()
 	if _, err := io.Copy(hash, file); err != nil {
-		if l.log != nil {
-			l.log.Error(err)
-		}
+		l.log.Error(err)
 		return "", ErrFileRead
 	}
 	fileHash := hex.EncodeToString(hash.Sum(nil))
 
 	if _, err := file.Seek(0, 0); err != nil {
-		if l.log != nil {
-			l.log.Error(err)
-		}
+		l.log.Error(err)
 		return "", ErrFileRead
 	}
 
@@ -78,9 +75,7 @@ func (l *FileLogic) Upload(ctx context.Context, file multipart.File, header *mul
 		ContentType: header.Header.Get("Content-Type"),
 	})
 	if err != nil {
-		if l.log != nil {
-			l.log.Error(err)
-		}
+		l.log.Error(err)
 		return "", ErrFileUpload
 	}
 	return url, nil

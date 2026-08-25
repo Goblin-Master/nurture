@@ -74,6 +74,19 @@ func NewEmailX() *EmailX {
 }
 ```
 
+### 日志依赖
+
+需要保存 `*zap.SugaredLogger` 的结构体，应在构造函数中用 `zapx.OrNop(log)` 兜底，保证对象内部 logger 永远可用。业务方法里不要到处判断 `log != nil`。
+
+```go
+func NewUserLogic(userRepo repo.IUserRepo, log *zap.SugaredLogger) *UserLogic {
+    return &UserLogic{
+        userRepo: userRepo,
+        log:      zapx.OrNop(log),
+    }
+}
+```
+
 ### pkg 脚本资源
 
 pkg 自己使用的 Lua、SQL 片段、模板等脚本资源必须放在当前 pkg 的 `scripts/` 目录下，并通过 `go:embed` 嵌入代码。不要把多行脚本直接内联在 `enter.go` 或业务方法里。

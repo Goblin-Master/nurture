@@ -8,6 +8,7 @@ import (
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/passwordx"
 	"nurture/internal/pkg/smsx"
+	"nurture/internal/pkg/zapx"
 	userconstant "nurture/internal/user/constant"
 	"nurture/internal/user/dto"
 	"nurture/internal/user/repo"
@@ -77,22 +78,20 @@ func NewUserLogic(userRepo repo.IUserRepo, email EmailSender, sms SMSSender, bab
 		email:      email,
 		sms:        sms,
 		babySyncer: babySyncer,
-		log:        log,
+		log:        zapx.OrNop(log),
 	}
 }
 
 var _ IUserLogic = (*UserLogic)(nil)
 
 func (ul *UserLogic) logError(err error) {
-	if ul.log != nil {
+	if err != nil {
 		ul.log.Error(err)
 	}
 }
 
 func (ul *UserLogic) logWarnf(template string, args ...interface{}) {
-	if ul.log != nil {
-		ul.log.Warnf(template, args...)
-	}
+	ul.log.Warnf(template, args...)
 }
 
 func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error) {

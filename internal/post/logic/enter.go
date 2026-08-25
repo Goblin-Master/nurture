@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"nurture/internal/pkg/zapx"
 	"nurture/internal/post/dto"
 	"nurture/internal/post/repo"
 	"strings"
@@ -62,14 +63,14 @@ func NewPostLogic(postRepo repo.IPostRepo, followReader FollowReader, log *zap.S
 	return &PostLogic{
 		postRepo:     postRepo,
 		followReader: followReader,
-		log:          log,
+		log:          zapx.OrNop(log),
 	}
 }
 
 var _ IPostLogic = (*PostLogic)(nil)
 
 func (l *PostLogic) logError(err error) {
-	if l.log != nil {
+	if err != nil {
 		l.log.Error(err)
 	}
 }

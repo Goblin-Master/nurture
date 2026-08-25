@@ -10,6 +10,7 @@ import (
 	airepo "nurture/internal/ai/repo"
 	"nurture/internal/config"
 	"nurture/internal/pkg/aix"
+	"nurture/internal/pkg/zapx"
 	"strings"
 	"time"
 
@@ -62,7 +63,7 @@ func NewAILogic(aiRepo airepo.IAIRepo, ai *aix.AIX, cfg config.AI, growthReader 
 		aiRepo:       aiRepo,
 		growthReader: growthReader,
 		dbEnabled:    dbEnabled,
-		log:          log,
+		log:          zapx.OrNop(log),
 	}
 }
 
@@ -81,15 +82,13 @@ func (l *AILogic) growthAvailable() bool {
 }
 
 func (l *AILogic) logError(err error) {
-	if l.log != nil {
+	if err != nil {
 		l.log.Error(err)
 	}
 }
 
 func (l *AILogic) logErrorf(format string, args ...any) {
-	if l.log != nil {
-		l.log.Errorf(format, args...)
-	}
+	l.log.Errorf(format, args...)
 }
 
 func streamAIUnavailable(streamFunc func(event aidto.SSEEvent)) {

@@ -5,6 +5,7 @@ import (
 	babyconstant "nurture/internal/baby/constant"
 	"nurture/internal/baby/repo/cache"
 	"nurture/internal/baby/repo/dao"
+	"nurture/internal/pkg/zapx"
 
 	"errors"
 	"time"
@@ -65,7 +66,7 @@ func NewBabyRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger) *B
 		db:      db,
 		babyDao: dao.New(db),
 		rdb:     rdb,
-		log:     log,
+		log:     zapx.OrNop(log),
 	}
 }
 
@@ -83,7 +84,7 @@ type CreatedDose struct {
 }
 
 func (r *BabyRepo) logError(err error) {
-	if r.log != nil {
+	if err != nil {
 		r.log.Error(err)
 	}
 }

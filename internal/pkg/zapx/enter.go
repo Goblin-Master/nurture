@@ -10,6 +10,15 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+var nopLogger = zap.NewNop().Sugar()
+
+func OrNop(log *zap.SugaredLogger) *zap.SugaredLogger {
+	if log == nil {
+		return nopLogger
+	}
+	return log
+}
+
 func InitZap() *zap.SugaredLogger {
 	var logger *zap.Logger
 	var cores = make([]zapcore.Core, 0)

@@ -4,6 +4,7 @@ import (
 	"nurture/internal/file/logic"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/response"
+	"nurture/internal/pkg/zapx"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -17,14 +18,12 @@ type FileHandler struct {
 func NewFileHandler(fileLogic logic.IFileLogic, log *zap.SugaredLogger) *FileHandler {
 	return &FileHandler{
 		fileLogic: fileLogic,
-		log:       log,
+		log:       zapx.OrNop(log),
 	}
 }
 
 func (h *FileHandler) Upload(c *gin.Context) {
-	if h.log != nil {
-		h.log.Infof("%s: %s", jwtx.GetUserID(c), c.Request.FormValue("file"))
-	}
+	h.log.Infof("%s: %s", jwtx.GetUserID(c), c.Request.FormValue("file"))
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		response.Response(c, nil, ErrFileRead)

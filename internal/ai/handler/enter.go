@@ -8,6 +8,7 @@ import (
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/response"
+	"nurture/internal/pkg/zapx"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -21,7 +22,7 @@ type AIHandler struct {
 func NewAIHandler(aiLogic ailogic.IAILogic, log *zap.SugaredLogger) *AIHandler {
 	return &AIHandler{
 		aiLogic: aiLogic,
-		log:     log,
+		log:     zapx.OrNop(log),
 	}
 }
 
@@ -29,9 +30,7 @@ func NewAIHandler(aiLogic ailogic.IAILogic, log *zap.SugaredLogger) *AIHandler {
 func (h *AIHandler) ChatStream(c *gin.Context) {
 	req := middleware.GetBind[aidto.ChatStreamReq](c)
 	userID := jwtx.GetUserID(c)
-	if h.log != nil {
-		h.log.Infof("%s: %v", userID, req)
-	}
+	h.log.Infof("%s: %v", userID, req)
 
 	// 如果没有 SessionID，返回错误
 	if req.SessionID == "" {
@@ -61,16 +60,12 @@ func (h *AIHandler) UploadKnowledge(c *gin.Context) {
 	userID, role := jwtx.GetUserID(c), jwtx.GetRole(c)
 
 	if req.SpaceType == aiconstant.SpaceTypePublic && role < jwtx.INTERNAL_USER {
-		if h.log != nil {
-			h.log.Infof("%s: %d", userID, role)
-		}
+		h.log.Infof("%s: %d", userID, role)
 		response.Response(c, nil, ErrPermissionDenied)
 		return
 	}
 
-	if h.log != nil {
-		h.log.Infof("%s: %v", userID, req)
-	}
+	h.log.Infof("%s: %v", userID, req)
 	err := h.aiLogic.UploadKnowledge(c.Request.Context(), userID, req)
 	response.Response(c, nil, err)
 }
@@ -79,9 +74,7 @@ func (h *AIHandler) UploadKnowledge(c *gin.Context) {
 func (h *AIHandler) GetChatHistory(c *gin.Context) {
 	req := middleware.GetBind[aidto.ChatHistoryReq](c)
 	userID := jwtx.GetUserID(c)
-	if h.log != nil {
-		h.log.Infof("%s: %v", userID, req)
-	}
+	h.log.Infof("%s: %v", userID, req)
 	resp, err := h.aiLogic.GetChatHistory(c.Request.Context(), userID, req)
 	response.Response(c, resp, err)
 }
@@ -90,9 +83,7 @@ func (h *AIHandler) GetChatHistory(c *gin.Context) {
 func (h *AIHandler) GrowthAnalysis(c *gin.Context) {
 	req := middleware.GetBind[aidto.GrowthAnalysisReq](c)
 	userID := jwtx.GetUserID(c)
-	if h.log != nil {
-		h.log.Infof("GrowthAnalysis %s: %v", userID, req)
-	}
+	h.log.Infof("GrowthAnalysis %s: %v", userID, req)
 
 	// 设置 SSE 响应头
 	c.Header("Content-Type", "text/event-stream")
@@ -113,9 +104,7 @@ func (h *AIHandler) GrowthAnalysis(c *gin.Context) {
 func (h *AIHandler) GrowthReport(c *gin.Context) {
 	req := middleware.GetBind[aidto.GrowthReportReq](c)
 	userID := jwtx.GetUserID(c)
-	if h.log != nil {
-		h.log.Infof("GrowthReport %s: %v", userID, req)
-	}
+	h.log.Infof("GrowthReport %s: %v", userID, req)
 	resp, err := h.aiLogic.GrowthReport(c.Request.Context(), userID, req)
 	response.Response(c, resp, err)
 }

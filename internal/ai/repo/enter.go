@@ -6,6 +6,7 @@ import (
 	"fmt"
 	aiconstant "nurture/internal/ai/constant"
 	"nurture/internal/pkg/aix"
+	"nurture/internal/pkg/zapx"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -31,14 +32,14 @@ func NewAIRepo(ai *aix.AIX, rdb redis.Cmdable, log *zap.SugaredLogger) *AIRepo {
 	return &AIRepo{
 		ai:  ai,
 		rdb: rdb,
-		log: log,
+		log: zapx.OrNop(log),
 	}
 }
 
 var _ IAIRepo = (*AIRepo)(nil)
 
 func (r *AIRepo) logError(err error) {
-	if r.log != nil {
+	if err != nil {
 		r.log.Error(err)
 	}
 }
@@ -86,9 +87,7 @@ func (r *AIRepo) GetFullHistory(ctx context.Context, userID, sessionID string) (
 	for _, item := range result {
 		var msg aix.ChatMessage
 		if err := json.Unmarshal([]byte(item), &msg); err != nil {
-			if r.log != nil {
-				r.log.Errorf("Unmarshal message failed: %v", err)
-			}
+			r.log.Errorf("Unmarshal message failed: %v", err)
 			continue
 		}
 		messages = append(messages, msg)
@@ -116,9 +115,7 @@ func (r *AIRepo) GetRecentHistory(ctx context.Context, userID, sessionID string,
 	for _, item := range result {
 		var msg aix.ChatMessage
 		if err := json.Unmarshal([]byte(item), &msg); err != nil {
-			if r.log != nil {
-				r.log.Errorf("Unmarshal message failed: %v", err)
-			}
+			r.log.Errorf("Unmarshal message failed: %v", err)
 			continue
 		}
 		messages = append(messages, msg)

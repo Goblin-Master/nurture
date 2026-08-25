@@ -6,6 +6,7 @@ import (
 	"nurture/internal/chat/event"
 	"nurture/internal/chat/repo"
 	"nurture/internal/pkg/rabbitmqx"
+	"nurture/internal/pkg/zapx"
 	"time"
 
 	"go.uber.org/zap"
@@ -27,7 +28,7 @@ func NewOutboxWorker(repo OutboxRepo, bus event.Bus, log *zap.SugaredLogger) *Ou
 	return &OutboxWorker{
 		repo: repo,
 		bus:  bus,
-		log:  log,
+		log:  zapx.OrNop(log),
 	}
 }
 
@@ -103,7 +104,7 @@ func outboxRetryDelay(attempt int32) time.Duration {
 }
 
 func (w *OutboxWorker) logError(err error) {
-	if w.log != nil && err != nil {
+	if err != nil {
 		w.log.Error(err)
 	}
 }

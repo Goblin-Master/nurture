@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"nurture/internal/pkg/passwordx"
+	"nurture/internal/pkg/zapx"
 	userconstant "nurture/internal/user/constant"
 	"nurture/internal/user/repo/cache"
 	"nurture/internal/user/repo/dao"
@@ -92,22 +93,20 @@ func NewUserRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger) *U
 		db:      db,
 		userDao: dao.New(db),
 		rdb:     rdb,
-		log:     log,
+		log:     zapx.OrNop(log),
 	}
 }
 
 var _ IUserRepo = (*UserRepo)(nil)
 
 func (ur *UserRepo) logError(err error) {
-	if ur.log != nil {
+	if err != nil {
 		ur.log.Error(err)
 	}
 }
 
 func (ur *UserRepo) logCacheHit(args ...interface{}) {
-	if ur.log != nil {
-		ur.log.Info(args...)
-	}
+	ur.log.Info(args...)
 }
 
 func toUserBaseRow(row dao.UserBase) UserBaseRow {

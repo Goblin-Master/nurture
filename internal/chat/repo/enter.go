@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"nurture/internal/chat/repo/dao"
+	"nurture/internal/pkg/zapx"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5"
@@ -125,7 +126,7 @@ func NewChatRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger) *C
 	return &ChatRepo{
 		db:  db,
 		rdb: rdb,
-		log: log,
+		log: zapx.OrNop(log),
 		dao: dao.New(db),
 	}
 }
@@ -133,7 +134,7 @@ func NewChatRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger) *C
 var _ IChatRepo = (*ChatRepo)(nil)
 
 func (r *ChatRepo) logError(err error) {
-	if r.log != nil && err != nil {
+	if err != nil {
 		r.log.Error(err)
 	}
 }

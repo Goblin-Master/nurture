@@ -8,6 +8,7 @@ import (
 	"nurture/internal/chat/event"
 	"nurture/internal/chat/session"
 	"nurture/internal/pkg/rabbitmqx"
+	"nurture/internal/pkg/zapx"
 	"os"
 	"time"
 
@@ -42,7 +43,7 @@ func NewWorker(consumer Consumer, hub *session.Hub, log *zap.SugaredLogger) *Wor
 	return &Worker{
 		consumer: consumer,
 		hub:      hub,
-		log:      log,
+		log:      zapx.OrNop(log),
 	}
 }
 
@@ -68,7 +69,7 @@ func (w *Worker) Start(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			if w.log != nil && err != nil {
+			if err != nil {
 				w.log.Error(err)
 			}
 			select {

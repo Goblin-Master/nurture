@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"nurture/internal/config"
+	"nurture/internal/pkg/zapx"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -59,7 +60,7 @@ func NewClient(dsn string, log *zap.SugaredLogger) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{conn: conn, log: log}, nil
+	return &Client{conn: conn, log: zapx.OrNop(log)}, nil
 }
 
 func (c *Client) Close() error {
@@ -170,9 +171,7 @@ func (c *Client) Consume(ctx context.Context, cfg ConsumeConfig, handle func(con
 				Body:        msg.Body,
 			})
 			if err != nil {
-				if c.log != nil {
-					c.log.Error(err)
-				}
+				c.log.Error(err)
 				if isDiscard(err) {
 					_ = msg.Ack(false)
 					continue
@@ -180,9 +179,7 @@ func (c *Client) Consume(ctx context.Context, cfg ConsumeConfig, handle func(con
 				if topology.RetryEnabled {
 					if attempt >= topology.MaxAttempts {
 						if err := publishDeadLetter(ctx, ch, topology, msg, err); err != nil {
-							if c.log != nil {
-								c.log.Error(err)
-							}
+							c.log.Error(err)
 							_ = msg.Nack(false, false)
 							continue
 						}

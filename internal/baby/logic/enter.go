@@ -6,6 +6,7 @@ import (
 	babyconstant "nurture/internal/baby/constant"
 	"nurture/internal/baby/dto"
 	"nurture/internal/baby/repo"
+	"nurture/internal/pkg/zapx"
 	"sort"
 	"time"
 
@@ -58,14 +59,14 @@ func NewBabyLogic(babyRepo repo.IBabyRepo, partnerReader PartnerReader, log *zap
 	return &BabyLogic{
 		babyRepo:      babyRepo,
 		partnerReader: partnerReader,
-		log:           log,
+		log:           zapx.OrNop(log),
 	}
 }
 
 var _ IBabyLogic = (*BabyLogic)(nil)
 
 func (l *BabyLogic) logError(err error) {
-	if l.log != nil {
+	if err != nil {
 		l.log.Error(err)
 	}
 }
