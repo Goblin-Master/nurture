@@ -43,15 +43,20 @@ func (h *AIHandler) ChatStream(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 
-	// 流式回调
+	streamedError := false
 	streamFunc := func(event aidto.SSEEvent) {
-		data, _ := json.Marshal(event)
-		c.SSEvent("message", string(data))
-		c.Writer.Flush()
+		if event.Type == aiconstant.SSETypeError {
+			streamedError = true
+		}
+		h.writeSSEEvent(c, event)
 	}
 
-	// 执行对话
-	_ = h.aiLogic.ChatStream(c.Request.Context(), userID, req, streamFunc)
+	if err := h.aiLogic.ChatStream(c.Request.Context(), userID, req, streamFunc); err != nil && !streamedError {
+		h.writeSSEEvent(c, aidto.SSEEvent{
+			Type:  aiconstant.SSETypeError,
+			Error: err.Error(),
+		})
+	}
 }
 
 // UploadKnowledge 上传知识库
@@ -90,15 +95,20 @@ func (h *AIHandler) GrowthAnalysis(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 
-	// 流式回调
+	streamedError := false
 	streamFunc := func(event aidto.SSEEvent) {
-		data, _ := json.Marshal(event)
-		c.SSEvent("message", string(data))
-		c.Writer.Flush()
+		if event.Type == aiconstant.SSETypeError {
+			streamedError = true
+		}
+		h.writeSSEEvent(c, event)
 	}
 
-	// 执行分析
-	_ = h.aiLogic.GrowthAnalysisStream(c.Request.Context(), userID, req, streamFunc)
+	if err := h.aiLogic.GrowthAnalysisStream(c.Request.Context(), userID, req, streamFunc); err != nil && !streamedError {
+		h.writeSSEEvent(c, aidto.SSEEvent{
+			Type:  aiconstant.SSETypeError,
+			Error: err.Error(),
+		})
+	}
 }
 
 func (h *AIHandler) GrowthReport(c *gin.Context) {
@@ -107,4 +117,14 @@ func (h *AIHandler) GrowthReport(c *gin.Context) {
 	h.log.Infof("GrowthReport %s: %v", userID, req)
 	resp, err := h.aiLogic.GrowthReport(c.Request.Context(), userID, req)
 	response.Response(c, resp, err)
+}
+
+func (h *AIHandler) writeSSEEvent(c *gin.Context, event aidto.SSEEvent) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		h.log.Error(err)
+		return
+	}
+	c.SSEvent("message", string(data))
+	c.Writer.Flush()
 }
