@@ -9,14 +9,16 @@ import (
 )
 
 type consumeTopology struct {
-	RetryEnabled   bool
-	MaxAttempts    int64
-	RetryExchange  string
-	RetryQueue     string
-	RetryQueueArgs amqp.Table
-	DeadExchange   string
-	DeadQueue      string
-	MainQueueArgs  amqp.Table
+	RetryEnabled      bool
+	MaxAttempts       int64
+	RetryExchange     string
+	RetryQueue        string
+	RetryQueueOptions queueOptions
+	RetryQueueArgs    amqp.Table
+	DeadExchange      string
+	DeadQueue         string
+	DeadQueueOptions  queueOptions
+	MainQueueArgs     amqp.Table
 }
 
 type queueOptions struct {
@@ -55,18 +57,21 @@ func newConsumeTopology(cfg ConsumeConfig) consumeTopology {
 	}
 	retryName := cfg.Queue + ".retry"
 	deadName := cfg.Queue + ".dead"
+	queueOptions := consumeQueueOptions(cfg)
 	return consumeTopology{
-		RetryEnabled:  true,
-		MaxAttempts:   cfg.Retry.MaxAttempts,
-		RetryExchange: retryName,
-		RetryQueue:    retryName,
+		RetryEnabled:      true,
+		MaxAttempts:       cfg.Retry.MaxAttempts,
+		RetryExchange:     retryName,
+		RetryQueue:        retryName,
+		RetryQueueOptions: queueOptions,
 		RetryQueueArgs: amqp.Table{
 			"x-message-ttl":             retryDelayMillis(cfg.Retry.Delay),
 			"x-dead-letter-exchange":    amqp.DefaultExchange,
 			"x-dead-letter-routing-key": cfg.Queue,
 		},
-		DeadExchange: deadName,
-		DeadQueue:    deadName,
+		DeadExchange:     deadName,
+		DeadQueue:        deadName,
+		DeadQueueOptions: queueOptions,
 		MainQueueArgs: amqp.Table{
 			"x-dead-letter-exchange": retryName,
 		},
@@ -95,10 +100,24 @@ func declareRetryTopology(ch *amqp.Channel, cfg ConsumeConfig, topology consumeT
 	if err := ch.ExchangeDeclare(topology.DeadExchange, amqp.ExchangeTopic, false, true, false, false, nil); err != nil {
 		return err
 	}
-	if _, err := ch.QueueDeclare(topology.RetryQueue, false, true, true, false, topology.RetryQueueArgs); err != nil {
+	if _, err := ch.QueueDeclare(
+		topology.RetryQueue,
+		topology.RetryQueueOptions.durable,
+		topology.RetryQueueOptions.autoDelete,
+		topology.RetryQueueOptions.exclusive,
+		false,
+		topology.RetryQueueArgs,
+	); err != nil {
 		return err
 	}
-	if _, err := ch.QueueDeclare(topology.DeadQueue, false, true, true, false, nil); err != nil {
+	if _, err := ch.QueueDeclare(
+		topology.DeadQueue,
+		topology.DeadQueueOptions.durable,
+		topology.DeadQueueOptions.autoDelete,
+		topology.DeadQueueOptions.exclusive,
+		false,
+		nil,
+	); err != nil {
 		return err
 	}
 	for _, routingKey := range cfg.RoutingKeys {

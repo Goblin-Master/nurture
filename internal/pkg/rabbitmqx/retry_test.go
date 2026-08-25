@@ -46,6 +46,15 @@ func TestConsumeTopologyWithRetry(t *testing.T) {
 	if got, want := topology.RetryQueueArgs["x-dead-letter-routing-key"], cfg.Queue; got != want {
 		t.Fatalf("retry queue dl routing key = %v, want %v", got, want)
 	}
+	if topology.RetryQueueOptions.durable {
+		t.Fatal("retry queue durable = true, want false for ephemeral consumer")
+	}
+	if !topology.RetryQueueOptions.autoDelete {
+		t.Fatal("retry queue autoDelete = false, want true for ephemeral consumer")
+	}
+	if !topology.RetryQueueOptions.exclusive {
+		t.Fatal("retry queue exclusive = false, want true for ephemeral consumer")
+	}
 }
 
 func TestConsumeTopologyRetryDisabledByDefault(t *testing.T) {
@@ -55,6 +64,36 @@ func TestConsumeTopologyRetryDisabledByDefault(t *testing.T) {
 	}
 	if topology.MainQueueArgs != nil {
 		t.Fatalf("main queue args = %#v, want nil", topology.MainQueueArgs)
+	}
+}
+
+func TestConsumeTopologyUsesDurableRetryQueuesForDurableConsumer(t *testing.T) {
+	topology := newConsumeTopology(ConsumeConfig{
+		Queue:        "baby.partner.bound",
+		DurableQueue: true,
+		Retry: RetryConfig{
+			Delay:       time.Second,
+			MaxAttempts: 3,
+		},
+	})
+
+	if !topology.RetryQueueOptions.durable {
+		t.Fatal("retry queue durable = false, want true")
+	}
+	if topology.RetryQueueOptions.autoDelete {
+		t.Fatal("retry queue autoDelete = true, want false")
+	}
+	if topology.RetryQueueOptions.exclusive {
+		t.Fatal("retry queue exclusive = true, want false")
+	}
+	if !topology.DeadQueueOptions.durable {
+		t.Fatal("dead queue durable = false, want true")
+	}
+	if topology.DeadQueueOptions.autoDelete {
+		t.Fatal("dead queue autoDelete = true, want false")
+	}
+	if topology.DeadQueueOptions.exclusive {
+		t.Fatal("dead queue exclusive = true, want false")
 	}
 }
 
