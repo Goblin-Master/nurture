@@ -27,31 +27,6 @@ func (r *BabyRepo) ListMyBabies(ctx context.Context, userID string) ([]dao.ListB
 	return rows, nil
 }
 
-func (r *BabyRepo) SyncPartnerBabies(ctx context.Context, fatherUserID, motherUserID string) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	qtx := r.babyDao.WithTx(tx)
-	var fatherUUID, motherUUID pgtype.UUID
-	if err := fatherUUID.Scan(fatherUserID); err != nil {
-		return err
-	}
-	if err := motherUUID.Scan(motherUserID); err != nil {
-		return err
-	}
-
-	if err := r.copyBabies(ctx, qtx, fatherUUID, motherUUID); err != nil {
-		return err
-	}
-	if err := r.copyBabies(ctx, qtx, motherUUID, fatherUUID); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
 func (r *BabyRepo) copyBabies(ctx context.Context, qtx *dao.Queries, fromUserID, toUserID pgtype.UUID) error {
 	rows, err := qtx.ListBabiesByUserID(ctx, fromUserID)
 	if err != nil {

@@ -16,7 +16,7 @@ import (
 func TestRegisterMapsEmailConflict(t *testing.T) {
 	email := &emailFake{verifyOK: true}
 	repo := &userRepoFake{registerErr: userrepo.ErrEmailIsUsed}
-	l := userlogic.NewUserLogic(repo, email, &smsFake{}, nil, nil)
+	l := userlogic.NewUserLogic(repo, email, &smsFake{}, nil)
 
 	req := userdto.RegisterReq{
 		Account:  "account",
@@ -39,7 +39,7 @@ func TestRegisterMapsEmailConflict(t *testing.T) {
 
 func TestGetRegisterCodeUsesUserCodeKey(t *testing.T) {
 	email := &emailFake{}
-	l := userlogic.NewUserLogic(&userRepoFake{}, email, &smsFake{}, nil, nil)
+	l := userlogic.NewUserLogic(&userRepoFake{}, email, &smsFake{}, nil)
 
 	req := userdto.GetCodeReq{Email: "alice@example.com"}
 	resp, err := l.GetRegisterCode(context.Background(), req)
@@ -69,7 +69,7 @@ func TestGetRegisterCodeUsesUserCodeKey(t *testing.T) {
 	}
 }
 
-func TestBindPartnerSyncsBabiesThroughInjectedBoundary(t *testing.T) {
+func TestBindPartnerCreatesRelationshipWithoutDirectBabySync(t *testing.T) {
 	userID := "11111111-1111-1111-1111-111111111111"
 	partnerID := "22222222-2222-2222-2222-222222222222"
 	repo := &userRepoFake{
@@ -79,8 +79,7 @@ func TestBindPartnerSyncsBabiesThroughInjectedBoundary(t *testing.T) {
 			partnerID: {UserID: partnerID, Username: "Partner", Avatar: "avatar.png"},
 		},
 	}
-	syncer := &babySyncerFake{}
-	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, syncer, nil)
+	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, nil)
 
 	resp, err := l.BindPartner(context.Background(), userID, userdto.PartnerBindReq{
 		Account:  "partner",
@@ -92,9 +91,6 @@ func TestBindPartnerSyncsBabiesThroughInjectedBoundary(t *testing.T) {
 	}
 	if repo.boundFatherID != userID || repo.boundMotherID != partnerID {
 		t.Fatalf("BindPartner() bound (%q,%q), want (%q,%q)", repo.boundFatherID, repo.boundMotherID, userID, partnerID)
-	}
-	if syncer.fatherID != userID || syncer.motherID != partnerID {
-		t.Fatalf("SyncPartnerBabies() got (%q,%q), want (%q,%q)", syncer.fatherID, syncer.motherID, userID, partnerID)
 	}
 	if resp.PartnerID != partnerID || resp.PartnerUsername != "Partner" {
 		t.Fatalf("BindPartner() resp = %+v", resp)
@@ -109,8 +105,7 @@ func TestBindPartnerRejectsDifferentExistingPartner(t *testing.T) {
 		getUserByIDRow:      userrepo.UserBaseRow{UserID: userID, Gender: "male"},
 		partnerID:           "33333333-3333-3333-3333-333333333333",
 	}
-	syncer := &babySyncerFake{}
-	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, syncer, nil)
+	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, nil)
 
 	_, err := l.BindPartner(context.Background(), userID, userdto.PartnerBindReq{
 		Account:  "partner",
@@ -120,8 +115,8 @@ func TestBindPartnerRejectsDifferentExistingPartner(t *testing.T) {
 	if !errors.Is(err, userlogic.ErrPartnerAlreadyBound) {
 		t.Fatalf("BindPartner() error = %v, want %v", err, userlogic.ErrPartnerAlreadyBound)
 	}
-	if repo.boundFatherID != "" || syncer.fatherID != "" {
-		t.Fatalf("BindPartner() should not bind or sync when an existing different partner is present")
+	if repo.boundFatherID != "" {
+		t.Fatalf("BindPartner() should not bind when an existing different partner is present")
 	}
 }
 
@@ -133,7 +128,7 @@ func TestBindPartnerMapsPartnerProfileError(t *testing.T) {
 		getUserByIDRow:      userrepo.UserBaseRow{UserID: userID, Gender: "male"},
 		profileErr:          userrepo.ErrDefault,
 	}
-	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, &babySyncerFake{}, nil)
+	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, nil)
 
 	_, err := l.BindPartner(context.Background(), userID, userdto.PartnerBindReq{
 		Account:  "partner",
@@ -147,7 +142,7 @@ func TestBindPartnerMapsPartnerProfileError(t *testing.T) {
 
 func TestUpdateProfileMapsUpdateFailure(t *testing.T) {
 	repo := &userRepoFake{updateAdditionErr: userrepo.ErrUserUpdateFailed}
-	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, nil, nil)
+	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, nil)
 	occupation := "engineer"
 
 	_, err := l.UpdateProfile(context.Background(), "user-id", userdto.UpdateUserAdditionReq{
@@ -197,18 +192,6 @@ func (f *smsFake) SendCode(ctx context.Context, key string, phone string, code s
 
 func (f *smsFake) VerifyCode(ctx context.Context, key string, code string) (bool, error) {
 	return f.verifyOK, f.verifyErr
-}
-
-type babySyncerFake struct {
-	fatherID string
-	motherID string
-	err      error
-}
-
-func (f *babySyncerFake) SyncPartnerBabies(ctx context.Context, fatherUserID string, motherUserID string) error {
-	f.fatherID = fatherUserID
-	f.motherID = motherUserID
-	return f.err
 }
 
 type userRepoFake struct {

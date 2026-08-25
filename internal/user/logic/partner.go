@@ -60,13 +60,6 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 		ul.log.Error(err)
 		return resp, ErrDefault
 	}
-	if ul.babySyncer != nil {
-		err = ul.babySyncer.SyncPartnerBabies(ctx, fatherID, motherID)
-	}
-	if err != nil {
-		ul.log.Error(err)
-		return resp, ErrDefault
-	}
 	resp.PartnerID = ub.UserID
 	profile, err := ul.userRepo.GetMyProfile(ctx, ub.UserID)
 	if err != nil {

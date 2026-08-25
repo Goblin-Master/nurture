@@ -16,14 +16,13 @@ import (
 )
 
 type Deps struct {
-	DB         *pgxpool.Pool
-	RDB        redis.Cmdable
-	RabbitMQ   *rabbitmqx.Client
-	Log        *zap.SugaredLogger
-	Email      emailx.Sender
-	SMS        smsx.Sender
-	BabySyncer logic.BabySyncer
-	Context    context.Context
+	DB       *pgxpool.Pool
+	RDB      redis.Cmdable
+	RabbitMQ *rabbitmqx.Client
+	Log      *zap.SugaredLogger
+	Email    emailx.Sender
+	SMS      smsx.Sender
+	Context  context.Context
 }
 
 type Module struct {
@@ -49,7 +48,7 @@ func NewModule(deps Deps) *Module {
 	if deps.DB != nil && deps.RabbitMQ != nil {
 		worker.NewOutboxWorker(userRepo, deps.RabbitMQ, deps.Log).Start(ctx)
 	}
-	userLogic := logic.NewUserLogic(userRepo, email, sms, deps.BabySyncer, deps.Log)
+	userLogic := logic.NewUserLogic(userRepo, email, sms, deps.Log)
 	return &Module{
 		userLogic: userLogic,
 		handler:   handler.NewUserHandler(userLogic),
@@ -59,8 +58,4 @@ func NewModule(deps Deps) *Module {
 
 func (m *Module) Client() *Client {
 	return m.client
-}
-
-func (m *Module) SetBabySyncer(syncer logic.BabySyncer) {
-	m.userLogic.SetBabySyncer(syncer)
 }

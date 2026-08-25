@@ -25,7 +25,6 @@ type GrowthRecord struct {
 }
 
 type clientRepo interface {
-	SyncPartnerBabies(ctx context.Context, fatherUserID, motherUserID string) error
 	GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (dao.Baby, error)
 	ListGrowthRecordsByBabyIDBetween(ctx context.Context, babyID string, start, end int64) ([]dao.BabyGrowthRecord, error)
 }
@@ -36,10 +35,6 @@ type Client struct {
 
 func NewClient(babyRepo clientRepo) *Client {
 	return &Client{babyRepo: babyRepo}
-}
-
-func (c *Client) SyncPartnerBabies(ctx context.Context, fatherUserID, motherUserID string) error {
-	return c.babyRepo.SyncPartnerBabies(ctx, fatherUserID, motherUserID)
 }
 
 func (c *Client) GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (BabyProfile, error) {

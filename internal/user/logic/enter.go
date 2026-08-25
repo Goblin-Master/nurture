@@ -11,10 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type BabySyncer interface {
-	SyncPartnerBabies(ctx context.Context, fatherUserID string, motherUserID string) error
-}
-
 type IUserLogic interface {
 	Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error)
 	Register(ctx context.Context, req dto.RegisterReq) (dto.RegisterResp, error)
@@ -47,25 +43,19 @@ type IUserLogic interface {
 }
 
 type UserLogic struct {
-	userRepo   repo.IUserRepo
-	email      emailx.Sender
-	sms        smsx.Sender
-	babySyncer BabySyncer
-	log        *zap.SugaredLogger
+	userRepo repo.IUserRepo
+	email    emailx.Sender
+	sms      smsx.Sender
+	log      *zap.SugaredLogger
 }
 
-func NewUserLogic(userRepo repo.IUserRepo, email emailx.Sender, sms smsx.Sender, babySyncer BabySyncer, log *zap.SugaredLogger) *UserLogic {
+func NewUserLogic(userRepo repo.IUserRepo, email emailx.Sender, sms smsx.Sender, log *zap.SugaredLogger) *UserLogic {
 	return &UserLogic{
-		userRepo:   userRepo,
-		email:      email,
-		sms:        sms,
-		babySyncer: babySyncer,
-		log:        zapx.OrNop(log),
+		userRepo: userRepo,
+		email:    email,
+		sms:      sms,
+		log:      zapx.OrNop(log),
 	}
 }
 
 var _ IUserLogic = (*UserLogic)(nil)
-
-func (ul *UserLogic) SetBabySyncer(syncer BabySyncer) {
-	ul.babySyncer = syncer
-}

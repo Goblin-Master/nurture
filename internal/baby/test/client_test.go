@@ -12,19 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func TestBabyClientDelegatesSyncPartnerBabies(t *testing.T) {
-	repo := &babyClientRepoFake{}
-	client := baby.NewClient(repo)
-
-	err := client.SyncPartnerBabies(context.Background(), "father-1", "mother-1")
-	if err != nil {
-		t.Fatalf("SyncPartnerBabies() error = %v", err)
-	}
-	if repo.fatherID != "father-1" || repo.motherID != "mother-1" {
-		t.Fatalf("SyncPartnerBabies() got (%q,%q), want (father-1,mother-1)", repo.fatherID, repo.motherID)
-	}
-}
-
 func TestBabyClientReturnsBoundaryTypesForGrowthReads(t *testing.T) {
 	babyID := "33333333-3333-3333-3333-333333333333"
 	userID := "11111111-1111-1111-1111-111111111111"
@@ -101,19 +88,10 @@ func TestBabyModuleExposesClient(t *testing.T) {
 }
 
 type babyClientRepoFake struct {
-	fatherID   string
-	motherID   string
-	syncErr    error
 	baby       babydao.Baby
 	babyErr    error
 	growthRows []babydao.BabyGrowthRecord
 	growthErr  error
-}
-
-func (f *babyClientRepoFake) SyncPartnerBabies(ctx context.Context, fatherUserID, motherUserID string) error {
-	f.fatherID = fatherUserID
-	f.motherID = motherUserID
-	return f.syncErr
 }
 
 func (f *babyClientRepoFake) GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (babydao.Baby, error) {

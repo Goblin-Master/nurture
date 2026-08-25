@@ -15,19 +15,22 @@ sequenceDiagram
   participant UserClient as user.Client
   participant Email as pkg/emailx
   participant SMS as pkg/smsx
-  participant Baby as baby syncer
+  participant Worker as user.worker
+  participant MQ as RabbitMQ
 
-  Router->>Module: NewModule(DB, RDB, Log, Email?, SMS?, BabySyncer?)
+  Router->>Module: NewModule(DB, RDB, RabbitMQ, Log, Email?, SMS?)
   Module->>Email: use injected Email or emailx.NewEmailX()
   Module->>SMS: use injected SMS or smsx.NewSmsX()
   Module->>Repo: NewUserRepo(DB, RDB, Log)
-  Module->>Logic: NewUserLogic(repo, email, sms, BabySyncer, Log)
+  Module->>Logic: NewUserLogic(repo, email, sms, Log)
   Module->>Handler: NewUserHandler(logic)
   Module->>UserClient: NewClient(repo)
-  Router->>Module: SetBabySyncer(babyModule.Client())
+  alt DB and RabbitMQ enabled
+    Module->>Worker: Start outbox worker
+    Worker->>MQ: publish user.event partner.bound
+  end
   Router->>Module: RegisterRoutes(api.Group('/user'))
   Router->>Module: RegisterAdminRoutes(api.Group('/admin'))
-  Logic-->>Baby: sync partner babies after partner binding
 ```
 
 ## 注册与登录链路
@@ -115,7 +118,7 @@ sequenceDiagram
   participant Logic as UserLogic
   participant Repo as UserRepo
   participant DB as PostgreSQL
-  participant Baby as baby syncer
+  participant MQ as RabbitMQ
 
   Client->>Handler: POST /api/user/partner
   Handler->>Handler: auth user and bind PartnerBindReq
@@ -127,9 +130,8 @@ sequenceDiagram
   Logic->>Logic: validate gender and relation direction
   Logic->>Repo: BindPartner(fatherID, motherID)
   Repo->>DB: update both users partner fields
+  Repo->>DB: insert user_event_outbox(partner.bound)
   Repo-->>Logic: nil
-  Logic->>Baby: SyncPartnerBabies(fatherID, motherID)
-  Baby-->>Logic: nil
   Logic-->>Handler: PartnerBindResp
   Handler-->>Client: response
 ```
@@ -171,4 +173,4 @@ sequenceDiagram
 
 - User 模块通过 `user.Client` 对外暴露伴侣读取、关注读取等能力；其它模块仍在自己的 logic 包定义最小 consumer 接口。
 - Email/SMS 是基础设施能力，可以注入测试实现；默认使用 `internal/pkg/emailx` 和 `internal/pkg/smsx`。
-- 伴侣绑定后的宝宝同步通过注入的 `BabySyncer` 完成，避免 user 模块直接依赖 baby 模块内部包。
+- 伴侣绑定后的宝宝同步通过 `user_event_outbox` + `RabbitMQ` 异步完成，避免 user 模块直接依赖 baby 模块内部包。

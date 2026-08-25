@@ -61,7 +61,6 @@ func registerRoutes(r *gin.Engine) {
 		Log:           global.Log,
 		PartnerReader: userModule.Client(),
 	})
-	userModule.SetBabySyncer(babyModule.Client())
 	postModule := post.NewModule(post.Deps{
 		DB:           global.DB,
 		RDB:          global.RDB,
