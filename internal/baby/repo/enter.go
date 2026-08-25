@@ -19,6 +19,7 @@ import (
 
 type IBabyRepo interface {
 	ListMyBabies(ctx context.Context, userID string) ([]dao.ListBabiesByUserIDRow, error)
+	SyncPartnerBabies(ctx context.Context, fatherUserID, motherUserID string) error
 	CreateBabyWithInit(ctx context.Context, userID, partnerID, babyID, name, gender string, birthday int64, avatar string, recordTime int64, height, weight, headCircumference float64, remark string) error
 	GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (dao.Baby, error)
 	GetLatestGrowthByBabyIDAndUser(ctx context.Context, babyID, userID string) (dao.BabyGrowthRecord, error)
@@ -98,6 +99,68 @@ func (r *BabyRepo) ListMyBabies(ctx context.Context, userID string) ([]dao.ListB
 		return nil, ErrDefault
 	}
 	return rows, nil
+}
+
+func (r *BabyRepo) SyncPartnerBabies(ctx context.Context, fatherUserID, motherUserID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := r.babyDao.WithTx(tx)
+	var fatherUUID, motherUUID pgtype.UUID
+	if err := fatherUUID.Scan(fatherUserID); err != nil {
+		return err
+	}
+	if err := motherUUID.Scan(motherUserID); err != nil {
+		return err
+	}
+
+	if err := r.copyBabies(ctx, qtx, fatherUUID, motherUUID); err != nil {
+		return err
+	}
+	if err := r.copyBabies(ctx, qtx, motherUUID, fatherUUID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *BabyRepo) copyBabies(ctx context.Context, qtx *dao.Queries, fromUserID, toUserID pgtype.UUID) error {
+	rows, err := qtx.ListBabiesByUserID(ctx, fromUserID)
+	if err != nil {
+		r.logError(err)
+		return ErrDefault
+	}
+	for _, row := range rows {
+		var babyID pgtype.UUID
+		if err := babyID.Scan(row.BabyID); err != nil {
+			return err
+		}
+		full, err := qtx.GetBabyByIDAndUser(ctx, dao.GetBabyByIDAndUserParams{
+			BabyID: babyID,
+			UserID: fromUserID,
+		})
+		if err != nil {
+			r.logError(err)
+			return ErrDefault
+		}
+		now := time.Now().UnixMilli()
+		if err := qtx.CreateBaby(ctx, dao.CreateBabyParams{
+			BabyID:   full.BabyID,
+			UserID:   toUserID,
+			Name:     full.Name,
+			Gender:   full.Gender,
+			Birthday: full.Birthday,
+			Avatar:   full.Avatar,
+			Ctime:    now,
+			Utime:    now,
+		}); err != nil {
+			r.logError(err)
+			return ErrDefault
+		}
+	}
+	return nil
 }
 
 func (r *BabyRepo) CreateBabyWithInit(ctx context.Context, userID, partnerID, babyID, name, gender string, birthday int64, avatar string,

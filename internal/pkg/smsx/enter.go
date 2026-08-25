@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"nurture/internal/config"
-	"nurture/internal/constant"
 	"nurture/internal/global"
 	"strings"
 	"time"
@@ -43,16 +42,8 @@ func NewSmsX() *SmsX {
 	}
 }
 
-func (sx *SmsX) SendRegisterCode(ctx context.Context, phone string, code string) error {
-	return sx.sendAndStore(ctx, fmt.Sprintf(constant.REGISTER_SMS_CODE_KEY, phone), phone, code)
-}
-
-func (sx *SmsX) SendBindPhoneCode(ctx context.Context, phone string, code string) error {
-	return sx.sendAndStore(ctx, fmt.Sprintf(constant.BIND_PHONE_CODE_KEY, phone), phone, code)
-}
-
-func (sx *SmsX) SendRebindPhoneCode(ctx context.Context, phone string, code string) error {
-	return sx.sendAndStore(ctx, fmt.Sprintf(constant.REBIND_PHONE_CODE_KEY, phone), phone, code)
+func (sx *SmsX) SendCode(ctx context.Context, key string, phone string, code string) error {
+	return sx.sendAndStore(ctx, key, phone, code)
 }
 
 func (sx *SmsX) sendAndStore(ctx context.Context, redisKey string, phone string, code string) error {

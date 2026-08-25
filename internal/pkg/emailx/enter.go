@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/smtp"
 	"nurture/internal/config"
-	"nurture/internal/constant"
 	"nurture/internal/global"
 	"strings"
 	"time"
@@ -40,48 +39,12 @@ func NewEmailX() *EmailX {
 	}
 }
 
-func (ex *EmailX) SendLoginCode(ctx context.Context, to string, code string) error {
-	subject := fmt.Sprintf("[%s]邮箱登录", ex.config.Subject)
-	text := fmt.Sprintf("你正在进行邮箱登录，登录的验证码是：%s，十分钟内有效", code)
+func (ex *EmailX) SendCode(ctx context.Context, to string, title string, text string, key string, code string) error {
+	subject := fmt.Sprintf("[%s]%s", ex.config.Subject, title)
 	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
 		return err
 	}
-	return ex.storeCode(ctx, fmt.Sprintf(constant.LOGIN_CODE_KEY, to), code)
-}
-func (ex *EmailX) SendResetPwdCode(ctx context.Context, to string, code string) error {
-	subject := fmt.Sprintf("[%s]重置密码", ex.config.Subject)
-	text := fmt.Sprintf("你正在进行账号密码重置，重置的验证码是：%s，十分钟内有效", code)
-	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
-		return err
-	}
-	return ex.storeCode(ctx, fmt.Sprintf(constant.RESET_PWD_CODE_KEY, to), code)
-}
-
-func (ex *EmailX) SendRegisterCode(ctx context.Context, to string, code string) error {
-	subject := fmt.Sprintf("[%s]注册账号", ex.config.Subject)
-	text := fmt.Sprintf("你正在进行账号注册，注册的验证码是：%s，十分钟内有效", code)
-	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
-		return err
-	}
-	return ex.storeCode(ctx, fmt.Sprintf(constant.REGISTER_CODE_KEY, to), code)
-}
-
-func (ex *EmailX) SendBindEmailCode(ctx context.Context, to string, code string) error {
-	subject := fmt.Sprintf("[%s]绑定邮箱", ex.config.Subject)
-	text := fmt.Sprintf("你正在进行邮箱绑定，验证码是：%s，十分钟内有效", code)
-	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
-		return err
-	}
-	return ex.storeCode(ctx, fmt.Sprintf(constant.BIND_EMAIL_CODE_KEY, to), code)
-}
-
-func (ex *EmailX) SendRebindEmailCode(ctx context.Context, to string, code string) error {
-	subject := fmt.Sprintf("[%s]换绑邮箱", ex.config.Subject)
-	text := fmt.Sprintf("你正在进行邮箱换绑，验证码是：%s，十分钟内有效", code)
-	if err := ex.sendEmail(ctx, to, subject, text); err != nil {
-		return err
-	}
-	return ex.storeCode(ctx, fmt.Sprintf(constant.REBIND_EMAIL_CODE_KEY, to), code)
+	return ex.storeCode(ctx, key, code)
 }
 
 func (ex *EmailX) storeCode(ctx context.Context, key string, code string) error {

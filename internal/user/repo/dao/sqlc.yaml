@@ -1,0 +1,11 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "sql/user.sql"
+    schema: "../../../../deploy/schema/user.sql"
+    gen:
+      go:
+        package: "dao"
+        out: "."
+        sql_package: "pgx/v5"
+        output_models_file_name: "model.go"

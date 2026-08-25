@@ -13,9 +13,9 @@ func TestSendRegisterCodeDisabled(t *testing.T) {
 		config: config.SMS{Enable: false},
 	}
 
-	err := sx.SendRegisterCode(context.Background(), "13800138000", "123456")
+	err := sx.SendCode(context.Background(), "test:sms", "13800138000", "123456")
 	if !errors.Is(err, ErrSMSDisabled) {
-		t.Fatalf("SendRegisterCode() error = %v, want ErrSMSDisabled", err)
+		t.Fatalf("SendCode() error = %v, want ErrSMSDisabled", err)
 	}
 }
 

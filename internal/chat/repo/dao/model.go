@@ -12,7 +12,7 @@ import (
 type ChatDirectMessage struct {
 	// 主键ID
 	ID int64
-	// 消息ID(UUID)
+	// 消息ID(UUID,幂等)
 	MessageID pgtype.UUID
 	// 发送者用户ID(UUID)
 	FromUserID pgtype.UUID

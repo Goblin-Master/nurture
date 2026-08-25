@@ -3,13 +3,14 @@ package router
 import (
 	"fmt"
 	"nurture/internal/baby"
+	babyrepo "nurture/internal/baby/repo"
 	"nurture/internal/chat"
 	"nurture/internal/config"
 	"nurture/internal/global"
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/post"
-	"nurture/internal/repo"
+	"nurture/internal/user"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,18 +47,24 @@ func registerRoutes(r *gin.Engine) {
 	api := r.Group("/api")
 	ws := r.Group("/ws")
 	dbRequired := middleware.RequireDB()
+	userModule := user.NewModule(user.Deps{
+		DB:         global.DB,
+		RDB:        global.RDB,
+		Log:        global.Log,
+		BabySyncer: babyrepo.NewBabyRepo(global.DB, global.RDB, global.Log),
+	})
 	babyModule := baby.NewModule(baby.Deps{
 		DB:            global.DB,
 		RDB:           global.RDB,
 		Log:           global.Log,
-		PartnerReader: repo.NewUserRepo(),
+		PartnerReader: userModule,
 	})
 	postModule := post.NewModule(post.Deps{
 		DB:           global.DB,
 		RDB:          global.RDB,
 		Log:          global.Log,
 		AI:           global.AIX,
-		FollowReader: repo.NewUserRepo(),
+		FollowReader: userModule,
 	})
 
 	registerCommonRoutes(api.Group("/common"))
@@ -69,11 +76,11 @@ func registerRoutes(r *gin.Engine) {
 		AuthUser:      middleware.Authentication(jwtx.COMMON_USER),
 		RateLimitUser: middleware.RateLimitUser,
 	}).RegisterRoutes(api.Group("/chat", dbRequired), ws.Group("", dbRequired))
-	registerUserRoutes(api.Group("/user", dbRequired))
+	userModule.RegisterRoutes(api.Group("/user", dbRequired))
 	babyModule.RegisterRoutes(api.Group("/baby", dbRequired))
 	postModule.RegisterRoutes(api.Group("/post", dbRequired))
 	admin := api.Group("/admin", dbRequired)
-	registerAdminRoutes(admin)
+	userModule.RegisterAdminRoutes(admin)
 	babyModule.RegisterAdminRoutes(admin)
 	postModule.RegisterAdminRoutes(admin)
 }

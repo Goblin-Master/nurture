@@ -16,9 +16,9 @@ func TestSendRegisterCodeDisabled(t *testing.T) {
 		config: config.Email{Enable: false},
 	}
 
-	err := ex.SendRegisterCode(context.Background(), "to@example.com", "123456")
+	err := ex.SendCode(context.Background(), "to@example.com", "注册账号", "验证码是：123456", "test:email", "123456")
 	if !errors.Is(err, ErrEmailDisabled) {
-		t.Fatalf("SendRegisterCode() error = %v, want ErrEmailDisabled", err)
+		t.Fatalf("SendCode() error = %v, want ErrEmailDisabled", err)
 	}
 }
 
@@ -46,7 +46,7 @@ func TestEmailSend(t *testing.T) {
 		rdb:    rdb,
 	}
 
-	err := ex.SendRegisterCode(context.Background(), config.Conf.Email.SendEmail, "123456")
-	t.Logf("SendRegisterCode err: %v", err)
+	err := ex.SendCode(context.Background(), config.Conf.Email.SendEmail, "注册账号", "验证码是：123456", "test:email", "123456")
+	t.Logf("SendCode err: %v", err)
 	assert.NoError(t, err)
 }

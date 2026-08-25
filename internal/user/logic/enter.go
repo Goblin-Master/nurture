@@ -4,20 +4,34 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"nurture/internal/constant"
-	"nurture/internal/dto"
-	"nurture/internal/global"
 	"nurture/internal/pkg/emailx"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/passwordx"
 	"nurture/internal/pkg/smsx"
-	"nurture/internal/repo"
+	userconstant "nurture/internal/user/constant"
+	"nurture/internal/user/dto"
+	"nurture/internal/user/repo"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
+
+type EmailSender interface {
+	SendCode(ctx context.Context, to string, title string, text string, key string, code string) error
+	VerifyCode(ctx context.Context, key string, code string) (bool, error)
+}
+
+type SMSSender interface {
+	SendCode(ctx context.Context, key string, phone string, code string) error
+	VerifyCode(ctx context.Context, key string, code string) (bool, error)
+}
+
+type BabySyncer interface {
+	SyncPartnerBabies(ctx context.Context, fatherUserID string, motherUserID string) error
+}
 
 type IUserLogic interface {
 	Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error)
@@ -50,43 +64,59 @@ type IUserLogic interface {
 	AdminPromoteToAdmin(ctx context.Context, userID string) (string, error)
 }
 type UserLogic struct {
-	userRepo *repo.UserRepo
-	email    *emailx.EmailX
-	sms      *smsx.SmsX
+	userRepo   repo.IUserRepo
+	email      EmailSender
+	sms        SMSSender
+	babySyncer BabySyncer
+	log        *zap.SugaredLogger
 }
 
-func NewUserLogic() *UserLogic {
+func NewUserLogic(userRepo repo.IUserRepo, email EmailSender, sms SMSSender, babySyncer BabySyncer, log *zap.SugaredLogger) *UserLogic {
 	return &UserLogic{
-		userRepo: repo.NewUserRepo(),
-		email:    emailx.NewEmailX(),
-		sms:      smsx.NewSmsX(),
+		userRepo:   userRepo,
+		email:      email,
+		sms:        sms,
+		babySyncer: babySyncer,
+		log:        log,
 	}
 }
 
 var _ IUserLogic = (*UserLogic)(nil)
 
+func (ul *UserLogic) logError(err error) {
+	if ul.log != nil {
+		ul.log.Error(err)
+	}
+}
+
+func (ul *UserLogic) logWarnf(template string, args ...interface{}) {
+	if ul.log != nil {
+		ul.log.Warnf(template, args...)
+	}
+}
+
 func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error) {
 	var resp dto.LoginResp
 	switch req.LoginType {
-	case constant.LOGIN_WITH_ACCOUNT:
+	case userconstant.LoginWithAccount:
 		data, err := ul.userRepo.LoginWithAccount(ctx, req.Account, req.Password)
 		if err != nil {
 			return resp, ErrAccountOrPassword
 		}
 		token, err := jwtx.GenToken(jwtx.Claims{
-			UserID: data.UserID.String(),
+			UserID: data.UserID,
 			Role:   jwtx.Role(data.Role),
 		})
 		if err != nil {
-			global.Log.Error(err)
+			ul.logError(err)
 			return resp, ErrDefault
 		}
 		resp.Token = token
 		return resp, nil
-	case constant.LOGIN_WITH_EMAIL:
-		ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.LOGIN_CODE_KEY, req.Email), req.Code)
+	case userconstant.LoginWithEmail:
+		ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.LoginCodeKey, req.Email), req.Code)
 		if err != nil {
-			global.Log.Error(err)
+			ul.logError(err)
 			return resp, ErrCodeVerify
 		}
 		if !ok {
@@ -97,26 +127,26 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 			return resp, ErrEmail
 		}
 		token, err := jwtx.GenToken(jwtx.Claims{
-			UserID: data.UserID.String(),
+			UserID: data.UserID,
 			Role:   jwtx.Role(data.Role),
 		})
 		if err != nil {
-			global.Log.Error(err)
+			ul.logError(err)
 			return resp, ErrDefault
 		}
 		resp.Token = token
 		return resp, nil
 	default:
-		global.Log.Warnf("错误的登录方式:%s", req.LoginType)
+		ul.logWarnf("错误的登录方式:%s", req.LoginType)
 		return resp, ErrLoginWithFailedWay
 	}
 }
 
 func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.RegisterResp, error) {
 	var resp dto.RegisterResp
-	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.REGISTER_CODE_KEY, req.Email), req.Code)
+	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.RegisterCodeKey, req.Email), req.Code)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -139,7 +169,7 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
 		} else if errors.Is(err, repo.ErrAccountIsUsed) {
 			return resp, ErrAccountIsUsed
 		} else {
-			global.Log.Error(err)
+			ul.logError(err)
 			return resp, ErrDefault
 		}
 	}
@@ -160,9 +190,9 @@ func (ul *UserLogic) RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (d
 	if account == "" {
 		account = phone
 	}
-	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(constant.REGISTER_SMS_CODE_KEY, phone), req.Code)
+	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(userconstant.RegisterSMSCodeKey, phone), req.Code)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -183,7 +213,7 @@ func (ul *UserLogic) RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (d
 		if errors.Is(err, repo.ErrAccountIsUsed) {
 			return resp, ErrAccountIsUsed
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	_ = ul.userRepo.UpdateAdditionByID(ctx, userID, nil, &phone, nil, nil, nil, nil)
@@ -193,9 +223,9 @@ func (ul *UserLogic) RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (d
 
 func (ul *UserLogic) ResetPassword(ctx context.Context, req dto.ResetPasswordReq) (dto.ResetPasswordResp, error) {
 	var resp dto.ResetPasswordResp
-	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.RESET_PWD_CODE_KEY, req.Email), req.Code)
+	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.ResetPwdCodeKey, req.Email), req.Code)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -215,7 +245,7 @@ func (ul *UserLogic) ResetPassword(ctx context.Context, req dto.ResetPasswordReq
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "重置密码成功！"
@@ -225,9 +255,16 @@ func (ul *UserLogic) ResetPassword(ctx context.Context, req dto.ResetPasswordReq
 func (ul *UserLogic) GetLoginCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
 	c := emailx.GenCode()
-	err := ul.email.SendLoginCode(ctx, req.Email, c)
+	err := ul.email.SendCode(
+		ctx,
+		req.Email,
+		"邮箱登录",
+		fmt.Sprintf("你正在进行邮箱登录，登录的验证码是：%s，十分钟内有效", c),
+		fmt.Sprintf(userconstant.LoginCodeKey, req.Email),
+		c,
+	)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -237,9 +274,16 @@ func (ul *UserLogic) GetLoginCode(ctx context.Context, req dto.GetCodeReq) (dto.
 func (ul *UserLogic) GetRegisterCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
 	c := emailx.GenCode()
-	err := ul.email.SendRegisterCode(ctx, req.Email, c)
+	err := ul.email.SendCode(
+		ctx,
+		req.Email,
+		"注册账号",
+		fmt.Sprintf("你正在进行账号注册，注册的验证码是：%s，十分钟内有效", c),
+		fmt.Sprintf(userconstant.RegisterCodeKey, req.Email),
+		c,
+	)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -253,9 +297,9 @@ func (ul *UserLogic) GetRegisterSMSCode(ctx context.Context, req dto.GetSMSCodeR
 		return resp, ErrInvalidPhone
 	}
 	c := smsx.GenCode()
-	err := ul.sms.SendRegisterCode(ctx, phone, c)
+	err := ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.RegisterSMSCodeKey, phone), phone, c)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -265,9 +309,16 @@ func (ul *UserLogic) GetRegisterSMSCode(ctx context.Context, req dto.GetSMSCodeR
 func (ul *UserLogic) GetResetCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
 	c := emailx.GenCode()
-	err := ul.email.SendResetPwdCode(ctx, req.Email, c)
+	err := ul.email.SendCode(
+		ctx,
+		req.Email,
+		"重置密码",
+		fmt.Sprintf("你正在进行账号密码重置，重置的验证码是：%s，十分钟内有效", c),
+		fmt.Sprintf(userconstant.ResetPwdCodeKey, req.Email),
+		c,
+	)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -288,7 +339,7 @@ func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.U
 			if errors.Is(err, repo.ErrUserUpdateFailed) {
 				return resp, ErrProfileUpdateFailed
 			}
-			global.Log.Error(err)
+			ul.logError(err)
 			return resp, ErrDefault
 		}
 	}
@@ -317,7 +368,7 @@ func (ul *UserLogic) UpdateProfile(ctx context.Context, userID string, req dto.U
 		if errors.Is(err, repo.ErrUserUpdateFailed) {
 			return resp, ErrProfileUpdateFailed
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -332,16 +383,16 @@ func (ul *UserLogic) GetBindPhoneCode(ctx context.Context, userID string, req dt
 	}
 	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	if used {
 		return resp, ErrPhoneIsUsed
 	}
 	c := smsx.GenCode()
-	err = ul.sms.SendBindPhoneCode(ctx, phone, c)
+	err = ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.BindPhoneCodeKey, phone), phone, c)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -354,9 +405,9 @@ func (ul *UserLogic) BindPhone(ctx context.Context, userID string, req dto.BindP
 	if !isValidPhone(phone) {
 		return resp, ErrInvalidPhone
 	}
-	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(constant.BIND_PHONE_CODE_KEY, phone), req.Code)
+	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(userconstant.BindPhoneCodeKey, phone), req.Code)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -364,7 +415,7 @@ func (ul *UserLogic) BindPhone(ctx context.Context, userID string, req dto.BindP
 	}
 	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	if used {
@@ -378,7 +429,7 @@ func (ul *UserLogic) BindPhone(ctx context.Context, userID string, req dto.BindP
 		if errors.Is(err, repo.ErrUserUpdateFailed) {
 			return resp, ErrProfileUpdateFailed
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -388,9 +439,16 @@ func (ul *UserLogic) BindPhone(ctx context.Context, userID string, req dto.BindP
 func (ul *UserLogic) GetBindEmailCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
 	c := emailx.GenCode()
-	err := ul.email.SendBindEmailCode(ctx, req.Email, c)
+	err := ul.email.SendCode(
+		ctx,
+		req.Email,
+		"绑定邮箱",
+		fmt.Sprintf("你正在进行邮箱绑定，验证码是：%s，十分钟内有效", c),
+		fmt.Sprintf(userconstant.BindEmailCodeKey, req.Email),
+		c,
+	)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -399,9 +457,9 @@ func (ul *UserLogic) GetBindEmailCode(ctx context.Context, req dto.GetCodeReq) (
 
 func (ul *UserLogic) BindEmail(ctx context.Context, userID string, req dto.BindEmailReq) (dto.BindContactResp, error) {
 	var resp dto.BindContactResp
-	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.BIND_EMAIL_CODE_KEY, req.Email), req.Code)
+	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.BindEmailCodeKey, req.Email), req.Code)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -415,7 +473,7 @@ func (ul *UserLogic) BindEmail(ctx context.Context, userID string, req dto.BindE
 		if errors.Is(err, repo.ErrEmailIsUsed) {
 			return resp, ErrEmailIsUsed
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -430,16 +488,16 @@ func (ul *UserLogic) GetRebindPhoneCode(ctx context.Context, userID string, req 
 	}
 	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	if used {
 		return resp, ErrPhoneIsUsed
 	}
 	c := smsx.GenCode()
-	err = ul.sms.SendRebindPhoneCode(ctx, phone, c)
+	err = ul.sms.SendCode(ctx, fmt.Sprintf(userconstant.RebindPhoneCodeKey, phone), phone, c)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -452,9 +510,9 @@ func (ul *UserLogic) RebindPhone(ctx context.Context, userID string, req dto.Bin
 	if !isValidPhone(phone) {
 		return resp, ErrInvalidPhone
 	}
-	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(constant.REBIND_PHONE_CODE_KEY, phone), req.Code)
+	ok, err := ul.sms.VerifyCode(ctx, fmt.Sprintf(userconstant.RebindPhoneCodeKey, phone), req.Code)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -462,7 +520,7 @@ func (ul *UserLogic) RebindPhone(ctx context.Context, userID string, req dto.Bin
 	}
 	used, err := ul.userRepo.IsPhoneUsed(ctx, phone, userID)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	if used {
@@ -476,7 +534,7 @@ func (ul *UserLogic) RebindPhone(ctx context.Context, userID string, req dto.Bin
 		if errors.Is(err, repo.ErrUserUpdateFailed) {
 			return resp, ErrProfileUpdateFailed
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -486,9 +544,16 @@ func (ul *UserLogic) RebindPhone(ctx context.Context, userID string, req dto.Bin
 func (ul *UserLogic) GetRebindEmailCode(ctx context.Context, userID string, req dto.GetCodeReq) (dto.GetCodeResp, error) {
 	var resp dto.GetCodeResp
 	c := emailx.GenCode()
-	err := ul.email.SendRebindEmailCode(ctx, req.Email, c)
+	err := ul.email.SendCode(
+		ctx,
+		req.Email,
+		"换绑邮箱",
+		fmt.Sprintf("你正在进行邮箱换绑，验证码是：%s，十分钟内有效", c),
+		fmt.Sprintf(userconstant.RebindEmailCodeKey, req.Email),
+		c,
+	)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeGet
 	}
 	resp.Code = c
@@ -497,9 +562,9 @@ func (ul *UserLogic) GetRebindEmailCode(ctx context.Context, userID string, req 
 
 func (ul *UserLogic) RebindEmail(ctx context.Context, userID string, req dto.BindEmailReq) (dto.BindContactResp, error) {
 	var resp dto.BindContactResp
-	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.REBIND_EMAIL_CODE_KEY, req.Email), req.Code)
+	ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.RebindEmailCodeKey, req.Email), req.Code)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrCodeVerify
 	}
 	if !ok {
@@ -513,7 +578,7 @@ func (ul *UserLogic) RebindEmail(ctx context.Context, userID string, req dto.Bin
 		if errors.Is(err, repo.ErrEmailIsUsed) {
 			return resp, ErrEmailIsUsed
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -547,7 +612,7 @@ func (ul *UserLogic) UpdateAvatar(ctx context.Context, userID string, req dto.Up
 		if errors.Is(err, repo.ErrUserUpdateFailed) {
 			return resp, ErrProfileUpdateFailed
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -561,10 +626,10 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 		if errors.Is(err, repo.ErrUserNotExist) || errors.Is(err, repo.ErrAccountOrPwd) {
 			return resp, ErrAccountOrPassword
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
-	if ub.UserID.String() == userID {
+	if ub.UserID == userID {
 		return resp, ErrParamsType
 	}
 	// 性别校验与父母角色确定
@@ -573,7 +638,7 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	if self.Gender == ub.Gender {
@@ -582,30 +647,36 @@ func (ul *UserLogic) BindPartner(ctx context.Context, userID string, req dto.Par
 	// 已绑定校验：若已绑定不同对象则拒绝；若已绑定同一对象则幂等返回
 	existingPID, e1 := ul.userRepo.GetPartnerByUserID(ctx, userID)
 	if e1 != nil {
-		global.Log.Error(e1)
+		ul.logError(e1)
 		return resp, ErrDefault
 	}
 	if existingPID != "" {
-		if existingPID == ub.UserID.String() {
-			resp.PartnerID = ub.UserID.String()
-			profile, _ := ul.userRepo.GetMyProfile(ctx, ub.UserID.String())
+		if existingPID == ub.UserID {
+			resp.PartnerID = ub.UserID
+			profile, _ := ul.userRepo.GetMyProfile(ctx, ub.UserID)
 			resp.PartnerUsername = profile.Username
 			resp.PartnerAvatar = profile.Avatar
 			return resp, nil
 		}
 		return resp, ErrPartnerAlreadyBound
 	}
-	fatherID, motherID := userID, ub.UserID.String()
+	fatherID, motherID := userID, ub.UserID
 	if self.Gender != "male" { // self female
-		fatherID, motherID = ub.UserID.String(), userID
+		fatherID, motherID = ub.UserID, userID
 	}
-	err = ul.userRepo.BindPartnerAndSyncBabies(ctx, fatherID, motherID)
-	if err != nil {
-		global.Log.Error(err)
+	if err = ul.userRepo.BindPartner(ctx, fatherID, motherID); err != nil {
+		ul.logError(err)
 		return resp, ErrDefault
 	}
-	resp.PartnerID = ub.UserID.String()
-	profile, _ := ul.userRepo.GetMyProfile(ctx, ub.UserID.String())
+	if ul.babySyncer != nil {
+		err = ul.babySyncer.SyncPartnerBabies(ctx, fatherID, motherID)
+	}
+	if err != nil {
+		ul.logError(err)
+		return resp, ErrDefault
+	}
+	resp.PartnerID = ub.UserID
+	profile, _ := ul.userRepo.GetMyProfile(ctx, ub.UserID)
 	resp.PartnerUsername = profile.Username
 	resp.PartnerAvatar = profile.Avatar
 	return resp, nil
@@ -615,7 +686,7 @@ func (ul *UserLogic) GetPartner(ctx context.Context, userID string) (dto.Partner
 	var resp dto.PartnerGetResp
 	pid, err := ul.userRepo.GetPartnerByUserID(ctx, userID)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.PartnerID = pid
@@ -625,7 +696,7 @@ func (ul *UserLogic) GetPartner(ctx context.Context, userID string) (dto.Partner
 			if errors.Is(e, repo.ErrUserNotExist) {
 				return resp, ErrUserNotExist
 			}
-			global.Log.Error(e)
+			ul.logError(e)
 			return resp, ErrDefault
 		}
 		resp.PartnerUsername = row.Username
@@ -641,7 +712,7 @@ func (ul *UserLogic) MyProfile(ctx context.Context, userID string) (dto.MyProfil
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.UserID = row.UserID
@@ -659,7 +730,7 @@ func (ul *UserLogic) MyProfile(ctx context.Context, userID string) (dto.MyProfil
 	resp.Utime = row.Utime
 	pid, err := ul.userRepo.GetPartnerByUserID(ctx, userID)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.PartnerID = pid
@@ -677,12 +748,12 @@ func (ul *UserLogic) Follow(ctx context.Context, userID string, uri dto.FollowRe
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return resp, ErrUserNotExist
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	if err := ul.userRepo.FollowUser(ctx, userID, target); err != nil {
 		if errors.Is(err, repo.ErrDefault) {
-			global.Log.Error(err)
+			ul.logError(err)
 			return resp, ErrDefault
 		}
 	}
@@ -697,7 +768,7 @@ func (ul *UserLogic) Unfollow(ctx context.Context, userID string, uri dto.Follow
 		return resp, ErrParamsType
 	}
 	if err := ul.userRepo.UnfollowUser(ctx, userID, target); err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	resp.Message = "OK"
@@ -720,7 +791,7 @@ func (ul *UserLogic) ListFollowing(ctx context.Context, userID string, req dto.F
 	}
 	rows, hasMore, err := ul.userRepo.ListFollowing(ctx, viewID, page, pageSize)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	items := make([]dto.FollowingUserItem, 0, len(rows))
@@ -753,7 +824,7 @@ func (ul *UserLogic) ListFollowers(ctx context.Context, userID string, req dto.F
 	}
 	rows, hasMore, err := ul.userRepo.ListFollowers(ctx, viewID, page, pageSize)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	items := make([]dto.FollowingUserItem, 0, len(rows))
@@ -783,7 +854,7 @@ func (ul *UserLogic) AdminListUsers(ctx context.Context, req dto.AdminListUsersR
 	}
 	rows, hasMore, err := ul.userRepo.AdminListUsers(ctx, req.Keyword, page, pageSize)
 	if err != nil {
-		global.Log.Error(err)
+		ul.logError(err)
 		return resp, ErrDefault
 	}
 	items := make([]dto.AdminUserItem, 0, len(rows))
@@ -806,7 +877,7 @@ func (ul *UserLogic) AdminPromoteToAdmin(ctx context.Context, userID string) (st
 		if errors.Is(err, repo.ErrUserNotExist) {
 			return "", ErrUserNotExist
 		}
-		global.Log.Error(err)
+		ul.logError(err)
 		return "", ErrDefault
 	}
 	return "OK", nil

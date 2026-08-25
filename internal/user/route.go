@@ -1,16 +1,15 @@
-package router
+package user
 
 import (
-	"nurture/internal/dto"
-	"nurture/internal/handler"
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
+	"nurture/internal/user/dto"
 
 	"github.com/gin-gonic/gin"
 )
 
-func registerUserRoutes(rg *gin.RouterGroup) {
-	userHandler := handler.NewUserHandler()
+func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
+	userHandler := m.handler
 
 	rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
 	rg.POST("/register", middleware.BindJsonMiddleware[dto.RegisterReq], userHandler.Register)
@@ -52,5 +51,18 @@ func registerUserRoutes(rg *gin.RouterGroup) {
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindQueryMiddleware[dto.FollowersListReq],
 		userHandler.ListFollowers,
+	)
+}
+
+func (m *Module) RegisterAdminRoutes(rg *gin.RouterGroup) {
+	rg.GET("/users/list",
+		middleware.Authentication(jwtx.ADMIN),
+		middleware.BindQueryMiddleware[dto.AdminListUsersReq],
+		m.handler.AdminListUsers,
+	)
+	rg.PUT("/users/:user_id/role/admin",
+		middleware.Authentication(jwtx.ADMIN),
+		middleware.BindUriMiddleware[dto.AdminPromoteUri],
+		m.handler.AdminPromoteToAdmin,
 	)
 }

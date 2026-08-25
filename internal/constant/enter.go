@@ -2,20 +2,10 @@ package constant
 
 // 所有常量文件读取位置
 const (
-	TOKEN_USER_ID         = "UserID"
-	TOKEN_ROLE            = "Role"
-	LOGIN_WITH_ACCOUNT    = "account"
-	LOGIN_WITH_EMAIL      = "email"
-	DEFAULT_NODE_ID       = 1
-	FILE_MAX_SIZE         = 1024 * 1024 * 10
-	LOGIN_CODE_KEY        = "login_code:%s"
-	RESET_PWD_CODE_KEY    = "reset_pwd_code:%s"
-	REGISTER_CODE_KEY     = "register_code:%s"
-	REGISTER_SMS_CODE_KEY = "register_sms_code:%s"
-	BIND_PHONE_CODE_KEY   = "bind_phone_code:%s"
-	BIND_EMAIL_CODE_KEY   = "bind_email_code:%s"
-	REBIND_PHONE_CODE_KEY = "rebind_phone_code:%s"
-	REBIND_EMAIL_CODE_KEY = "rebind_email_code:%s"
+	TOKEN_USER_ID   = "UserID"
+	TOKEN_ROLE      = "Role"
+	DEFAULT_NODE_ID = 1
+	FILE_MAX_SIZE   = 1024 * 1024 * 10
 
 	// 知识空间类型
 	SPACE_TYPE_PRIVATE = "private"
@@ -30,19 +20,6 @@ const (
 	// 对话历史
 	AI_CONTEXT_MESSAGES = 6             // AI 上下文：最近 3 轮问答（6 条消息）
 	HISTORY_TTL         = 7 * 24 * 3600 // 7 天（秒）
-
-	// 用户缓存 Key
-	USER_PROFILE_KEY   = "user:profile:%s"
-	USER_PARTNER_KEY   = "user:partner:%s"
-	USER_FOLLOWING_KEY = "user:following:%s:%d:%d"
-	USER_FOLLOWERS_KEY = "user:followers:%s:%d:%d"
-	// 用户缓存 TTL（秒）
-	USER_PROFILE_TTL = 10 * 60
-	USER_PARTNER_TTL = 24 * 3600
-	USER_LIST_TTL    = 5 * 60
-
-	USER_TAG_PREF_KEY = "user:tag_pref:%s"
-	USER_TAG_PREF_TTL = 30 * 24 * 3600
 
 	// SSE 事件类型
 	SSE_TYPE_CONTENT = "content"

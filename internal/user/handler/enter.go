@@ -1,23 +1,22 @@
 package handler
 
 import (
-	"nurture/internal/dto"
-	"nurture/internal/global"
-	"nurture/internal/logic"
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/response"
+	"nurture/internal/user/dto"
+	"nurture/internal/user/logic"
 
 	"github.com/gin-gonic/gin"
 )
 
 type UserHandler struct {
-	userLogic *logic.UserLogic
+	userLogic logic.IUserLogic
 }
 
-func NewUserHandler() *UserHandler {
+func NewUserHandler(userLogic logic.IUserLogic) *UserHandler {
 	return &UserHandler{
-		userLogic: logic.NewUserLogic(),
+		userLogic: userLogic,
 	}
 }
 
@@ -47,35 +46,30 @@ func (uh *UserHandler) ResetPassword(c *gin.Context) {
 
 func (uh *UserHandler) GetLoginCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetCodeReq](c)
-	global.Log.Info(cr)
 	resp, err := uh.userLogic.GetLoginCode(c.Request.Context(), cr)
 	response.Response(c, resp, err)
 }
 
 func (uh *UserHandler) GetRegisterCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetCodeReq](c)
-	global.Log.Info(cr)
 	resp, err := uh.userLogic.GetRegisterCode(c.Request.Context(), cr)
 	response.Response(c, resp, err)
 }
 
 func (uh *UserHandler) GetRegisterSMSCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetSMSCodeReq](c)
-	global.Log.Info(cr)
 	resp, err := uh.userLogic.GetRegisterSMSCode(c.Request.Context(), cr)
 	response.Response(c, resp, err)
 }
 
 func (uh *UserHandler) GetResetCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetCodeReq](c)
-	global.Log.Info(cr)
 	resp, err := uh.userLogic.GetResetCode(c.Request.Context(), cr)
 	response.Response(c, resp, err)
 }
 
 func (uh *UserHandler) GetBindPhoneCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetSMSCodeReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.GetBindPhoneCode(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
@@ -83,7 +77,6 @@ func (uh *UserHandler) GetBindPhoneCode(c *gin.Context) {
 
 func (uh *UserHandler) BindPhone(c *gin.Context) {
 	cr := middleware.GetBind[dto.BindPhoneReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.BindPhone(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
@@ -91,14 +84,12 @@ func (uh *UserHandler) BindPhone(c *gin.Context) {
 
 func (uh *UserHandler) GetBindEmailCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetCodeReq](c)
-	global.Log.Info(cr)
 	resp, err := uh.userLogic.GetBindEmailCode(c.Request.Context(), cr)
 	response.Response(c, resp, err)
 }
 
 func (uh *UserHandler) BindEmail(c *gin.Context) {
 	cr := middleware.GetBind[dto.BindEmailReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.BindEmail(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
@@ -106,7 +97,6 @@ func (uh *UserHandler) BindEmail(c *gin.Context) {
 
 func (uh *UserHandler) GetRebindPhoneCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetSMSCodeReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.GetRebindPhoneCode(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
@@ -114,7 +104,6 @@ func (uh *UserHandler) GetRebindPhoneCode(c *gin.Context) {
 
 func (uh *UserHandler) RebindPhone(c *gin.Context) {
 	cr := middleware.GetBind[dto.BindPhoneReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.RebindPhone(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
@@ -122,7 +111,6 @@ func (uh *UserHandler) RebindPhone(c *gin.Context) {
 
 func (uh *UserHandler) GetRebindEmailCode(c *gin.Context) {
 	cr := middleware.GetBind[dto.GetCodeReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.GetRebindEmailCode(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
@@ -130,7 +118,6 @@ func (uh *UserHandler) GetRebindEmailCode(c *gin.Context) {
 
 func (uh *UserHandler) RebindEmail(c *gin.Context) {
 	cr := middleware.GetBind[dto.BindEmailReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.RebindEmail(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
@@ -138,7 +125,6 @@ func (uh *UserHandler) RebindEmail(c *gin.Context) {
 
 func (uh *UserHandler) UpdateProfile(c *gin.Context) {
 	cr := middleware.GetBind[dto.UpdateUserAdditionReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.UpdateProfile(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
@@ -146,7 +132,6 @@ func (uh *UserHandler) UpdateProfile(c *gin.Context) {
 
 func (uh *UserHandler) UpdateAvatar(c *gin.Context) {
 	cr := middleware.GetBind[dto.UpdateAvatarReq](c)
-	global.Log.Info(cr)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.UpdateAvatar(c.Request.Context(), userID, cr)
 	response.Response(c, resp, err)
@@ -173,7 +158,6 @@ func (uh *UserHandler) MyProfile(c *gin.Context) {
 
 func (uh *UserHandler) Follow(c *gin.Context) {
 	uri := middleware.GetBind[dto.FollowReq](c)
-	global.Log.Info(uri)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.Follow(c.Request.Context(), userID, uri)
 	response.Response(c, resp, err)
@@ -181,7 +165,6 @@ func (uh *UserHandler) Follow(c *gin.Context) {
 
 func (uh *UserHandler) Unfollow(c *gin.Context) {
 	uri := middleware.GetBind[dto.FollowReq](c)
-	global.Log.Info(uri)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.Unfollow(c.Request.Context(), userID, uri)
 	response.Response(c, resp, err)
@@ -189,7 +172,6 @@ func (uh *UserHandler) Unfollow(c *gin.Context) {
 
 func (uh *UserHandler) ListFollowing(c *gin.Context) {
 	q := middleware.GetBind[dto.FollowingListReq](c)
-	global.Log.Info(q)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.ListFollowing(c.Request.Context(), userID, q)
 	response.Response(c, resp, err)
@@ -197,7 +179,6 @@ func (uh *UserHandler) ListFollowing(c *gin.Context) {
 
 func (uh *UserHandler) ListFollowers(c *gin.Context) {
 	q := middleware.GetBind[dto.FollowersListReq](c)
-	global.Log.Info(q)
 	userID := jwtx.GetUserID(c)
 	resp, err := uh.userLogic.ListFollowers(c.Request.Context(), userID, q)
 	response.Response(c, resp, err)
@@ -206,14 +187,12 @@ func (uh *UserHandler) ListFollowers(c *gin.Context) {
 // admin
 func (uh *UserHandler) AdminListUsers(c *gin.Context) {
 	q := middleware.GetBind[dto.AdminListUsersReq](c)
-	global.Log.Info(q)
 	resp, err := uh.userLogic.AdminListUsers(c.Request.Context(), q)
 	response.Response(c, resp, err)
 }
 
 func (uh *UserHandler) AdminPromoteToAdmin(c *gin.Context) {
 	uri := middleware.GetBind[dto.AdminPromoteUri](c)
-	global.Log.Info(uri)
 	msg, err := uh.userLogic.AdminPromoteToAdmin(c.Request.Context(), uri.UserID)
 	if err != nil {
 		response.Response(c, nil, err)

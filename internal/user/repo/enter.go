@@ -3,112 +3,222 @@ package repo
 import (
 	"context"
 	"errors"
-	babydao "nurture/internal/baby/repo/dao"
-	"nurture/internal/constant"
-	"nurture/internal/global"
 	"nurture/internal/pkg/passwordx"
-	"nurture/internal/repo/user"
+	userconstant "nurture/internal/user/constant"
+	"nurture/internal/user/repo/cache"
+	"nurture/internal/user/repo/dao"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 )
 
+type UserBaseRow struct {
+	UserID   string
+	Account  string
+	Password string
+	Email    string
+	Username string
+	Gender   string
+	Role     int16
+	Ctime    int64
+	Utime    int64
+}
+
+type ProfileRow struct {
+	UserID     string
+	Account    string
+	Email      string
+	Username   string
+	Gender     string
+	Avatar     string
+	Phone      string
+	Occupation string
+	Birthday   int64
+	Province   string
+	City       string
+	Ctime      int64
+	Utime      int64
+}
+
+type FollowUserRow struct {
+	UserID     string
+	Username   string
+	Avatar     string
+	FollowTime int64
+}
+
+type AdminUserRow struct {
+	UserID   string
+	Username string
+	Avatar   string
+}
+
 type IUserRepo interface {
-	LoginWithAccount(ctx context.Context, account string, password string) (user.UserBase, error)
-	LoginWithEmail(ctx context.Context, email string) (user.UserBase, error)
-	GetUserByID(ctx context.Context, userID string) (user.UserBase, error)
+	LoginWithAccount(ctx context.Context, account string, password string) (UserBaseRow, error)
+	LoginWithEmail(ctx context.Context, email string) (UserBaseRow, error)
+	GetUserByID(ctx context.Context, userID string) (UserBaseRow, error)
 	Register(ctx context.Context, userID, username string, email *string, account, password, gender string) error //注册仅写user_base，同时创建user_addition
 	ResetPassword(ctx context.Context, email, newPassword string) error
 	UpdateAvatarByID(ctx context.Context, userID, url string) error
 	UpdateAdditionByID(ctx context.Context, userID string, occupation, phone, province, city, avatar *string, birthday *int64) error
-	GetMyProfile(ctx context.Context, userID string) (user.GetMyProfileRow, error)
+	GetMyProfile(ctx context.Context, userID string) (ProfileRow, error)
 	GetPartnerByUserID(ctx context.Context, userID string) (string, error)
-	BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, motherUserID string) error
+	BindPartner(ctx context.Context, fatherUserID, motherUserID string) error
 	UpdateGender(ctx context.Context, userID, gender string) error
 	FollowUser(ctx context.Context, followerID, followeeID string) error
 	UnfollowUser(ctx context.Context, followerID, followeeID string) error
-	ListFollowing(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowingByUserIDRow, bool, error)
-	ListFollowers(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowersByUserIDRow, bool, error)
+	ListFollowing(ctx context.Context, userID string, page, pageSize int) ([]FollowUserRow, bool, error)
+	ListFollowers(ctx context.Context, userID string, page, pageSize int) ([]FollowUserRow, bool, error)
 	IsFollowing(ctx context.Context, followerID, followeeID string) (bool, error)
 	IsPhoneUsed(ctx context.Context, phone string, excludeUserID string) (bool, error)
 	BindEmail(ctx context.Context, userID, email string) error
+	AdminListUsers(ctx context.Context, keyword string, page, pageSize int) ([]AdminUserRow, bool, error)
+	AdminUpdateUserRole(ctx context.Context, userID string, role int16) error
 }
 type UserRepo struct {
-	userDao *user.Queries
+	db      *pgxpool.Pool
+	userDao *dao.Queries
 	rdb     redis.Cmdable
+	log     *zap.SugaredLogger
 }
 
-func NewUserRepo() *UserRepo {
+func NewUserRepo(db *pgxpool.Pool, rdb redis.Cmdable, log *zap.SugaredLogger) *UserRepo {
 	return &UserRepo{
-		userDao: user.New(global.DB),
-		rdb:     global.RDB,
+		db:      db,
+		userDao: dao.New(db),
+		rdb:     rdb,
+		log:     log,
 	}
 }
 
 var _ IUserRepo = (*UserRepo)(nil)
 
-func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, password string) (user.UserBase, error) {
+func (ur *UserRepo) logError(err error) {
+	if ur.log != nil {
+		ur.log.Error(err)
+	}
+}
+
+func (ur *UserRepo) logCacheHit(args ...interface{}) {
+	if ur.log != nil {
+		ur.log.Info(args...)
+	}
+}
+
+func toUserBaseRow(row dao.UserBase) UserBaseRow {
+	return UserBaseRow{
+		UserID:   row.UserID.String(),
+		Account:  row.Account,
+		Password: row.Password,
+		Email:    row.Email.String,
+		Username: row.Username,
+		Gender:   row.Gender,
+		Role:     row.Role,
+		Ctime:    row.Ctime,
+		Utime:    row.Utime,
+	}
+}
+
+func toProfileRow(row dao.GetMyProfileRow) ProfileRow {
+	return ProfileRow{
+		UserID:     row.UserID,
+		Account:    row.Account,
+		Email:      row.Email,
+		Username:   row.Username,
+		Gender:     row.Gender,
+		Avatar:     row.Avatar,
+		Phone:      row.Phone,
+		Occupation: row.Occupation,
+		Birthday:   row.Birthday,
+		Province:   row.Province,
+		City:       row.City,
+		Ctime:      row.Ctime,
+		Utime:      row.Utime,
+	}
+}
+
+func toFollowUserRow(userID, username, avatar string, followTime int64) FollowUserRow {
+	return FollowUserRow{
+		UserID:     userID,
+		Username:   username,
+		Avatar:     avatar,
+		FollowTime: followTime,
+	}
+}
+
+func toAdminUserRow(row dao.AdminListUsersRow) AdminUserRow {
+	return AdminUserRow{
+		UserID:   row.UserID,
+		Username: row.Username,
+		Avatar:   row.Avatar,
+	}
+}
+
+func (ur *UserRepo) LoginWithAccount(ctx context.Context, account string, password string) (UserBaseRow, error) {
 	u, err := ur.userDao.GetUserByAccount(ctx, account)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return user.UserBase{}, ErrUserNotExist
+			return UserBaseRow{}, ErrUserNotExist
 		}
-		global.Log.Error(err)
-		return user.UserBase{}, ErrDefault
+		ur.logError(err)
+		return UserBaseRow{}, ErrDefault
 	}
 	if passwordx.IsBcryptHash(u.Password) {
 		if err := passwordx.ComparePassword(u.Password, password); err != nil {
 			if errors.Is(err, passwordx.ErrPasswordMismatch) || errors.Is(err, passwordx.ErrPasswordEmpty) {
-				return user.UserBase{}, ErrAccountOrPwd
+				return UserBaseRow{}, ErrAccountOrPwd
 			}
-			global.Log.Error(err)
-			return user.UserBase{}, ErrDefault
+			ur.logError(err)
+			return UserBaseRow{}, ErrDefault
 		}
-		return u, nil
+		return toUserBaseRow(u), nil
 	}
 	if password == "" || u.Password == "" || u.Password != password {
-		return user.UserBase{}, ErrAccountOrPwd
+		return UserBaseRow{}, ErrAccountOrPwd
 	}
 	if hashed, err := passwordx.HashAnyPassword(password); err == nil {
-		if _, upErr := ur.userDao.UpdatePasswordByUserID(ctx, user.UpdatePasswordByUserIDParams{
+		if _, upErr := ur.userDao.UpdatePasswordByUserID(ctx, dao.UpdatePasswordByUserIDParams{
 			UserID:   u.UserID,
 			Password: hashed,
 			Utime:    time.Now().UnixMilli(),
 		}); upErr != nil {
-			global.Log.Error(upErr)
+			ur.logError(upErr)
 		}
 	} else {
-		global.Log.Error(err)
+		ur.logError(err)
 	}
-	return u, nil
+	return toUserBaseRow(u), nil
 }
 
-func (ur *UserRepo) GetMyProfile(ctx context.Context, userID string) (user.GetMyProfileRow, error) {
-	key := user.CacheProfileKey(userID)
+func (ur *UserRepo) GetMyProfile(ctx context.Context, userID string) (ProfileRow, error) {
+	key := cache.ProfileKey(userID)
 	{
-		var cached user.GetMyProfileRow
-		if ok, _ := getCacheJSON(ctx, ur.rdb, key, &cached); ok {
-			global.Log.Info("user_cache_hit", "type", "profile", "user", userID)
+		var cached ProfileRow
+		if ok, _ := cache.GetJSON(ctx, ur.rdb, key, &cached); ok {
+			ur.logCacheHit("user_cache_hit", "type", "profile", "user", userID)
 			return cached, nil
 		}
 	}
 	var uid pgtype.UUID
 	if err := uid.Scan(userID); err != nil {
-		return user.GetMyProfileRow{}, err
+		return ProfileRow{}, err
 	}
 	p, err := ur.userDao.GetMyProfile(ctx, uid)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return user.GetMyProfileRow{}, ErrUserNotExist
+			return ProfileRow{}, ErrUserNotExist
 		}
-		global.Log.Error(err)
-		return user.GetMyProfileRow{}, ErrDefault
+		ur.logError(err)
+		return ProfileRow{}, ErrDefault
 	}
-	_ = setCacheJSON(ctx, ur.rdb, key, p, time.Duration(constant.USER_PROFILE_TTL)*time.Second)
-	return p, nil
+	ret := toProfileRow(p)
+	_ = cache.SetJSON(ctx, ur.rdb, key, ret, time.Duration(userconstant.ProfileTTL)*time.Second)
+	return ret, nil
 }
 
 func (ur *UserRepo) FollowUser(ctx context.Context, followerID, followeeID string) error {
@@ -119,18 +229,18 @@ func (ur *UserRepo) FollowUser(ctx context.Context, followerID, followeeID strin
 	if err := eUID.Scan(followeeID); err != nil {
 		return err
 	}
-	err := ur.userDao.CreateFollow(ctx, user.CreateFollowParams{
+	err := ur.userDao.CreateFollow(ctx, dao.CreateFollowParams{
 		Follower: fUID,
 		Followee: eUID,
 		Ctime:    time.Now().UnixMilli(),
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return ErrDefault
 	}
-	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(followerID), user.CacheProfileKey(followeeID))
-	_ = scanDelCache(ctx, ur.rdb, user.CacheFollowingKey(followerID, 0, 0), 100)
-	_ = scanDelCache(ctx, ur.rdb, user.CacheFollowersKey(followeeID, 0, 0), 100)
+	_ = cache.Del(ctx, ur.rdb, cache.ProfileKey(followerID), cache.ProfileKey(followeeID))
+	_ = cache.ScanDel(ctx, ur.rdb, cache.FollowingPattern(followerID), 100)
+	_ = cache.ScanDel(ctx, ur.rdb, cache.FollowersPattern(followeeID), 100)
 	return nil
 }
 
@@ -142,20 +252,20 @@ func (ur *UserRepo) UnfollowUser(ctx context.Context, followerID, followeeID str
 	if err := eUID.Scan(followeeID); err != nil {
 		return err
 	}
-	n, err := ur.userDao.DeleteFollow(ctx, user.DeleteFollowParams{
+	n, err := ur.userDao.DeleteFollow(ctx, dao.DeleteFollowParams{
 		Follower: fUID,
 		Followee: eUID,
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return ErrDefault
 	}
 	if n == 0 {
 		return nil
 	}
-	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(followerID), user.CacheProfileKey(followeeID))
-	_ = scanDelCache(ctx, ur.rdb, user.CacheFollowingPattern(followerID), 100)
-	_ = scanDelCache(ctx, ur.rdb, user.CacheFollowersPattern(followeeID), 100)
+	_ = cache.Del(ctx, ur.rdb, cache.ProfileKey(followerID), cache.ProfileKey(followeeID))
+	_ = cache.ScanDel(ctx, ur.rdb, cache.FollowingPattern(followerID), 100)
+	_ = cache.ScanDel(ctx, ur.rdb, cache.FollowersPattern(followeeID), 100)
 	return nil
 }
 
@@ -167,27 +277,27 @@ func (ur *UserRepo) IsFollowing(ctx context.Context, followerID, followeeID stri
 	if err := eUID.Scan(followeeID); err != nil {
 		return false, err
 	}
-	ok, err := ur.userDao.IsFollowing(ctx, user.IsFollowingParams{
+	ok, err := ur.userDao.IsFollowing(ctx, dao.IsFollowingParams{
 		Follower: fUID,
 		Followee: eUID,
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return false, ErrDefault
 	}
 	return ok, nil
 }
 
-func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowingByUserIDRow, bool, error) {
+func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, pageSize int) ([]FollowUserRow, bool, error) {
 	type listCache struct {
-		Rows    []user.ListFollowingByUserIDRow `json:"rows"`
-		HasMore bool                            `json:"has_more"`
+		Rows    []FollowUserRow `json:"rows"`
+		HasMore bool            `json:"has_more"`
 	}
-	key := user.CacheFollowingKey(userID, page, pageSize)
+	key := cache.FollowingKey(userID, page, pageSize)
 	{
 		var cached listCache
-		if ok, _ := getCacheJSON(ctx, ur.rdb, key, &cached); ok {
-			global.Log.Info("user_cache_hit", "type", "following", "user", userID, "page", page, "size", pageSize)
+		if ok, _ := cache.GetJSON(ctx, ur.rdb, key, &cached); ok {
+			ur.logCacheHit("user_cache_hit", "type", "following", "user", userID, "page", page, "size", pageSize)
 			return cached.Rows, cached.HasMore, nil
 		}
 	}
@@ -197,36 +307,40 @@ func (ur *UserRepo) ListFollowing(ctx context.Context, userID string, page, page
 	}
 	limit := int32(pageSize + 1)
 	offset := int32((page - 1) * pageSize)
-	rows, err := ur.userDao.ListFollowingByUserID(ctx, user.ListFollowingByUserIDParams{
+	rows, err := ur.userDao.ListFollowingByUserID(ctx, dao.ListFollowingByUserIDParams{
 		Follower: uid,
 		Limit:    limit,
 		Offset:   offset,
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return nil, false, ErrDefault
 	}
-	_ = delCache(ctx, ur.rdb, key)
+	_ = cache.Del(ctx, ur.rdb, key)
 	hasMore := false
 	if len(rows) > pageSize {
 		hasMore = true
 		rows = rows[:pageSize]
 	}
-	payload := listCache{Rows: rows, HasMore: hasMore}
-	_ = setCacheJSON(ctx, ur.rdb, key, payload, time.Duration(constant.USER_LIST_TTL)*time.Second)
-	return rows, hasMore, nil
+	ret := make([]FollowUserRow, 0, len(rows))
+	for _, row := range rows {
+		ret = append(ret, toFollowUserRow(row.UserID, row.Username, row.Avatar, row.FollowTime))
+	}
+	payload := listCache{Rows: ret, HasMore: hasMore}
+	_ = cache.SetJSON(ctx, ur.rdb, key, payload, time.Duration(userconstant.ListTTL)*time.Second)
+	return ret, hasMore, nil
 }
 
-func (ur *UserRepo) ListFollowers(ctx context.Context, userID string, page, pageSize int) ([]user.ListFollowersByUserIDRow, bool, error) {
+func (ur *UserRepo) ListFollowers(ctx context.Context, userID string, page, pageSize int) ([]FollowUserRow, bool, error) {
 	type listCache struct {
-		Rows    []user.ListFollowersByUserIDRow `json:"rows"`
-		HasMore bool                            `json:"has_more"`
+		Rows    []FollowUserRow `json:"rows"`
+		HasMore bool            `json:"has_more"`
 	}
-	key := user.CacheFollowersKey(userID, page, pageSize)
+	key := cache.FollowersKey(userID, page, pageSize)
 	{
 		var cached listCache
-		if ok, _ := getCacheJSON(ctx, ur.rdb, key, &cached); ok {
-			global.Log.Info("user_cache_hit", "type", "followers", "user", userID, "page", page, "size", pageSize)
+		if ok, _ := cache.GetJSON(ctx, ur.rdb, key, &cached); ok {
+			ur.logCacheHit("user_cache_hit", "type", "followers", "user", userID, "page", page, "size", pageSize)
 			return cached.Rows, cached.HasMore, nil
 		}
 	}
@@ -236,52 +350,56 @@ func (ur *UserRepo) ListFollowers(ctx context.Context, userID string, page, page
 	}
 	limit := int32(pageSize + 1)
 	offset := int32((page - 1) * pageSize)
-	rows, err := ur.userDao.ListFollowersByUserID(ctx, user.ListFollowersByUserIDParams{
+	rows, err := ur.userDao.ListFollowersByUserID(ctx, dao.ListFollowersByUserIDParams{
 		Followee: uid,
 		Limit:    limit,
 		Offset:   offset,
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return nil, false, ErrDefault
 	}
-	_ = delCache(ctx, ur.rdb, key)
+	_ = cache.Del(ctx, ur.rdb, key)
 	hasMore := false
 	if len(rows) > pageSize {
 		hasMore = true
 		rows = rows[:pageSize]
 	}
-	payload := listCache{Rows: rows, HasMore: hasMore}
-	_ = setCacheJSON(ctx, ur.rdb, key, payload, time.Duration(constant.USER_LIST_TTL)*time.Second)
-	return rows, hasMore, nil
+	ret := make([]FollowUserRow, 0, len(rows))
+	for _, row := range rows {
+		ret = append(ret, toFollowUserRow(row.UserID, row.Username, row.Avatar, row.FollowTime))
+	}
+	payload := listCache{Rows: ret, HasMore: hasMore}
+	_ = cache.SetJSON(ctx, ur.rdb, key, payload, time.Duration(userconstant.ListTTL)*time.Second)
+	return ret, hasMore, nil
 }
 
-func (ur *UserRepo) LoginWithEmail(ctx context.Context, email string) (user.UserBase, error) {
+func (ur *UserRepo) LoginWithEmail(ctx context.Context, email string) (UserBaseRow, error) {
 	u, err := ur.userDao.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return user.UserBase{}, ErrUserNotExist
+			return UserBaseRow{}, ErrUserNotExist
 		}
-		global.Log.Error(err)
-		return user.UserBase{}, ErrDefault
+		ur.logError(err)
+		return UserBaseRow{}, ErrDefault
 	}
-	return u, nil
+	return toUserBaseRow(u), nil
 }
 
-func (ur *UserRepo) GetUserByID(ctx context.Context, userID string) (user.UserBase, error) {
+func (ur *UserRepo) GetUserByID(ctx context.Context, userID string) (UserBaseRow, error) {
 	var uid pgtype.UUID
 	if err := uid.Scan(userID); err != nil {
-		return user.UserBase{}, err
+		return UserBaseRow{}, err
 	}
 	u, err := ur.userDao.GetUserByID(ctx, uid)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return user.UserBase{}, ErrUserNotExist
+			return UserBaseRow{}, ErrUserNotExist
 		}
-		global.Log.Error(err)
-		return user.UserBase{}, ErrDefault
+		ur.logError(err)
+		return UserBaseRow{}, ErrDefault
 	}
-	return u, nil
+	return toUserBaseRow(u), nil
 }
 
 func (ur *UserRepo) Register(ctx context.Context, userID, username string, email *string, account, password, gender string) error {
@@ -298,7 +416,7 @@ func (ur *UserRepo) Register(ctx context.Context, userID, username string, email
 		emailText = pgtype.Text{String: *email, Valid: true}
 	}
 
-	err = ur.userDao.CreateUser(ctx, user.CreateUserParams{
+	err = ur.userDao.CreateUser(ctx, dao.CreateUserParams{
 		UserID:   userUUID,
 		Username: username,
 		Email:    emailText,
@@ -319,7 +437,7 @@ func (ur *UserRepo) Register(ctx context.Context, userID, username string, email
 				return ErrEmailIsUsed
 			}
 		}
-		global.Log.Error(err)
+		ur.logError(err)
 		return ErrDefault
 	}
 	return nil
@@ -327,47 +445,49 @@ func (ur *UserRepo) Register(ctx context.Context, userID, username string, email
 
 // UpdateGender 事务地同时更新 user_base 和 user_addition 的性别，保证两表一致
 func (ur *UserRepo) UpdateGender(ctx context.Context, userID, gender string) error {
-	tx, err := global.DB.Begin(ctx)
+	tx, err := ur.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback(ctx)
-		} else {
-			_ = tx.Commit(ctx)
-		}
-	}()
+	defer tx.Rollback(ctx)
+
 	uq := ur.userDao.WithTx(tx)
 	var uid pgtype.UUID
 	if scanErr := uid.Scan(userID); scanErr != nil {
-		err = scanErr
-		return err
+		return scanErr
 	}
-	if _, err = uq.UpdateBaseGenderByUserID(ctx, user.UpdateBaseGenderByUserIDParams{
+	n, err := uq.UpdateBaseGenderByUserID(ctx, dao.UpdateBaseGenderByUserIDParams{
 		UserID: uid,
 		Gender: gender,
 		Utime:  time.Now().UnixMilli(),
-	}); err != nil {
-		global.Log.Error(err)
+	})
+	if err != nil {
+		ur.logError(err)
 		return ErrUserUpdateFailed
 	}
-	if _, err = uq.UpdateGenderByUserID(ctx, user.UpdateGenderByUserIDParams{
+	if n == 0 {
+		return ErrUserNotExist
+	}
+	n, err = uq.UpdateGenderByUserID(ctx, dao.UpdateGenderByUserIDParams{
 		UserID: uid,
 		Gender: gender,
 		Utime:  time.Now().UnixMilli(),
-	}); err != nil {
-		global.Log.Error(err)
+	})
+	if err != nil {
+		ur.logError(err)
 		return ErrUserUpdateFailed
 	}
-	return nil
+	if n == 0 {
+		return ErrUserNotExist
+	}
+	return tx.Commit(ctx)
 }
 
 // GetPartnerByUserID 查询另一半（返回对方ID；没有则返回空字符串）
 func (ur *UserRepo) GetPartnerByUserID(ctx context.Context, userID string) (string, error) {
-	key := user.CachePartnerKey(userID)
-	if s, ok, _ := getCacheString(ctx, ur.rdb, key); ok {
-		global.Log.Info("user_cache_hit", "type", "partner", "user", userID)
+	key := cache.PartnerKey(userID)
+	if s, ok, _ := cache.GetString(ctx, ur.rdb, key); ok {
+		ur.logCacheHit("user_cache_hit", "type", "partner", "user", userID)
 		return s, nil
 	}
 	var uid pgtype.UUID
@@ -377,36 +497,21 @@ func (ur *UserRepo) GetPartnerByUserID(ctx context.Context, userID string) (stri
 	row, err := ur.userDao.GetPartnerByUserID(ctx, uid)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			_ = setCacheEX(ctx, ur.rdb, key, "", time.Duration(constant.USER_PROFILE_TTL)*time.Second)
+			_ = cache.SetEX(ctx, ur.rdb, key, "", time.Duration(userconstant.ProfileTTL)*time.Second)
 			return "", nil
 		}
-		global.Log.Error(err)
+		ur.logError(err)
 		return "", ErrDefault
 	}
 	if row.Father == userID {
-		_ = setCacheEX(ctx, ur.rdb, key, row.Mother, time.Duration(constant.USER_PARTNER_TTL)*time.Second)
+		_ = cache.SetEX(ctx, ur.rdb, key, row.Mother, time.Duration(userconstant.PartnerTTL)*time.Second)
 		return row.Mother, nil
 	}
-	_ = setCacheEX(ctx, ur.rdb, key, row.Father, time.Duration(constant.USER_PARTNER_TTL)*time.Second)
+	_ = cache.SetEX(ctx, ur.rdb, key, row.Father, time.Duration(userconstant.PartnerTTL)*time.Second)
 	return row.Father, nil
 }
 
-// BindPartnerAndSyncBabies 建立关系并双向同步现有宝宝
-func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, motherUserID string) error {
-	tx, err := global.DB.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback(ctx)
-		} else {
-			_ = tx.Commit(ctx)
-		}
-	}()
-
-	// 1) 插入关系（幂等）使用 sqlc
-	uq := ur.userDao.WithTx(tx)
+func (ur *UserRepo) BindPartner(ctx context.Context, fatherUserID, motherUserID string) error {
 	var aUUID, bUUID pgtype.UUID
 	if scanErr := aUUID.Scan(fatherUserID); scanErr != nil {
 		return scanErr
@@ -414,112 +519,34 @@ func (ur *UserRepo) BindPartnerAndSyncBabies(ctx context.Context, fatherUserID, 
 	if scanErr := bUUID.Scan(motherUserID); scanErr != nil {
 		return scanErr
 	}
-	if err = uq.CreatePartner(ctx, user.CreatePartnerParams{
+	if err := ur.userDao.CreatePartner(ctx, dao.CreatePartnerParams{
 		Father: aUUID,
 		Mother: bUUID,
 		Ctime:  time.Now().UnixMilli(),
 	}); err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return ErrDefault
 	}
-
-	// 2) 同步宝宝：A -> B
-	bq := babydao.New(tx)
-	aBabies, err := bq.ListBabiesByUserID(ctx, aUUID)
-	if err != nil {
-		global.Log.Error(err)
-		return ErrDefault
-	}
-	for _, row := range aBabies {
-		// 获取完整信息
-		babyID := pgtype.UUID{}
-		if err := babyID.Scan(row.BabyID); err != nil {
-			return err
-		}
-		full, err := bq.GetBabyByIDAndUser(ctx, babydao.GetBabyByIDAndUserParams{
-			BabyID: babyID,
-			UserID: aUUID,
-		})
-		if err != nil {
-			global.Log.Error(err)
-			return ErrDefault
-		}
-		// 插入到 B（幂等：若已存在则忽略）
-		err = bq.CreateBaby(ctx, babydao.CreateBabyParams{
-			BabyID:   full.BabyID,
-			UserID:   bUUID,
-			Name:     full.Name,
-			Gender:   full.Gender,
-			Birthday: full.Birthday,
-			Avatar:   full.Avatar,
-			Ctime:    time.Now().UnixMilli(),
-			Utime:    time.Now().UnixMilli(),
-		})
-		if err != nil {
-			if pe, ok := err.(*pgconn.PgError); ok && pe.Code == "23505" {
-				continue
-			}
-			global.Log.Error(err)
-			return ErrDefault
-		}
-	}
-
-	// 3) 同步宝宝：B -> A
-	bBabies, err := bq.ListBabiesByUserID(ctx, bUUID)
-	if err != nil {
-		global.Log.Error(err)
-		return ErrDefault
-	}
-	for _, row := range bBabies {
-		babyID := pgtype.UUID{}
-		if err := babyID.Scan(row.BabyID); err != nil {
-			return err
-		}
-		full, err := bq.GetBabyByIDAndUser(ctx, babydao.GetBabyByIDAndUserParams{
-			BabyID: babyID,
-			UserID: bUUID,
-		})
-		if err != nil {
-			global.Log.Error(err)
-			return ErrDefault
-		}
-		err = bq.CreateBaby(ctx, babydao.CreateBabyParams{
-			BabyID:   full.BabyID,
-			UserID:   aUUID,
-			Name:     full.Name,
-			Gender:   full.Gender,
-			Birthday: full.Birthday,
-			Avatar:   full.Avatar,
-			Ctime:    time.Now().UnixMilli(),
-			Utime:    time.Now().UnixMilli(),
-		})
-		if err != nil {
-			if pe, ok := err.(*pgconn.PgError); ok && pe.Code == "23505" {
-				continue
-			}
-			global.Log.Error(err)
-			return ErrDefault
-		}
-	}
-	_ = delCache(ctx, ur.rdb, user.CachePartnerKey(fatherUserID), user.CachePartnerKey(motherUserID))
+	_ = cache.Del(ctx, ur.rdb, cache.PartnerKey(fatherUserID), cache.PartnerKey(motherUserID))
 	for _, uid := range []string{fatherUserID, motherUserID} {
-		_ = scanDelCache(ctx, ur.rdb, user.CacheFollowingPattern(uid), 100)
-		_ = scanDelCache(ctx, ur.rdb, user.CacheFollowersPattern(uid), 100)
-		_ = delCache(ctx, ur.rdb, user.CacheProfileKey(uid))
+		_ = cache.ScanDel(ctx, ur.rdb, cache.FollowingPattern(uid), 100)
+		_ = cache.ScanDel(ctx, ur.rdb, cache.FollowersPattern(uid), 100)
+		_ = cache.Del(ctx, ur.rdb, cache.ProfileKey(uid))
 	}
 	return nil
 }
+
 func (ur *UserRepo) ResetPassword(ctx context.Context, email, newPassword string) error {
 	hashed, err := passwordx.HashPassword(newPassword)
 	if err != nil {
 		return err
 	}
-	count, err := ur.userDao.UpdatePasswordByEmail(ctx, user.UpdatePasswordByEmailParams{
+	count, err := ur.userDao.UpdatePasswordByEmail(ctx, dao.UpdatePasswordByEmailParams{
 		Email:    pgtype.Text{String: email, Valid: true},
 		Password: hashed,
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return ErrDefault
 	}
 	if count == 0 {
@@ -536,7 +563,7 @@ func (ur *UserRepo) UpdateAvatarByID(ctx context.Context, userID, url string) er
 	// 兼容：使用 UpdateUserAdditionByUserID 仅更新 avatar 字段
 	var v2, v3, v4, v5 interface{}
 	v6 := url
-	count, err := ur.userDao.UpdateUserAdditionByUserID(ctx, user.UpdateUserAdditionByUserIDParams{
+	count, err := ur.userDao.UpdateUserAdditionByUserID(ctx, dao.UpdateUserAdditionByUserIDParams{
 		UserID:  userUUID,
 		Column2: v2,
 		Column3: v3,
@@ -547,13 +574,13 @@ func (ur *UserRepo) UpdateAvatarByID(ctx context.Context, userID, url string) er
 		Utime:   time.Now().UnixMilli(),
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return ErrUserUpdateFailed
 	}
 	if count == 0 {
 		return ErrUserNotExist
 	}
-	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(userID))
+	_ = cache.Del(ctx, ur.rdb, cache.ProfileKey(userID))
 	return nil
 }
 
@@ -586,7 +613,7 @@ func (ur *UserRepo) UpdateAdditionByID(ctx context.Context, userID string, occup
 	if birthday != nil {
 		v7 = *birthday
 	}
-	n, err := ur.userDao.UpdateUserAdditionByUserID(ctx, user.UpdateUserAdditionByUserIDParams{
+	n, err := ur.userDao.UpdateUserAdditionByUserID(ctx, dao.UpdateUserAdditionByUserIDParams{
 		UserID:  userUUID,
 		Column2: v2,
 		Column3: v3,
@@ -597,13 +624,13 @@ func (ur *UserRepo) UpdateAdditionByID(ctx context.Context, userID string, occup
 		Utime:   time.Now().UnixMilli(),
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return ErrUserUpdateFailed
 	}
 	if n == 0 {
 		return ErrUserNotExist
 	}
-	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(userID))
+	_ = cache.Del(ctx, ur.rdb, cache.ProfileKey(userID))
 	return nil
 }
 
@@ -612,12 +639,12 @@ func (ur *UserRepo) IsPhoneUsed(ctx context.Context, phone string, excludeUserID
 	if err := exclude.Scan(excludeUserID); err != nil {
 		return false, err
 	}
-	exists, err := ur.userDao.IsPhoneUsed(ctx, user.IsPhoneUsedParams{
+	exists, err := ur.userDao.IsPhoneUsed(ctx, dao.IsPhoneUsedParams{
 		Phone:  phone,
 		UserID: exclude,
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return false, ErrDefault
 	}
 	return exists, nil
@@ -628,7 +655,7 @@ func (ur *UserRepo) BindEmail(ctx context.Context, userID, email string) error {
 	if err := uid.Scan(userID); err != nil {
 		return err
 	}
-	count, err := ur.userDao.BindEmailByUserID(ctx, user.BindEmailByUserIDParams{
+	count, err := ur.userDao.BindEmailByUserID(ctx, dao.BindEmailByUserIDParams{
 		UserID: uid,
 		Email:  pgtype.Text{String: email, Valid: true},
 		Utime:  time.Now().UnixMilli(),
@@ -641,27 +668,26 @@ func (ur *UserRepo) BindEmail(ctx context.Context, userID, email string) error {
 				return ErrEmailIsUsed
 			}
 		}
-		global.Log.Error(err)
+		ur.logError(err)
 		return ErrUserUpdateFailed
 	}
 	if count == 0 {
 		return ErrUserNotExist
 	}
-	_ = delCache(ctx, ur.rdb, user.CacheProfileKey(userID))
+	_ = cache.Del(ctx, ur.rdb, cache.ProfileKey(userID))
 	return nil
 }
 
-// admin
-func (ur *UserRepo) AdminListUsers(ctx context.Context, keyword string, page, pageSize int) ([]user.AdminListUsersRow, bool, error) {
+func (ur *UserRepo) AdminListUsers(ctx context.Context, keyword string, page, pageSize int) ([]AdminUserRow, bool, error) {
 	limit := int32(pageSize + 1)
 	offset := int32((page - 1) * pageSize)
-	rows, err := ur.userDao.AdminListUsers(ctx, user.AdminListUsersParams{
+	rows, err := ur.userDao.AdminListUsers(ctx, dao.AdminListUsersParams{
 		Column1: keyword,
 		Limit:   limit,
 		Offset:  offset,
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return nil, false, ErrDefault
 	}
 	hasMore := false
@@ -669,7 +695,11 @@ func (ur *UserRepo) AdminListUsers(ctx context.Context, keyword string, page, pa
 		hasMore = true
 		rows = rows[:pageSize]
 	}
-	return rows, hasMore, nil
+	ret := make([]AdminUserRow, 0, len(rows))
+	for _, row := range rows {
+		ret = append(ret, toAdminUserRow(row))
+	}
+	return ret, hasMore, nil
 }
 
 func (ur *UserRepo) AdminUpdateUserRole(ctx context.Context, userID string, role int16) error {
@@ -677,13 +707,13 @@ func (ur *UserRepo) AdminUpdateUserRole(ctx context.Context, userID string, role
 	if err := uid.Scan(userID); err != nil {
 		return err
 	}
-	n, err := ur.userDao.AdminUpdateUserRole(ctx, user.AdminUpdateUserRoleParams{
+	n, err := ur.userDao.AdminUpdateUserRole(ctx, dao.AdminUpdateUserRoleParams{
 		UserID: uid,
 		Role:   role,
 		Utime:  time.Now().UnixMilli(),
 	})
 	if err != nil {
-		global.Log.Error(err)
+		ur.logError(err)
 		return ErrDefault
 	}
 	if n == 0 {
