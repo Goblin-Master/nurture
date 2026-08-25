@@ -1,7 +1,6 @@
 package user
 
 import (
-	"context"
 	"nurture/internal/pkg/emailx"
 	"nurture/internal/pkg/smsx"
 	"nurture/internal/user/handler"
@@ -23,8 +22,9 @@ type Deps struct {
 }
 
 type Module struct {
-	userRepo repo.IUserRepo
-	handler  *handler.UserHandler
+	userLogic *logic.UserLogic
+	handler   *handler.UserHandler
+	client    *Client
 }
 
 func NewModule(deps Deps) *Module {
@@ -39,15 +39,16 @@ func NewModule(deps Deps) *Module {
 	userRepo := repo.NewUserRepo(deps.DB, deps.RDB, deps.Log)
 	userLogic := logic.NewUserLogic(userRepo, email, sms, deps.BabySyncer, deps.Log)
 	return &Module{
-		userRepo: userRepo,
-		handler:  handler.NewUserHandler(userLogic),
+		userLogic: userLogic,
+		handler:   handler.NewUserHandler(userLogic),
+		client:    NewClient(userRepo),
 	}
 }
 
-func (m *Module) GetPartnerByUserID(ctx context.Context, userID string) (string, error) {
-	return m.userRepo.GetPartnerByUserID(ctx, userID)
+func (m *Module) Client() *Client {
+	return m.client
 }
 
-func (m *Module) IsFollowing(ctx context.Context, followerID, followeeID string) (bool, error) {
-	return m.userRepo.IsFollowing(ctx, followerID, followeeID)
+func (m *Module) SetBabySyncer(syncer logic.BabySyncer) {
+	m.userLogic.SetBabySyncer(syncer)
 }

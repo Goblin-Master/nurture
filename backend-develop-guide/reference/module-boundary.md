@@ -40,6 +40,7 @@ internal/
 - 业务有自己的状态流，例如消息投递、订单生命周期、任务重试。
 - handler、logic、repo 文件过长，继续放共享目录会导致命名和职责混乱。
 - 测试需要独立 fakes、fixtures、session、worker 或 repo cache。
+- 跨模块调用开始变多，需要一个可替换的本地 API 边界。
 - 未来可能整体替换、下线或抽成服务。
 
 ## 模块目标结构
@@ -49,6 +50,7 @@ internal/
 ```text
 internal/<domain>/
   enter.go          # Module/Deps/NewModule
+  client.go         # optional cross-module client
   route.go          # RegisterRoutes
   constant/         # 固定业务策略和常量
   dto/              # 模块请求/响应/消息 DTO
@@ -103,6 +105,30 @@ chat.NewModule(chat.Deps{
     Log: global.Log,
 }).RegisterRoutes(api.Group("/chat"), ws)
 ```
+
+## 模块 Client
+
+当其它模块需要调用当前模块的能力时，provider 模块可以在根包暴露 `Client`，由 `Module.Client()` 返回。`Module` 负责构造、路由和 worker 生命周期；`Client` 负责稳定的跨模块能力入口。
+
+```go
+type Module struct {
+    handler *handler.Handler
+    client  *Client
+}
+
+func (m *Module) Client() *Client {
+    return m.client
+}
+```
+
+使用规则：
+
+- provider 的 `Client` 放在 `internal/<domain>/client.go`，不要放进 `internal/pkg`。
+- consumer 仍然在自己的 logic 包定义最小接口，例如 `PartnerReader`、`FollowReader`、`BabyGrowthReader`。
+- `Client` 不暴露 handler、logic、repo、sqlc/dao 类型；需要返回数据时定义模块根包自己的边界类型。
+- `router` 或 `main` 只做上层组装：`baby.NewModule(... PartnerReader: userModule.Client())`。
+- 出现构造环时，可以使用模块方法做初始化期 late-bind，例如 `userModule.SetBabySyncer(babyModule.Client())`，不要在 router 中直接 new 另一个模块的 repo。
+- proto/gRPC 只在模块需要远程化、跨进程契约或多语言调用时引入；本进程模块调用优先使用 `Client` + consumer 小接口。
 
 ## 依赖规则
 

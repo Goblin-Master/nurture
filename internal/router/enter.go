@@ -4,7 +4,6 @@ import (
 	"fmt"
 	aimodule "nurture/internal/ai"
 	"nurture/internal/baby"
-	babyrepo "nurture/internal/baby/repo"
 	"nurture/internal/chat"
 	"nurture/internal/config"
 	"nurture/internal/file"
@@ -49,25 +48,24 @@ func registerRoutes(r *gin.Engine) {
 	api := r.Group("/api")
 	ws := r.Group("/ws")
 	dbRequired := middleware.RequireDB()
-	babyRepo := babyrepo.NewBabyRepo(global.DB, global.RDB, global.Log)
 	userModule := user.NewModule(user.Deps{
-		DB:         global.DB,
-		RDB:        global.RDB,
-		Log:        global.Log,
-		BabySyncer: babyRepo,
+		DB:  global.DB,
+		RDB: global.RDB,
+		Log: global.Log,
 	})
 	babyModule := baby.NewModule(baby.Deps{
 		DB:            global.DB,
 		RDB:           global.RDB,
 		Log:           global.Log,
-		PartnerReader: userModule,
+		PartnerReader: userModule.Client(),
 	})
+	userModule.SetBabySyncer(babyModule.Client())
 	postModule := post.NewModule(post.Deps{
 		DB:           global.DB,
 		RDB:          global.RDB,
 		Log:          global.Log,
 		AI:           global.AIX,
-		FollowReader: userModule,
+		FollowReader: userModule.Client(),
 	})
 
 	file.NewModule(file.Deps{
@@ -81,7 +79,7 @@ func registerRoutes(r *gin.Engine) {
 		AI:           global.AIX,
 		AIConfig:     config.Conf.AI,
 		DBEnabled:    config.Conf.DB.Enable && global.DB != nil,
-		GrowthReader: newAIGrowthReader(babyRepo),
+		GrowthReader: newAIGrowthReader(babyModule.Client()),
 	}).RegisterRoutes(api.Group("/ai"))
 	chat.NewModule(chat.Deps{
 		DB:            global.DB,

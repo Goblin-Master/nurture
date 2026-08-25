@@ -19,6 +19,7 @@ type Deps struct {
 
 type Module struct {
 	handler *handler.BabyHandler
+	client  *Client
 }
 
 func NewModule(deps Deps) *Module {
@@ -26,5 +27,10 @@ func NewModule(deps Deps) *Module {
 	babyLogic := logic.NewBabyLogic(babyRepo, deps.PartnerReader, deps.Log)
 	return &Module{
 		handler: handler.NewBabyHandler(babyLogic),
+		client:  NewClient(babyRepo),
 	}
+}
+
+func (m *Module) Client() *Client {
+	return m.client
 }

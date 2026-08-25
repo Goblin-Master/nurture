@@ -84,6 +84,10 @@ func NewUserLogic(userRepo repo.IUserRepo, email EmailSender, sms SMSSender, bab
 
 var _ IUserLogic = (*UserLogic)(nil)
 
+func (ul *UserLogic) SetBabySyncer(syncer BabySyncer) {
+	ul.babySyncer = syncer
+}
+
 func (ul *UserLogic) logError(err error) {
 	if err != nil {
 		ul.log.Error(err)

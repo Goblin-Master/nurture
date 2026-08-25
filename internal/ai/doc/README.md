@@ -13,7 +13,7 @@ sequenceDiagram
   participant Logic as ai.logic
   participant Handler as ai.handler
   participant AIX as pkg/aix
-  participant Baby as baby reader
+  participant Baby as baby.Client adapter
 
   Router->>Module: NewModule(RDB, Log, AIX, AIConfig, DBEnabled, GrowthReader)
   Module->>Repo: NewAIRepo(AIX, RDB, Log)
@@ -22,7 +22,7 @@ sequenceDiagram
   Router->>Module: RegisterRoutes(api.Group('/ai'))
   Module-->>Router: register knowledge, chat, growth routes
   Logic-->>AIX: use chat, embedding, vector, history capabilities
-  Logic-->>Baby: read baby profile and growth records when needed
+  Logic-->>Baby: read baby profile and growth records through injected boundary
 ```
 
 ## 对话流链路
@@ -37,7 +37,7 @@ sequenceDiagram
   participant Redis as Redis
   participant AIX as pkg/aix
   participant Vector as pgvector
-  participant Baby as baby reader
+  participant Baby as baby.Client adapter
   participant LLM as chat provider
 
   Client->>Handler: POST /api/ai/chat/stream
@@ -119,7 +119,7 @@ sequenceDiagram
   participant Client as client
   participant Handler as AIHandler
   participant Logic as AILogic
-  participant Baby as baby reader
+  participant Baby as baby.Client adapter
   participant AIX as pkg/aix
   participant LLM as chat provider
 
@@ -144,6 +144,6 @@ sequenceDiagram
 
 ## 边界说明
 
-- AI 模块不直接初始化模型或外部客户端，`AIX`、Redis、日志和 baby 读取能力都由上层注入。
+- AI 模块不直接初始化模型或外部客户端，`AIX`、Redis、日志和 baby 读取能力都由上层注入；当前 baby 读取由 router 中的 adapter 基于 `baby.Client` 提供。
 - `chat.enable` 与 `embedding.enable` 分开判断：普通对话、知识库上传、RAG 检索和成长报告可以按能力降级。
 - 知识库固定策略放在 `internal/config` 的 AI 配置与 `internal/ai/constant` 中；DTO 不承载配置。

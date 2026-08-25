@@ -13,7 +13,7 @@ sequenceDiagram
   participant Logic as post.logic
   participant Handler as post.handler
   participant AIX as pkg/aix
-  participant User as user follow reader
+  participant User as user.Client via FollowReader
 
   Router->>Module: NewModule(DB, RDB, Log, AI, FollowReader)
   Module->>Repo: NewPostRepo(DB, RDB, Log, AI)
@@ -137,6 +137,6 @@ sequenceDiagram
 
 ## 边界说明
 
-- Post 模块通过注入的 `FollowReader` 读取用户关注关系，不直接依赖 user 模块内部实现。
+- Post 模块通过注入的 `FollowReader` 读取用户关注关系；当前由 `user.Client` 提供实现，不直接依赖 user 模块内部 repo/logic。
 - 推荐依赖注入的 `pkg/aix`，AI 不可用时 feed/search 仍保持基础查询能力。
 - 标签管理在模块内提供 admin routes，顶层 router 只负责挂到 `/api/admin`。

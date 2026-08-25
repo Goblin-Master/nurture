@@ -12,15 +12,44 @@ sequenceDiagram
   participant Repo as baby.repo
   participant Logic as baby.logic
   participant Handler as baby.handler
-  participant User as user partner reader
+  participant BabyClient as baby.Client
+  participant User as user.Client via PartnerReader
 
   Router->>Module: NewModule(DB, RDB, Log, PartnerReader)
   Module->>Repo: NewBabyRepo(DB, RDB, Log)
   Module->>Logic: NewBabyLogic(repo, PartnerReader, Log)
   Module->>Handler: NewBabyHandler(logic)
+  Module->>BabyClient: NewClient(repo)
   Router->>Module: RegisterRoutes(api.Group('/baby'))
   Router->>Module: RegisterAdminRoutes(api.Group('/admin'))
+  Router-->>BabyClient: inject into user and AI boundaries
   Logic-->>User: read partner relationship when creating baby
+```
+
+## Client 边界链路
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Router as router
+  participant BabyClient as baby.Client
+  participant User as user.logic BabySyncer
+  participant AI as ai.logic BabyGrowthReader
+  participant Repo as BabyRepo
+
+  Router->>BabyClient: babyModule.Client()
+  Router->>User: inject as BabySyncer
+  User->>BabyClient: SyncPartnerBabies(fatherID, motherID)
+  BabyClient->>Repo: SyncPartnerBabies(fatherID, motherID)
+  Repo-->>BabyClient: nil
+
+  Router->>AI: inject growth adapter backed by baby.Client
+  AI->>BabyClient: GetBabyByIDAndUser(babyID, userID)
+  BabyClient->>Repo: GetBabyByIDAndUser(babyID, userID)
+  BabyClient-->>AI: baby.BabyProfile
+  AI->>BabyClient: ListGrowthRecordsByBabyIDBetween(babyID, from, to)
+  BabyClient->>Repo: ListGrowthRecordsByBabyIDBetween(babyID, from, to)
+  BabyClient-->>AI: []baby.GrowthRecord
 ```
 
 ## 新建宝宝链路
