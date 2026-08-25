@@ -6,6 +6,7 @@ import (
 	babyrepo "nurture/internal/baby/repo"
 	"nurture/internal/chat"
 	"nurture/internal/config"
+	"nurture/internal/file"
 	"nurture/internal/global"
 	"nurture/internal/middleware"
 	"nurture/internal/pkg/jwtx"
@@ -67,6 +68,11 @@ func registerRoutes(r *gin.Engine) {
 		FollowReader: userModule,
 	})
 
+	file.NewModule(file.Deps{
+		Config:  config.Conf.Minio,
+		Storage: global.MIO,
+		Log:     global.Log,
+	}).RegisterRoutes(api.Group("/common/file"))
 	registerCommonRoutes(api.Group("/common"))
 	chat.NewModule(chat.Deps{
 		DB:            global.DB,

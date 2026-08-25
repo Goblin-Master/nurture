@@ -1,17 +1,10 @@
 package logic
 
-import (
-	"errors"
-	"fmt"
-	"nurture/internal/constant"
-)
+import "errors"
 
 var (
 	ErrParamsType          = errors.New("参数格式错误")
 	ErrDefault             = errors.New("默认错误")
-	ErrFileOverSize        = fmt.Errorf("文件大小不能超过%dMB", constant.FILE_MAX_SIZE/1024/1024)
-	ErrFileRead            = errors.New("文件读取失败")
-	ErrFileUpload          = errors.New("文件上传失败")
 	ErrDatabaseUnavailable = errors.New("数据库服务未启用")
 )
 

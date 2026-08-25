@@ -23,23 +23,6 @@ func NewCommonHandler() *CommonHandler {
 	}
 }
 
-func (h *CommonHandler) UploadFile(c *gin.Context) {
-	global.Log.Infof("%s: %s", jwtx.GetUserID(c), c.Request.FormValue("file"))
-	file, header, err := c.Request.FormFile("file")
-	if err != nil {
-		response.Response(c, nil, ErrFileRead)
-		return
-	}
-	defer file.Close()
-
-	url, err := h.commonLogic.UploadFile(c.Request.Context(), file, header)
-	if err != nil {
-		response.Response(c, nil, err)
-		return
-	}
-	response.Response(c, url, nil)
-}
-
 // ChatStream AI 对话（SSE 流式响应）
 func (h *CommonHandler) ChatStream(c *gin.Context) {
 	req := middleware.GetBind[dto.ChatStreamReq](c)

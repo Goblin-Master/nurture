@@ -5,7 +5,6 @@ const (
 	TOKEN_USER_ID   = "UserID"
 	TOKEN_ROLE      = "Role"
 	DEFAULT_NODE_ID = 1
-	FILE_MAX_SIZE   = 1024 * 1024 * 10
 
 	// 知识空间类型
 	SPACE_TYPE_PRIVATE = "private"

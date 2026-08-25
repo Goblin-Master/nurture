@@ -11,7 +11,6 @@ import (
 
 func registerCommonRoutes(rg *gin.RouterGroup) {
 	commonHandler := handler.NewCommonHandler()
-	rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
 
 	ai := rg.Group("/ai")
 	{
