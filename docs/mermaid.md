@@ -16,7 +16,7 @@ flowchart TD
 ```mermaid
 flowchart TD
   U[用户] --> FE[前端]
-  FE -->|POST /api/common/ai/chat/stream<br/>session_id + message<br/>可选 auto_context + baby_id + context_days| API[后端 ChatStream]
+  FE -->|POST /api/ai/chat/stream<br/>session_id + message<br/>可选 auto_context + baby_id + context_days| API[后端 ChatStream]
 
   API --> AUTH[鉴权 获取 user_id]
 
@@ -43,7 +43,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  FE[前端] -->|POST /api/common/ai/chat/stream<br/>auto_context=true<br/>baby_id + context_days| API[ChatStream]
+  FE[前端] -->|POST /api/ai/chat/stream<br/>auto_context=true<br/>baby_id + context_days| API[ChatStream]
 
   API --> AUTH[鉴权 获取 user_id]
 
@@ -66,7 +66,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  FE[前端] -->|POST /api/common/ai/knowledge/upload<br/>space_type private 或 public<br/>content| API[后端 UploadKnowledge]
+  FE[前端] -->|POST /api/ai/knowledge/upload<br/>space_type private 或 public<br/>content| API[后端 UploadKnowledge]
   API --> AUTH[鉴权 获取 user_id]
   API --> CHUNK[文本分块]
   CHUNK --> EMB[调用 Embedding]
@@ -78,7 +78,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  FE[前端] -->|POST /api/common/ai/chat/stream| API[ChatStream]
+  FE[前端] -->|POST /api/ai/chat/stream| API[ChatStream]
   API --> AUTH[鉴权 获取 user_id]
   API --> COL["根据 config.Conf.AI.KBConfig 选择 collections<br/>knowledge_user_USER_ID 或 knowledge_public"]
   COL --> QEMB[对 query 做 Embedding]
@@ -93,7 +93,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  FE[前端] -->|POST /api/common/ai/report/growth<br/>baby_id + range_days + language| API[后端 GrowthReport]
+  FE[前端] -->|POST /api/ai/report/growth<br/>baby_id + range_days + language| API[后端 GrowthReport]
   API --> AUTH[鉴权 获取 user_id]
   API --> BABY[GetBabyByIDAndUser<br/>取宝宝基础信息]
   API --> GR[ListGrowthRecordsByBabyIDBetween<br/>计算 from to]

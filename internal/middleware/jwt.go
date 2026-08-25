@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"nurture/internal/constant"
 	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/response"
 
@@ -30,8 +29,8 @@ func Authentication(role jwtx.Role) gin.HandlerFunc {
 			return
 		}
 		//将用户id和角色加入ctx
-		c.Set(constant.TOKEN_USER_ID, UserID)
-		c.Set(constant.TOKEN_ROLE, Role)
+		c.Set(jwtx.ContextUserIDKey, UserID)
+		c.Set(jwtx.ContextRoleKey, Role)
 		c.Next()
 	}
 }

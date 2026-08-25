@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"nurture/internal/config"
-	"nurture/internal/constant"
 	"strings"
 	"time"
 
@@ -18,6 +17,11 @@ const (
 	COMMON_USER = iota + 1
 	INTERNAL_USER
 	ADMIN
+)
+
+const (
+	ContextUserIDKey = "UserID"
+	ContextRoleKey   = "Role"
 )
 
 type MyClaims struct {
@@ -106,7 +110,7 @@ func ParseTokenString(token string) (*MyClaims, error) {
 
 // 必须使用了鉴权中间件才能用
 func GetUserID(c *gin.Context) string {
-	if data, exists := c.Get(constant.TOKEN_USER_ID); exists {
+	if data, exists := c.Get(ContextUserIDKey); exists {
 		user_id, ok := data.(string)
 		if ok {
 			return user_id
@@ -124,7 +128,7 @@ func GetUserID(c *gin.Context) string {
 
 // 必须使用了鉴权中间件才能用
 func GetRole(c *gin.Context) Role {
-	if data, exists := c.Get(constant.TOKEN_ROLE); exists {
+	if data, exists := c.Get(ContextRoleKey); exists {
 		role, ok := data.(Role)
 		if ok {
 			return role

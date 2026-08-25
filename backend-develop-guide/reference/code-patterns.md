@@ -280,8 +280,8 @@ func Authentication(role jwtx.Role) gin.HandlerFunc {
             return
         }
         // 将用户信息存入 Context
-        c.Set(constant.TOKEN_USER_ID, UserID)
-        c.Set(constant.TOKEN_ROLE, Role)
+        c.Set(jwtx.ContextUserIDKey, UserID)
+        c.Set(jwtx.ContextRoleKey, Role)
         c.Next()
     }
 }
@@ -420,7 +420,7 @@ func LoadConfig() {
 func registerRoutes(r *gin.Engine) {
     registerHealthRoutes(r)
     api := r.Group("/api")
-    registerCommonRoutes(api.Group("/common"))
+    registerFileRoutes(api.Group("/file"))
     registerUserRoutes(api.Group("/user"))
 }
 
@@ -439,10 +439,10 @@ func registerHealthRoutes(r *gin.Engine) {
     })
 }
 
-// router/common.go
-func registerCommonRoutes(rg *gin.RouterGroup) {
-    commonHandler := handler.NewCommonHandler()
-    rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
+// router/file.go
+func registerFileRoutes(rg *gin.RouterGroup) {
+    fileHandler := handler.NewFileHandler()
+    rg.POST("/upload", middleware.Authentication(jwtx.COMMON_USER), fileHandler.Upload)
 }
 
 // router/user.go
@@ -455,22 +455,17 @@ func registerUserRoutes(rg *gin.RouterGroup) {
 
 ## 9. 常量定义模式
 
+根级 `internal/constant` 容易退化成杂物包。常量应优先归属业务模块或基础设施包自身，例如 `internal/user/constant`、`internal/chat/constant`、`internal/pkg/jwtx`。
+
 ```go
-// constant/enter.go
+// user/constant/enter.go
 package constant
 
 const (
-    // Context Keys
-    TOKEN_USER_ID = "UserID"
-    TOKEN_ROLE    = "Role"
-    
     // 登录方式
     LOGIN_WITH_ACCOUNT = "account"
     LOGIN_WITH_EMAIL   = "email"
-    
-    // 业务常量
-    FILE_MAX_SIZE = 1024 * 1024 * 10  // 10MB
-    
+
     // Redis Key 模板
     LOGIN_CODE_KEY     = "login_code:%s"
     REGISTER_CODE_KEY  = "register_code:%s"

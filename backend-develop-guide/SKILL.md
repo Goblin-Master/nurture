@@ -64,8 +64,6 @@ internal/
 ├── config/          # 配置结构定义和加载
 │   ├── enter.go     # Config 结构体定义
 │   └── read.go      # 配置加载逻辑
-├── constant/        # 常量定义
-│   └── enter.go
 ├── dto/             # 数据传输对象（Request/Response）
 │   └── user.go
 ├── etc/             # 配置文件
@@ -100,6 +98,8 @@ internal/
 │   └── user.go      # 模块路由注册
 └── main.go          # 应用入口
 ```
+
+固定业务策略和常量优先放在业务模块自己的 `constant/` 包中，例如 `internal/user/constant`、`internal/chat/constant`。不要为了少量跨包字符串新建根级 `internal/constant`。
 
 可拆卸模块使用 `internal/<domain>`，例如：
 
@@ -331,7 +331,7 @@ response.Response(c, resp, err)
 ## AI 模块开发规范
 
 - **文档参考**：AI 系统详细设计参考 `docs/ai-system-srs.md`。
-- **接口位置**：AI 相关接口统一放在 `/api/common/ai/` 路由组下。
+- **接口位置**：AI 相关接口统一放在 `/api/ai/` 路由组下。
 - **鉴权**：所有 AI 接口强制鉴权，`UserID` 从 Token 获取，`SessionID` 由前端生成并传递。
 - **配置**：AI 模型密钥（API Key）必须从 `config` 读取，禁止硬编码。
 

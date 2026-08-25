@@ -74,7 +74,7 @@ func registerRoutes(r *gin.Engine) {
 		Config:  config.Conf.Minio,
 		Storage: global.MIO,
 		Log:     global.Log,
-	}).RegisterRoutes(api.Group("/common/file"))
+	}).RegisterRoutes(api.Group("/file"))
 	aimodule.NewModule(aimodule.Deps{
 		RDB:          global.RDB,
 		Log:          global.Log,
@@ -82,7 +82,7 @@ func registerRoutes(r *gin.Engine) {
 		AIConfig:     config.Conf.AI,
 		DBEnabled:    config.Conf.DB.Enable && global.DB != nil,
 		GrowthReader: newAIGrowthReader(babyRepo),
-	}).RegisterRoutes(api.Group("/common/ai"))
+	}).RegisterRoutes(api.Group("/ai"))
 	chat.NewModule(chat.Deps{
 		DB:            global.DB,
 		RDB:           global.RDB,

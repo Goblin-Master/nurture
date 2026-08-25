@@ -51,29 +51,27 @@ HTTP Request
 
 ```
 internal/
+├── ai/                  # AI 可拆卸模块
+│   ├── constant/        # AI 相关常量（Redis Key、Collection 名等）
+│   ├── dto/             # AI 对话相关 DTO
+│   ├── handler/         # AIHandler
+│   ├── logic/           # AILogic
+│   ├── repo/            # AIRepo
+│   └── route.go         # AI 路由注册
 ├── config/              # 配置结构定义和加载
 │   ├── enter.go         # Config 结构体定义（含 AI 配置）
 │   └── read.go          # 配置加载逻辑
-├── constant/            # 常量定义
-│   └── enter.go         # AI 相关常量（Redis Key、Collection 名等）
-├── dto/                 # 数据传输对象
-│   └── ai.go            # AI 对话相关 DTO
 ├── etc/                 # 配置文件
 │   ├── local.yaml
 │   └── template.yaml
 ├── global/              # 全局变量
 │   └── enter.go         # DB、Redis、AIX 实例
-├── handler/             # HTTP 处理器
-│   └── common.go        # CommonHandler（含 AI 接口）
-├── logic/               # 业务逻辑
-│   ├── errors.go        # Logic 层错误定义
-│   └── common.go        # CommonLogic（含 AI 逻辑）
 ├── middleware/          # 中间件
 │   ├── bind.go
 │   └── cors.go
 ├── router/              # 路由注册
 │   ├── enter.go
-│   └── common.go
+│   └── ai.go            # AI 跨模块 adapter
 ├── pkg/                 # 基础设施包
 │   ├── aix/             # AI 功能封装（核心）
 │   │   ├── enter.go     # AIX 结构体和初始化
@@ -140,12 +138,12 @@ flowchart TD
 
 ## 五、API 规范
 
-> API 路由放在 `/api/common/` 路由组下
+> API 路由放在 `/api/ai/` 路由组下
 
 ### 5.1 上传文件到知识库
 
 ```
-POST /api/common/ai/knowledge/upload
+POST /api/ai/knowledge/upload
 ```
 
 **请求头**：
@@ -183,7 +181,7 @@ POST /api/common/ai/knowledge/upload
 ### 5.2 AI 对话（流式响应）
 
 ```
-POST /api/common/ai/chat/stream
+POST /api/ai/chat/stream
 ```
 
 **请求头**：
@@ -238,7 +236,7 @@ data: {"type": "done", "session_id": "sess_789"}
 ### 5.3 获取对话历史
 
 ```
-GET /api/common/ai/chat/history
+GET /api/ai/chat/history
 ```
 
 **请求头**：
@@ -254,7 +252,7 @@ GET /api/common/ai/chat/history
 **请求示例**：
 
 ```
-GET /api/common/ai/chat/history?session_id=sess_789
+GET /api/ai/chat/history?session_id=sess_789
 ```
 
 **响应参数**：
@@ -357,31 +355,31 @@ type (
 
 ## 七、常量定义
 
-**文件**：`internal/constant/enter.go`
+**文件**：`internal/ai/constant/enter.go`
 
 ```go
 package constant
 
 const (
     // 知识空间类型
-    SPACE_TYPE_PRIVATE = "private"
-    SPACE_TYPE_PUBLIC  = "public"
+    SpaceTypePrivate = "private"
+    SpaceTypePublic  = "public"
 
     // CollectionName 模板
-    COLLECTION_USER_PREFIX = "knowledge_user_%s"//user_id
-    COLLECTION_PUBLIC      = "knowledge_public"
+    CollectionUserPrefix = "knowledge_user_%s"
+    CollectionPublic     = "knowledge_public"
 
     // Redis Key
-    CHAT_HISTORY_KEY = "chat:history:%s:%s"  // user_id:session_id
+    ChatHistoryKey = "chat:history:%s:%s"
 
     // 对话历史
-    AI_CONTEXT_MESSAGES = 6              // AI 上下文：最近 3 轮问答（6 条消息）
-    HISTORY_TTL         = 7 * 24 * 3600  // 7 天（秒）
+    ContextMessages = 6
+    HistoryTTL      = 7 * 24 * 3600
 
     // SSE 事件类型
-    SSE_TYPE_CONTENT = "content"
-    SSE_TYPE_ERROR   = "error"
-    SSE_TYPE_DONE    = "done"
+    SSETypeContent = "content"
+    SSETypeError   = "error"
+    SSETypeDone    = "done"
 )
 ```
 
@@ -512,9 +510,9 @@ func newChatModel(cfg config.ChatModel) (llms.Model, error) {
 }
 
 // StreamChat 流式对话
-func (a *AIX) StreamChat(ctx context.Context, messages []llms.MessageContent, 
+func (a *AIX) StreamChat(ctx context.Context, messages []llms.MessageContent,
     streamFunc func(chunk string)) (string, error) {
-  
+
     var fullResponse strings.Builder
 
     _, err := a.chatModel.GenerateContent(ctx, messages,
@@ -534,15 +532,15 @@ func (a *AIX) StreamChat(ctx context.Context, messages []llms.MessageContent,
 }
 
 // BuildMessages 构建消息（含历史 + RAG 上下文）
-func (a *AIX) BuildMessages(history []ChatMessage, userMessage string, 
+func (a *AIX) BuildMessages(history []ChatMessage, userMessage string,
     images []string, ragContext string) []llms.MessageContent {
-  
+
     var messages []llms.MessageContent
 
     // 系统提示词
     systemPrompt := "你是一个智能助手。"
     if ragContext != "" {
-        systemPrompt += "\n\n以下是相关参考资料：\n" + ragContext + 
+        systemPrompt += "\n\n以下是相关参考资料：\n" + ragContext +
             "\n\n请基于以上资料回答用户问题。"
     }
     messages = append(messages, llms.TextParts(llms.ChatMessageTypeSystem, systemPrompt))
@@ -623,9 +621,9 @@ func (a *AIX) AddDocument(ctx context.Context, collectionName string, content st
 }
 
 // SimilaritySearch 相似度搜索
-func (a *AIX) SimilaritySearch(ctx context.Context, query string, 
+func (a *AIX) SimilaritySearch(ctx context.Context, query string,
     collections []string, topK int) ([]schema.Document, error) {
-  
+
     var allDocs []schema.Document
 
     for _, collName := range collections {
@@ -668,7 +666,7 @@ import (
     "context"
     "encoding/json"
     "fmt"
-    "nurture/internal/constant"
+    "aiconstant "nurture/internal/ai/constant""
     "time"
 )
 
@@ -682,7 +680,7 @@ type ChatMessage struct {
 
 // GetFullHistory 获取完整对话历史（供前端展示）
 func (a *AIX) GetFullHistory(ctx context.Context, userID, sessionID string) ([]ChatMessage, error) {
-    key := fmt.Sprintf(constant.CHAT_HISTORY_KEY, userID, sessionID)
+    key := fmt.Sprintf(aiconstant.ChatHistoryKey, userID, sessionID)
     data, err := a.rdb.LRange(ctx, key, 0, -1).Result()
     if err != nil {
         return nil, err
@@ -700,7 +698,7 @@ func (a *AIX) GetFullHistory(ctx context.Context, userID, sessionID string) ([]C
 
 // GetRecentHistory 获取最近 N 条历史（供 AI 上下文使用）
 func (a *AIX) GetRecentHistory(ctx context.Context, userID, sessionID string, limit int) ([]ChatMessage, error) {
-    key := fmt.Sprintf(constant.CHAT_HISTORY_KEY, userID, sessionID)
+    key := fmt.Sprintf(aiconstant.ChatHistoryKey, userID, sessionID)
     // 从末尾取最近 limit 条
     data, err := a.rdb.LRange(ctx, key, int64(-limit), -1).Result()
     if err != nil {
@@ -719,12 +717,12 @@ func (a *AIX) GetRecentHistory(ctx context.Context, userID, sessionID string, li
 
 // SaveMessage 保存消息（不裁剪，保留完整历史）
 func (a *AIX) SaveMessage(ctx context.Context, userID, sessionID string, msg ChatMessage) error {
-    key := fmt.Sprintf(constant.CHAT_HISTORY_KEY, userID, sessionID)
+    key := fmt.Sprintf(aiconstant.ChatHistoryKey, userID, sessionID)
     data, _ := json.Marshal(msg)
 
     pipe := a.rdb.Pipeline()
     pipe.RPush(ctx, key, data)
-    pipe.Expire(ctx, key, time.Duration(constant.HISTORY_TTL)*time.Second)
+    pipe.Expire(ctx, key, time.Duration(aiconstant.HistoryTTL)*time.Second)
     _, err := pipe.Exec(ctx)
     return err
 }
@@ -774,9 +772,9 @@ func (r *AIRepo) AddDocuments(ctx context.Context, collectionName, content strin
     return nil
 }
 
-func (r *AIRepo) SimilaritySearch(ctx context.Context, query string, 
+func (r *AIRepo) SimilaritySearch(ctx context.Context, query string,
     collections []string, topK int) ([]schema.Document, error) {
-  
+
     docs, err := global.AIX.SimilaritySearch(ctx, query, collections, topK)
     if err != nil {
         global.Log.Error(err)
@@ -815,7 +813,7 @@ func (r *AIRepo) SaveMessage(ctx context.Context, userID, sessionID string, msg 
 
 ### 10.2 Logic 层
 
-**文件**：`internal/logic/common.go`（AI 相关方法）
+**文件**：`internal/ai/logic/enter.go`（AI 相关方法）
 
 ```go
 package logic
@@ -823,42 +821,42 @@ package logic
 import (
     "context"
     "fmt"
-    "nurture/internal/constant"
-    "nurture/internal/dto"
+    "aiconstant "nurture/internal/ai/constant""
+    "aidto "nurture/internal/ai/dto""
     "nurture/internal/global"
     "nurture/internal/pkg/aix"
-    "nurture/internal/repo"
+    "airepo "nurture/internal/ai/repo""
     "strings"
     "time"
 )
 
-type ICommonLogic interface {
+type IAILogic interface {
     UploadKnowledge(ctx context.Context, req dto.KnowledgeUploadReq) error
     ChatStream(ctx context.Context, req dto.ChatStreamReq, streamFunc func(event dto.SSEEvent)) error
     GetChatHistory(ctx context.Context, req dto.ChatHistoryReq) (dto.ChatHistoryResp, error)
 }
 
-type CommonLogic struct {
+type AILogic struct {
     aiRepo *repo.AIRepo
 }
 
-func NewCommonLogic() *CommonLogic {
-    return &CommonLogic{
+func NewAILogic() *AILogic {
+    return &AILogic{
         aiRepo: repo.NewAIRepo(),
     }
 }
 
-var _ ICommonLogic = (*CommonLogic)(nil)
+var _ IAILogic = (*AILogic)(nil)
 
 // UploadKnowledge 上传知识库
-func (l *CommonLogic) UploadKnowledge(ctx context.Context, req dto.KnowledgeUploadReq) error {
+func (l *AILogic) UploadKnowledge(ctx context.Context, req dto.KnowledgeUploadReq) error {
     // 构建 CollectionName
     var collectionName string
     switch req.SpaceType {
-    case constant.SPACE_TYPE_PRIVATE:
-        collectionName = constant.COLLECTION_USER_PREFIX + req.UserID
-    case constant.SPACE_TYPE_PUBLIC:
-        collectionName = constant.COLLECTION_PUBLIC
+    case aiconstant.SpaceTypePrivate:
+        collectionName = aiconstant.CollectionUserPrefix + req.UserID
+    case aiconstant.SpaceTypePublic:
+        collectionName = aiconstant.CollectionPublic
     default:
         return ErrInvalidSpaceType
     }
@@ -873,11 +871,11 @@ func (l *CommonLogic) UploadKnowledge(ctx context.Context, req dto.KnowledgeUplo
 }
 
 // ChatStream 流式对话
-func (l *CommonLogic) ChatStream(ctx context.Context, req dto.ChatStreamReq, 
+func (l *AILogic) ChatStream(ctx context.Context, req dto.ChatStreamReq,
     streamFunc func(event dto.SSEEvent)) error {
-  
+
     // 1. 获取最近 3 轮对话历史（6 条消息）作为 AI 上下文
-    history, err := l.aiRepo.GetRecentHistory(ctx, req.UserID, req.SessionID, constant.AI_CONTEXT_MESSAGES)
+    history, err := l.aiRepo.GetRecentHistory(ctx, req.UserID, req.SessionID, aiconstant.ContextMessages)
     if err != nil {
         global.Log.Error(err)
         // 历史获取失败不阻断，继续对话
@@ -909,14 +907,14 @@ func (l *CommonLogic) ChatStream(ctx context.Context, req dto.ChatStreamReq,
     // 4. 流式对话
     fullResponse, err := global.AIX.StreamChat(ctx, messages, func(chunk string) {
         streamFunc(dto.SSEEvent{
-            Type:    constant.SSE_TYPE_CONTENT,
+            Type:    aiconstant.SSETypeContent,
             Content: chunk,
         })
     })
     if err != nil {
         global.Log.Error(err)
         streamFunc(dto.SSEEvent{
-            Type:  constant.SSE_TYPE_ERROR,
+            Type:  aiconstant.SSETypeError,
             Error: ErrLLMGenerate.Error(),
         })
         return ErrLLMGenerate
@@ -938,7 +936,7 @@ func (l *CommonLogic) ChatStream(ctx context.Context, req dto.ChatStreamReq,
 
     // 6. 发送完成事件
     streamFunc(dto.SSEEvent{
-        Type:      constant.SSE_TYPE_DONE,
+        Type:      aiconstant.SSETypeDone,
         SessionID: req.SessionID,
     })
 
@@ -946,7 +944,7 @@ func (l *CommonLogic) ChatStream(ctx context.Context, req dto.ChatStreamReq,
 }
 
 // GetChatHistory 获取完整对话历史（供前端展示）
-func (l *CommonLogic) GetChatHistory(ctx context.Context, req dto.ChatHistoryReq) (dto.ChatHistoryResp, error) {
+func (l *AILogic) GetChatHistory(ctx context.Context, req dto.ChatHistoryReq) (dto.ChatHistoryResp, error) {
     var resp dto.ChatHistoryResp
 
     history, err := l.aiRepo.GetFullHistory(ctx, req.UserID, req.SessionID)
@@ -968,14 +966,14 @@ func (l *CommonLogic) GetChatHistory(ctx context.Context, req dto.ChatHistoryReq
     return resp, nil
 }
 
-func (l *CommonLogic) buildCollections(userID string) []string {
+func (l *AILogic) buildCollections(userID string) []string {
     var collections []string
     cfg := config.Conf.AI.KBConfig
     if cfg.SearchPrivate {
-        collections = append(collections, constant.COLLECTION_USER_PREFIX+userID)
+        collections = append(collections, aiconstant.CollectionUserPrefix+userID)
     }
     if cfg.SearchPublic {
-        collections = append(collections, constant.COLLECTION_PUBLIC)
+        collections = append(collections, aiconstant.CollectionPublic)
     }
     return collections
 }
@@ -983,40 +981,40 @@ func (l *CommonLogic) buildCollections(userID string) []string {
 
 ### 10.3 Handler 层
 
-**文件**：`internal/handler/common.go`（AI 相关方法）
+**文件**：`internal/ai/handler/enter.go`（AI 相关方法）
 
 ```go
 package handler
 
 import (
     "encoding/json"
-    "nurture/internal/dto"
-    "nurture/internal/logic"
+    "aidto "nurture/internal/ai/dto""
+    "ailogic "nurture/internal/ai/logic""
     "nurture/internal/middleware"
     "nurture/internal/pkg/response"
 
     "github.com/gin-gonic/gin"
 )
 
-type CommonHandler struct {
-    commonLogic *logic.CommonLogic
+type AIHandler struct {
+    aiLogic *logic.AILogic
 }
 
-func NewCommonHandler() *CommonHandler {
-    return &CommonHandler{
-        commonLogic: logic.NewCommonLogic(),
+func NewAIHandler() *AIHandler {
+    return &AIHandler{
+        aiLogic: logic.NewAILogic(),
     }
 }
 
 // UploadKnowledge 上传知识库
-func (h *CommonHandler) UploadKnowledge(c *gin.Context) {
+func (h *AIHandler) UploadKnowledge(c *gin.Context) {
     req := middleware.GetBind[dto.KnowledgeUploadReq](c)
-    err := h.commonLogic.UploadKnowledge(c.Request.Context(), req)
+    err := h.aiLogic.UploadKnowledge(c.Request.Context(), req)
     response.Response(c, nil, err)
 }
 
 // ChatStream AI 对话（SSE 流式响应）
-func (h *CommonHandler) ChatStream(c *gin.Context) {
+func (h *AIHandler) ChatStream(c *gin.Context) {
     req := middleware.GetBind[dto.ChatStreamReq](c)
 
     // 设置 SSE 响应头
@@ -1032,13 +1030,13 @@ func (h *CommonHandler) ChatStream(c *gin.Context) {
     }
 
     // 执行对话
-    _ = h.commonLogic.ChatStream(c.Request.Context(), req, streamFunc)
+    _ = h.aiLogic.ChatStream(c.Request.Context(), req, streamFunc)
 }
 
 // GetChatHistory 获取对话历史
-func (h *CommonHandler) GetChatHistory(c *gin.Context) {
+func (h *AIHandler) GetChatHistory(c *gin.Context) {
     req := middleware.GetBind[dto.ChatHistoryReq](c)
-    resp, err := h.commonLogic.GetChatHistory(c.Request.Context(), req)
+    resp, err := h.aiLogic.GetChatHistory(c.Request.Context(), req)
     response.Response(c, resp, err)
 }
 ```
@@ -1052,7 +1050,7 @@ package router
 
 func registerRoutes(r *gin.Engine) {
     api := r.Group("/api")
-    registerCommonRoutes(api.Group("/common"))
+    ai.NewModule(...).RegisterRoutes(api.Group("/ai"))
 }
 ```
 
@@ -1068,36 +1066,16 @@ func registerHealthRoutes(r *gin.Engine) {
 }
 ```
 
-**文件**：`internal/router/common.go`
+**文件**：`internal/ai/route.go`
 
 ```go
-package router
+package ai
 
-func registerCommonRoutes(rg *gin.RouterGroup) {
-    commonHandler := handler.NewCommonHandler()
-
-    // AI 相关接口
-    ai := rg.Group("/ai")
-    {
-        // 知识库上传
-        ai.POST("/knowledge/upload",
-            middleware.BindJsonMiddleware[dto.KnowledgeUploadReq],
-            commonHandler.UploadKnowledge,
-        )
-
-            // 流式对话
-            ai.POST("/chat/stream",
-                middleware.BindJsonMiddleware[dto.ChatStreamReq],
-                commonHandler.ChatStream,
-            )
-
-            // 获取对话历史
-            ai.GET("/chat/history",
-                middleware.BindQueryMiddleware[dto.ChatHistoryReq],
-                commonHandler.GetChatHistory,
-            )
-        }
-    })
+func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
+    aiHandler := m.handler
+    rg.POST("/knowledge/upload", middleware.BindJsonMiddleware[dto.KnowledgeUploadReq], aiHandler.UploadKnowledge)
+    rg.POST("/chat/stream", middleware.BindJsonMiddleware[dto.ChatStreamReq], aiHandler.ChatStream)
+    rg.GET("/chat/history", middleware.BindQueryMiddleware[dto.ChatHistoryReq], aiHandler.GetChatHistory)
 }
 ```
 
@@ -1284,7 +1262,7 @@ CREATE TABLE langchain_pg_embedding (
 );
 
 -- HNSW 索引
-CREATE INDEX ON langchain_pg_embedding 
+CREATE INDEX ON langchain_pg_embedding
 USING hnsw (embedding vector_cosine_ops)
 WITH (m = 16, ef_construction = 64);
 ```

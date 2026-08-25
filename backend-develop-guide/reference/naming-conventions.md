@@ -175,25 +175,17 @@ var Conf = new(Config)  // 帕斯卡命名，表示公开的配置实例
 
 | 规范 | 示例 |
 |------|------|
-| 全大写下划线 | `TOKEN_USER_ID`, `LOGIN_WITH_ACCOUNT` |
+| 全大写下划线或模块内既有风格 | `LOGIN_WITH_ACCOUNT`, `MessageTypeText` |
 | 相关常量分组 | 使用 `const ( ... )` 分组 |
 
 ```go
 package constant
 
 const (
-    // Context Keys
-    TOKEN_USER_ID = "UserID"
-    TOKEN_ROLE    = "Role"
-    
     // 登录方式
     LOGIN_WITH_ACCOUNT = "account"
     LOGIN_WITH_EMAIL   = "email"
-    
-    // 业务常量
-    DEFAULT_NODE_ID = 1
-    FILE_MAX_SIZE   = 1024 * 1024 * 10
-    
+
     // Redis Key 模板
     LOGIN_CODE_KEY     = "login_code:%s"
     REGISTER_CODE_KEY  = "register_code:%s"
@@ -291,14 +283,15 @@ UPDATE "user" SET password = $2 WHERE email = $1;
 
 | 规范 | 示例 |
 |------|------|
-| 小写 + 短横线 | `/api/user/login`, `/api/common/file/upload` |
+| 小写 + 短横线 | `/api/user/login`, `/api/file/upload` |
 | RESTful 风格 | `GET /users`, `POST /users`, `PUT /users/:id` |
-| 按模块分组 | `/api/user/*`, `/api/common/*`, `/api/order/*` |
+| 按模块分组 | `/api/user/*`, `/api/ai/*`, `/api/file/*` |
 
 ```go
 // 路由分组
-CommonRoutes: router.Group("/api/common")
-UserRoutes:   router.Group("/api/user")
+FileRoutes: router.Group("/api/file")
+AIRoutes:   router.Group("/api/ai")
+UserRoutes: router.Group("/api/user")
 
 // 具体路由
 rg.POST("/login", ...)

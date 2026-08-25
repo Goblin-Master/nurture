@@ -332,7 +332,7 @@ func registerRoutes(r *gin.Engine) {
     api := r.Group("/api")
 
     registerUserRoutes(api.Group("/user"))
-    registerCommonRoutes(api.Group("/common"))
+    registerFileRoutes(api.Group("/file"))
 }
 
 func registerUserRoutes(rg *gin.RouterGroup) {
@@ -340,9 +340,9 @@ func registerUserRoutes(rg *gin.RouterGroup) {
     rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
 }
 
-func registerCommonRoutes(rg *gin.RouterGroup) {
-    commonHandler := handler.NewCommonHandler()
-    rg.POST("/file/upload", middleware.Authentication(jwtx.COMMON_USER), commonHandler.UploadFile)
+func registerFileRoutes(rg *gin.RouterGroup) {
+    fileHandler := handler.NewFileHandler()
+    rg.POST("/upload", middleware.Authentication(jwtx.COMMON_USER), fileHandler.Upload)
 }
 
 func registerHealthRoutes(r *gin.Engine) {

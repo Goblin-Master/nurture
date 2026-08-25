@@ -175,14 +175,14 @@ package logic
 import (
     "errors"
     "fmt"
-    "nurture/internal/constant"
+    fileconstant "nurture/internal/file/constant"
 )
 
 // 通用错误
 var (
     ErrParamsType   = errors.New("参数格式错误")
     ErrDefault      = errors.New("默认错误")
-    ErrFileOverSize = fmt.Errorf("文件大小不能超过%dMB", constant.FILE_MAX_SIZE/1024/1024)
+    ErrFileOverSize = fmt.Errorf("文件大小不能超过%dMB", fileconstant.FileMaxSize/1024/1024)
     ErrFileRead     = errors.New("文件读取失败")
     ErrFileUpload   = errors.New("文件上传失败")
 )
@@ -218,7 +218,7 @@ import (
 
 func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error) {
     var resp dto.LoginResp
-    
+
     switch req.LoginType {
     case constant.LOGIN_WITH_ACCOUNT:
         data, err := ul.userRepo.LoginWithAccount(ctx, req.Account, req.Password)
@@ -226,7 +226,7 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
             // Repo 层已经返回了 ErrUserNotExist，这里转换为更友好的错误
             return resp, ErrAccountOrPassword
         }
-        
+
         token, err := jwtx.GenToken(jwtx.Claims{
             UserID: data.UserID.String(),
             Role:   jwtx.Role(data.Role),
@@ -236,11 +236,11 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
             global.Log.Error(err)
             return resp, ErrDefault
         }
-        
+
         resp.Token = token
         resp.Username = data.Username
         return resp, nil
-        
+
     default:
         global.Log.Warnf("错误的登录方式:%s", req.LoginType)
         return resp, ErrLoginWithFailedWay
@@ -249,7 +249,7 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 
 func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.RegisterResp, error) {
     var resp dto.RegisterResp
-    
+
     // 验证验证码
     ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(constant.REGISTER_CODE_KEY, req.Email), req.Code)
     if err != nil {
@@ -259,7 +259,7 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
     if !ok {
         return resp, ErrCodeVerify
     }
-    
+
     // 注册用户
     err = ul.userRepo.Register(ctx, uuid.NewString(), req.Username, req.Email, req.Account, req.Password)
     if err != nil {
@@ -273,7 +273,7 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
             return resp, ErrDefault
         }
     }
-    
+
     resp.Message = "用户注册成功！"
     return resp, nil
 }
@@ -293,16 +293,16 @@ func (ul *UserLogic) Register(ctx context.Context, req dto.RegisterReq) (dto.Reg
 // internal/handler/user.go
 func (uh *UserHandler) Login(c *gin.Context) {
     req := middleware.GetBind[dto.LoginReq](c)
-    
+
     // 调用 Logic
     resp, err := uh.userLogic.Login(c.Request.Context(), req)
-    
+
     // 如果 Logic 返回错误，Response 会自动处理
     response.Response(c, resp, err)
 }
 
 // 提前返回示例
-func (h *CommonHandler) UploadFile(c *gin.Context) {
+func (h *FileHandler) Upload(c *gin.Context) {
     file, header, err := c.Request.FormFile("file")
     if err != nil {
         // 使用自定义错误提前返回
@@ -410,8 +410,8 @@ func Authentication(role jwtx.Role) gin.HandlerFunc {
             c.Abort()
             return
         }
-        c.Set(constant.TOKEN_USER_ID, UserID)
-        c.Set(constant.TOKEN_ROLE, Role)
+        c.Set(jwtx.ContextUserIDKey, UserID)
+        c.Set(jwtx.ContextRoleKey, Role)
         c.Next()
     }
 }
