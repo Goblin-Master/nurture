@@ -13,6 +13,7 @@ import (
 type IBabyRepo interface {
 	ListMyBabies(ctx context.Context, userID string) ([]dao.ListBabiesByUserIDRow, error)
 	SyncPartnerBabies(ctx context.Context, fatherUserID, motherUserID string) error
+	HandlePartnerBoundEvent(ctx context.Context, eventID, fatherUserID, motherUserID string) (bool, error)
 	CreateBabyWithInit(ctx context.Context, userID, partnerID, babyID, name, gender string, birthday int64, avatar string, recordTime int64, height, weight, headCircumference float64, remark string) error
 	GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (dao.Baby, error)
 	GetLatestGrowthByBabyIDAndUser(ctx context.Context, babyID, userID string) (dao.BabyGrowthRecord, error)

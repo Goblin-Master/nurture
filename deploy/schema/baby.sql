@@ -25,6 +25,25 @@ COMMENT ON COLUMN "baby".avatar IS '宝宝头像URL';
 COMMENT ON COLUMN "baby".ctime IS '创建时间戳';
 COMMENT ON COLUMN "baby".utime IS '更新时间戳';
 
+-- 1.1 Baby 事件消费 inbox
+CREATE TABLE IF NOT EXISTS "baby_event_inbox" (
+  id          BIGSERIAL PRIMARY KEY,
+  event_id    VARCHAR(128) UNIQUE NOT NULL,
+  event_type  VARCHAR(64) NOT NULL,
+  status      VARCHAR(20) NOT NULL DEFAULT 'processing' CHECK (status IN ('processing','processed')),
+  ctime       BIGINT NOT NULL,
+  utime       BIGINT NOT NULL
+);
+
+COMMENT ON TABLE "baby_event_inbox" IS 'Baby事件消费幂等表';
+COMMENT ON COLUMN "baby_event_inbox".id IS '主键ID';
+COMMENT ON COLUMN "baby_event_inbox".event_id IS '事件ID';
+COMMENT ON COLUMN "baby_event_inbox".event_type IS '事件类型';
+COMMENT ON COLUMN "baby_event_inbox".status IS '消费状态';
+COMMENT ON COLUMN "baby_event_inbox".ctime IS '创建时间戳';
+COMMENT ON COLUMN "baby_event_inbox".utime IS '更新时间戳';
+CREATE INDEX IF NOT EXISTS idx_baby_event_inbox_status ON "baby_event_inbox"(status, id);
+
 -- 2. 疫苗字典表
 CREATE TABLE IF NOT EXISTS "vaccine" (
   id                   BIGSERIAL PRIMARY KEY,

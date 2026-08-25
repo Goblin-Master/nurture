@@ -14,15 +14,21 @@ sequenceDiagram
   participant Handler as baby.handler
   participant BabyClient as baby.Client
   participant User as user.Client via PartnerReader
+  participant Worker as baby.worker
+  participant MQ as RabbitMQ
 
-  Router->>Module: NewModule(DB, RDB, Log, PartnerReader)
+  Router->>Module: NewModule(DB, RDB, RabbitMQ, Log, PartnerReader)
   Module->>Repo: NewBabyRepo(DB, RDB, Log)
   Module->>Logic: NewBabyLogic(repo, PartnerReader, Log)
   Module->>Handler: NewBabyHandler(logic)
   Module->>BabyClient: NewClient(repo)
+  alt DB and RabbitMQ enabled
+    Module->>Worker: Start partner-bound consumer
+    Worker->>MQ: consume user.event partner.bound
+  end
   Router->>Module: RegisterRoutes(api.Group('/baby'))
   Router->>Module: RegisterAdminRoutes(api.Group('/admin'))
-  Router-->>BabyClient: inject into user and AI boundaries
+  Router-->>BabyClient: inject into AI boundary
   Logic-->>User: read partner relationship when creating baby
 ```
 
@@ -33,16 +39,10 @@ sequenceDiagram
   autonumber
   participant Router as router
   participant BabyClient as baby.Client
-  participant User as user.logic BabySyncer
   participant AI as ai.logic BabyGrowthReader
   participant Repo as BabyRepo
 
   Router->>BabyClient: babyModule.Client()
-  Router->>User: inject as BabySyncer
-  User->>BabyClient: SyncPartnerBabies(fatherID, motherID)
-  BabyClient->>Repo: SyncPartnerBabies(fatherID, motherID)
-  Repo-->>BabyClient: nil
-
   Router->>AI: inject growth adapter backed by baby.Client
   AI->>BabyClient: GetBabyByIDAndUser(babyID, userID)
   BabyClient->>Repo: GetBabyByIDAndUser(babyID, userID)
@@ -50,6 +50,45 @@ sequenceDiagram
   AI->>BabyClient: ListGrowthRecordsByBabyIDBetween(babyID, from, to)
   BabyClient->>Repo: ListGrowthRecordsByBabyIDBetween(babyID, from, to)
   BabyClient-->>AI: []baby.GrowthRecord
+```
+
+## 伴侣绑定事件消费链路
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant User as user outbox worker
+  participant MQ as RabbitMQ
+  participant Worker as baby.worker
+  participant Logic as baby.event logic
+  participant Repo as BabyRepo
+  participant DB as PostgreSQL
+
+  User->>MQ: publish user.event partner.bound
+  MQ->>Worker: deliver event to durable baby.partner.bound queue
+  Worker->>Worker: decode JSON and validate IDs
+  Worker->>Logic: HandlePartnerBound(ctx, eventID, fatherID, motherID)
+  Logic->>Repo: HandlePartnerBoundEvent(eventID, fatherID, motherID)
+  Repo->>DB: begin transaction
+  Repo->>DB: insert baby_event_inbox(eventID)
+  alt inbox duplicate
+    Repo-->>Logic: processed=false
+    Logic-->>Worker: nil
+    Worker-->>MQ: ack
+  else first delivery
+    Repo->>DB: copy father babies to mother
+    Repo->>DB: copy mother babies to father
+    Repo->>DB: mark inbox processed
+    Repo->>DB: commit
+    Repo-->>Logic: processed=true
+    Logic-->>Worker: nil
+    Worker-->>MQ: ack
+  end
+  alt decode or validation failed
+    Worker-->>MQ: discard and ack
+  else repo or database failed
+    Worker-->>MQ: return error for retry or dead letter
+  end
 ```
 
 ## 新建宝宝链路

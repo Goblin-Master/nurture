@@ -57,6 +57,7 @@ func registerRoutes(r *gin.Engine) {
 	babyModule := baby.NewModule(baby.Deps{
 		DB:            global.DB,
 		RDB:           global.RDB,
+		RabbitMQ:      global.RMQ,
 		Log:           global.Log,
 		PartnerReader: userModule.Client(),
 	})

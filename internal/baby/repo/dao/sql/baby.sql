@@ -11,6 +11,21 @@ ON CONFLICT (baby_id, user_id) DO NOTHING;
 -- name: GetBabyByIDAndUser :one
 SELECT * FROM "baby" WHERE baby_id = $1 AND user_id = $2 LIMIT 1;
 
+-- name: CreateBabyEventInbox :execrows
+INSERT INTO "baby_event_inbox" (
+  event_id, event_type, status, ctime, utime
+) VALUES (
+  $1, $2, 'processing', $3, $3
+)
+ON CONFLICT (event_id) DO NOTHING;
+
+-- name: MarkBabyEventInboxProcessed :execrows
+UPDATE "baby_event_inbox"
+SET status = 'processed',
+    utime = $2
+WHERE event_id = $1
+  AND status = 'processing';
+
 -- name: CreateBabyGrowthRecord :exec
 INSERT INTO "baby_growth_record" (record_id, baby_id, record_time, height, weight, head_circumference, remark, ctime, utime, created_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);

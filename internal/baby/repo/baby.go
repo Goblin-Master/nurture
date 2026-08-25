@@ -55,6 +55,9 @@ func (r *BabyRepo) SyncPartnerBabies(ctx context.Context, fatherUserID, motherUs
 func (r *BabyRepo) copyBabies(ctx context.Context, qtx *dao.Queries, fromUserID, toUserID pgtype.UUID) error {
 	rows, err := qtx.ListBabiesByUserID(ctx, fromUserID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
 		r.log.Error(err)
 		return ErrDefault
 	}
