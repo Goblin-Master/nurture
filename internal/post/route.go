@@ -19,7 +19,7 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 		middleware.BindQueryMiddleware[dto.TagListReq],
 		postHandler.ListTags,
 	)
-	rg.GET("/tag/:tag_id",
+	rg.GET("/tags/:tag_id/posts",
 		middleware.BindUriMiddleware[dto.PostTagListReq],
 		middleware.BindQueryMiddleware[dto.PostTagListReq],
 		postHandler.ListByTag,
@@ -32,7 +32,7 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 		middleware.BindUriMiddleware[dto.PostDetailReq],
 		postHandler.GetDetail,
 	)
-	rg.POST("/newPost",
+	rg.POST("",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindJsonMiddleware[dto.CreatePostReq],
 		postHandler.NewPost,
@@ -52,28 +52,28 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 		middleware.BindQueryMiddleware[dto.PostMyListReq],
 		postHandler.ListMyDrafts,
 	)
-	rg.GET("/mine/milestone",
+	rg.GET("/mine/milestones",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindQueryMiddleware[dto.PostMyListReq],
 		postHandler.ListMyMilestones,
 	)
-	rg.POST("/:post_id/publish",
+	rg.POST("/drafts/:post_id/publish",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindUriMiddleware[dto.PublishPostReq],
 		postHandler.Publish,
 	)
-	rg.PUT("/:post_id",
+	rg.PUT("/drafts/:post_id",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindUriMiddleware[dto.PostDetailReq],
 		middleware.BindJsonMiddleware[dto.UpdateDraftReq],
 		postHandler.UpdateDraft,
 	)
-	rg.DELETE("/:post_id",
+	rg.DELETE("/drafts/:post_id",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindUriMiddleware[dto.PostDetailReq],
 		postHandler.DeleteDraft,
 	)
-	rg.DELETE("/:post_id/delete",
+	rg.DELETE("/:post_id",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindUriMiddleware[dto.PostDetailReq],
 		postHandler.DeletePost,

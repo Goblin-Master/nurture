@@ -18,7 +18,7 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/code/register", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetRegisterCode)
 	rg.POST("/code/register/sms", middleware.BindJsonMiddleware[dto.GetSMSCodeReq], userHandler.GetRegisterSMSCode)
 	rg.POST("/code/reset", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetResetCode)
-	rg.POST("/resetPassword", middleware.BindJsonMiddleware[dto.ResetPasswordReq], userHandler.ResetPassword)
+	rg.POST("/password/reset", middleware.BindJsonMiddleware[dto.ResetPasswordReq], userHandler.ResetPassword)
 	rg.PUT("/profile", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateUserAdditionReq], userHandler.UpdateProfile)
 	rg.PUT("/avatar", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.UpdateAvatarReq], userHandler.UpdateAvatar)
 	rg.POST("/code/bind/phone", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.GetSMSCodeReq], userHandler.GetBindPhoneCode)
@@ -30,14 +30,14 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/code/rebind/email", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetRebindEmailCode)
 	rg.POST("/rebind/email", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.BindEmailReq], userHandler.RebindEmail)
 	rg.GET("/me", middleware.Authentication(jwtx.COMMON_USER), userHandler.MyProfile)
-	rg.POST("/partner/bind", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.PartnerBindReq], userHandler.BindPartner)
+	rg.POST("/partner", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.PartnerBindReq], userHandler.BindPartner)
 	rg.GET("/partner", middleware.Authentication(jwtx.COMMON_USER), userHandler.GetPartner)
-	rg.POST("/follow/:target_user_id",
+	rg.POST("/following/:target_user_id",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindUriMiddleware[dto.FollowReq],
 		userHandler.Follow,
 	)
-	rg.DELETE("/follow/:target_user_id",
+	rg.DELETE("/following/:target_user_id",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindUriMiddleware[dto.FollowReq],
 		userHandler.Unfollow,
@@ -55,7 +55,7 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 func (m *Module) RegisterAdminRoutes(rg *gin.RouterGroup) {
-	rg.GET("/users/list",
+	rg.GET("/users",
 		middleware.Authentication(jwtx.ADMIN),
 		middleware.BindQueryMiddleware[dto.AdminListUsersReq],
 		m.handler.AdminListUsers,

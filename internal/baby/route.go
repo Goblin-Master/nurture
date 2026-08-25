@@ -11,27 +11,27 @@ import (
 func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 	babyHandler := m.handler
 
-	rg.GET("/changeBaby",
+	rg.GET("",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindQueryMiddleware[dto.ChangeBabyReq],
 		babyHandler.ChangeBaby,
 	)
-	rg.POST("/newBaby",
+	rg.POST("",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindJsonMiddleware[dto.NewBabyReq],
 		babyHandler.NewBaby,
 	)
-	rg.POST("/growthRecords",
+	rg.POST("/growth-records",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindJsonMiddleware[dto.CreateGrowthReq],
 		babyHandler.CreateGrowth,
 	)
-	rg.GET("/growthRecord",
+	rg.GET("/growth-record",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindQueryMiddleware[dto.GrowthAtReq],
 		babyHandler.GetGrowthAt,
 	)
-	rg.GET("/growthCurve",
+	rg.GET("/growth-curve",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindQueryMiddleware[dto.GrowthCurveReq],
 		babyHandler.GrowthCurve,
@@ -111,27 +111,27 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 		middleware.BindQueryMiddleware[dto.BabyProfileReq],
 		babyHandler.GetProfile,
 	)
-	rg.GET("/vaccine/getVaccineList",
+	rg.GET("/vaccines",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindQueryMiddleware[dto.GetVaccineListReq],
 		babyHandler.GetVaccineList,
 	)
-	rg.PUT("/vaccine/changeStatus",
+	rg.PUT("/vaccines/status",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindJsonMiddleware[dto.ChangeVaccineStatusReq],
 		babyHandler.ChangeVaccineStatus,
 	)
-	rg.POST("/photo/upload",
+	rg.POST("/photos",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindJsonMiddleware[dto.UploadBabyPhotosReq],
 		babyHandler.UploadBabyPhotos,
 	)
-	rg.DELETE("/photo/delete",
+	rg.DELETE("/photos",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindJsonMiddleware[dto.DeleteBabyPhotosReq],
 		babyHandler.DeleteBabyPhotos,
 	)
-	rg.GET("/photo/list",
+	rg.GET("/photos",
 		middleware.Authentication(jwtx.COMMON_USER),
 		middleware.BindQueryMiddleware[dto.ListBabyPhotosReq],
 		babyHandler.ListBabyPhotos,

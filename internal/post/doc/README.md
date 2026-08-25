@@ -37,7 +37,7 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant Cache as post cache
 
-  Client->>Handler: POST /api/post/newPost
+  Client->>Handler: POST /api/post
   Handler->>Handler: auth user and bind CreatePostReq
   Handler->>Logic: NewPost(ctx, userID, req)
   Logic->>Logic: validate title, content and tags
@@ -49,7 +49,7 @@ sequenceDiagram
   Repo->>Cache: invalidate post list caches
   Logic-->>Handler: CreatePostResp
 
-  Client->>Handler: POST /api/post/:post_id/publish
+  Client->>Handler: POST /api/post/drafts/:post_id/publish
   Handler->>Logic: Publish(ctx, userID, postID)
   Logic->>Repo: Publish(postID, userID)
   Repo->>DB: update own draft status to published

@@ -117,7 +117,7 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant Baby as baby syncer
 
-  Client->>Handler: POST /api/user/partner/bind
+  Client->>Handler: POST /api/user/partner
   Handler->>Handler: auth user and bind PartnerBindReq
   Handler->>Logic: BindPartner(ctx, userID, req)
   Logic->>Repo: LoginWithAccount(partner account, partner password)
@@ -146,7 +146,7 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant Cache as user cache
 
-  Client->>Handler: POST /api/user/follow/:target_user_id
+  Client->>Handler: POST /api/user/following/:target_user_id
   Handler->>Logic: Follow(ctx, userID, uri)
   Logic->>Logic: reject empty target or following self
   Logic->>Repo: FollowUser(followerID, followeeID)

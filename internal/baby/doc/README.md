@@ -65,7 +65,7 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant Cache as baby cache
 
-  Client->>Handler: POST /api/baby/newBaby
+  Client->>Handler: POST /api/baby
   Handler->>Handler: auth user and bind NewBabyReq
   Handler->>Logic: NewBaby(ctx, userID, req)
   Logic->>User: GetPartnerByUserID(userID)
@@ -103,7 +103,7 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant Cache as baby cache
 
-  Client->>Handler: POST /api/baby/growthRecords
+  Client->>Handler: POST /api/baby/growth-records
   Handler->>Logic: CreateGrowth(ctx, userID, req)
   Logic->>Repo: GetBabyByIDAndUser(babyID, userID)
   Repo->>DB: verify baby ownership
@@ -171,7 +171,7 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant Cache as baby cache
 
-  Client->>Handler: GET /api/baby/vaccine/getVaccineList
+  Client->>Handler: GET /api/baby/vaccines
   Handler->>Logic: GetVaccineList(ctx, userID, req)
   Logic->>Repo: GetBabyByIDAndUser(babyID, userID)
   Logic->>Repo: ListVaccineRecordsByBaby(babyID)
@@ -182,7 +182,7 @@ sequenceDiagram
   end
   Logic-->>Handler: GetVaccineListResp
 
-  Client->>Handler: PUT /api/baby/vaccine/changeStatus
+  Client->>Handler: PUT /api/baby/vaccines/status
   Handler->>Logic: ChangeVaccineStatus(ctx, userID, req)
   Logic->>Repo: GetBabyByIDAndUser(babyID, userID)
   alt status is given
@@ -194,7 +194,7 @@ sequenceDiagram
   Repo->>Cache: delete vaccine list cache
   Logic-->>Handler: ChangeVaccineStatusResp
 
-  Client->>Handler: POST /api/baby/photo/upload
+  Client->>Handler: POST /api/baby/photos
   Handler->>Logic: UploadBabyPhotos(ctx, userID, req)
   Logic->>Repo: GetBabyByIDAndUser(babyID, userID)
   Logic->>Repo: UploadPhotos(babyID, links)
