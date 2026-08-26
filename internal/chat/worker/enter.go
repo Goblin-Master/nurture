@@ -15,12 +15,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type Consumer interface {
+type EventConsumer interface {
 	Consume(ctx context.Context, cfg rabbitmqx.ConsumeConfig, handle func(context.Context, rabbitmqx.Delivery) error) error
 }
 
 type Worker struct {
-	consumer Consumer
+	consumer EventConsumer
 	hub      *session.Hub
 	log      *zap.SugaredLogger
 }
@@ -39,7 +39,7 @@ type directMessageBody struct {
 	Ctime      int64  `json:"ctime"`
 }
 
-func NewWorker(consumer Consumer, hub *session.Hub, log *zap.SugaredLogger) *Worker {
+func NewWorker(consumer EventConsumer, hub *session.Hub, log *zap.SugaredLogger) *Worker {
 	return &Worker{
 		consumer: consumer,
 		hub:      hub,

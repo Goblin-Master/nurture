@@ -1,10 +1,5 @@
 package event
 
-import (
-	"context"
-	"nurture/internal/pkg/rabbitmqx"
-)
-
 const (
 	Exchange         = "chat.event"
 	RoutingKeyDirect = "chat.direct"
@@ -15,11 +10,6 @@ const (
 	EventKindDirect  = "direct"
 	EventKindGroup   = "group"
 )
-
-type Bus interface {
-	DeclareTopicExchange(name string) error
-	Publish(ctx context.Context, exchange, routingKey string, msg rabbitmqx.PublishMessage) error
-}
 
 type DirectMessage struct {
 	EventID    string `json:"event_id"`

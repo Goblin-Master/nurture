@@ -9,23 +9,19 @@ import (
 	"go.uber.org/zap"
 )
 
-type BabyEventRepo interface {
+type PartnerBoundEventStore interface {
 	HandlePartnerBoundEvent(ctx context.Context, eventID, fatherUserID, motherUserID string) (bool, error)
 }
 
-type IBabyEventLogic interface {
-	HandlePartnerBound(ctx context.Context, eventID, fatherUserID, motherUserID string) error
-}
-
 type BabyEventLogic struct {
-	repo BabyEventRepo
-	log  *zap.SugaredLogger
+	store PartnerBoundEventStore
+	log   *zap.SugaredLogger
 }
 
-func NewBabyEventLogic(repo BabyEventRepo, log *zap.SugaredLogger) *BabyEventLogic {
+func NewBabyEventLogic(store PartnerBoundEventStore, log *zap.SugaredLogger) *BabyEventLogic {
 	return &BabyEventLogic{
-		repo: repo,
-		log:  zapx.OrNop(log),
+		store: store,
+		log:   zapx.OrNop(log),
 	}
 }
 
@@ -33,7 +29,7 @@ func (l *BabyEventLogic) HandlePartnerBound(ctx context.Context, eventID, father
 	if eventID == "" || fatherUserID == "" || motherUserID == "" {
 		return ErrParamsType
 	}
-	_, err := l.repo.HandlePartnerBoundEvent(ctx, eventID, fatherUserID, motherUserID)
+	_, err := l.store.HandlePartnerBoundEvent(ctx, eventID, fatherUserID, motherUserID)
 	if err != nil {
 		if errors.Is(err, repo.ErrParamsType) {
 			return ErrParamsType
@@ -46,5 +42,3 @@ func (l *BabyEventLogic) HandlePartnerBound(ctx context.Context, eventID, father
 	}
 	return nil
 }
-
-var _ IBabyEventLogic = (*BabyEventLogic)(nil)

@@ -1,11 +1,8 @@
 package event
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-
-	"nurture/internal/pkg/rabbitmqx"
 )
 
 const (
@@ -13,11 +10,6 @@ const (
 	RoutingKeyPartnerBound = "partner.bound"
 	ContentTypeJSON        = "application/json"
 )
-
-type Bus interface {
-	DeclareTopicExchange(name string) error
-	Publish(ctx context.Context, exchange, routingKey string, msg rabbitmqx.PublishMessage) error
-}
 
 type PartnerBoundMessage struct {
 	EventID      string `json:"event_id"`

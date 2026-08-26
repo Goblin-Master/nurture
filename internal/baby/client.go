@@ -24,21 +24,21 @@ type GrowthRecord struct {
 	Remark            string
 }
 
-type clientRepo interface {
+type profileReader interface {
 	GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (dao.Baby, error)
 	ListGrowthRecordsByBabyIDBetween(ctx context.Context, babyID string, start, end int64) ([]dao.BabyGrowthRecord, error)
 }
 
 type Client struct {
-	babyRepo clientRepo
+	profileReader profileReader
 }
 
-func NewClient(babyRepo clientRepo) *Client {
-	return &Client{babyRepo: babyRepo}
+func NewClient(profileReader profileReader) *Client {
+	return &Client{profileReader: profileReader}
 }
 
 func (c *Client) GetBabyByIDAndUser(ctx context.Context, babyID, userID string) (BabyProfile, error) {
-	b, err := c.babyRepo.GetBabyByIDAndUser(ctx, babyID, userID)
+	b, err := c.profileReader.GetBabyByIDAndUser(ctx, babyID, userID)
 	if err != nil {
 		if errors.Is(err, repo.ErrBabyNotExist) {
 			return BabyProfile{}, ErrBabyNotExist
@@ -55,7 +55,7 @@ func (c *Client) GetBabyByIDAndUser(ctx context.Context, babyID, userID string) 
 }
 
 func (c *Client) ListGrowthRecordsByBabyIDBetween(ctx context.Context, babyID string, start, end int64) ([]GrowthRecord, error) {
-	rows, err := c.babyRepo.ListGrowthRecordsByBabyIDBetween(ctx, babyID, start, end)
+	rows, err := c.profileReader.ListGrowthRecordsByBabyIDBetween(ctx, babyID, start, end)
 	if err != nil {
 		return nil, err
 	}

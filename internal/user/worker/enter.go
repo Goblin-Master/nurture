@@ -14,12 +14,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type Consumer interface {
+type EventPublisher interface {
 	DeclareTopicExchange(name string) error
 	Publish(ctx context.Context, exchange, routingKey string, msg rabbitmqx.PublishMessage) error
 }
 
-type OutboxRepo interface {
+type OutboxStore interface {
 	ListPendingOutbox(ctx context.Context, now int64, staleBefore int64, limit int) ([]repo.UserOutboxEvent, error)
 	MarkOutboxPublished(ctx context.Context, id int64, now int64) error
 	MarkOutboxFailed(ctx context.Context, id int64, nextRetryAt int64, maxAttempts int32, now int64) error
@@ -28,12 +28,12 @@ type OutboxRepo interface {
 var ErrNilOutboxEvent = errors.New("nil user outbox event")
 
 type Worker struct {
-	repo OutboxRepo
-	bus  Consumer
+	repo OutboxStore
+	bus  EventPublisher
 	log  *zap.SugaredLogger
 }
 
-func NewOutboxWorker(repo OutboxRepo, bus Consumer, log *zap.SugaredLogger) *Worker {
+func NewOutboxWorker(repo OutboxStore, bus EventPublisher, log *zap.SugaredLogger) *Worker {
 	return &Worker{
 		repo: repo,
 		bus:  bus,

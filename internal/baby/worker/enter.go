@@ -12,17 +12,17 @@ import (
 	"go.uber.org/zap"
 )
 
-type Consumer interface {
+type EventConsumer interface {
 	Consume(ctx context.Context, cfg rabbitmqx.ConsumeConfig, handle func(context.Context, rabbitmqx.Delivery) error) error
 }
 
-type BabyEventLogic interface {
+type PartnerBoundHandler interface {
 	HandlePartnerBound(ctx context.Context, eventID, fatherUserID, motherUserID string) error
 }
 
 type Worker struct {
-	consumer Consumer
-	logic    BabyEventLogic
+	consumer EventConsumer
+	handler  PartnerBoundHandler
 	log      *zap.SugaredLogger
 }
 
@@ -33,16 +33,16 @@ type partnerBoundMessage struct {
 	OccurredAt   int64  `json:"occurred_at"`
 }
 
-func NewWorker(consumer Consumer, logic BabyEventLogic, log *zap.SugaredLogger) *Worker {
+func NewWorker(consumer EventConsumer, handler PartnerBoundHandler, log *zap.SugaredLogger) *Worker {
 	return &Worker{
 		consumer: consumer,
-		logic:    logic,
+		handler:  handler,
 		log:      zapx.OrNop(log),
 	}
 }
 
 func (w *Worker) Start(ctx context.Context) {
-	if w == nil || w.consumer == nil || w.logic == nil {
+	if w == nil || w.consumer == nil || w.handler == nil {
 		return
 	}
 	go func() {
@@ -87,8 +87,8 @@ func (w *Worker) Handle(ctx context.Context, delivery rabbitmqx.Delivery) error 
 	if msg.EventID == "" || msg.FatherUserID == "" || msg.MotherUserID == "" {
 		return rabbitmqx.Discard(fmt.Errorf("invalid partner bound event: %s", msg.EventID))
 	}
-	if w == nil || w.logic == nil {
-		return fmt.Errorf("baby event logic is nil")
+	if w == nil || w.handler == nil {
+		return fmt.Errorf("partner bound handler is nil")
 	}
-	return w.logic.HandlePartnerBound(ctx, msg.EventID, msg.FatherUserID, msg.MotherUserID)
+	return w.handler.HandlePartnerBound(ctx, msg.EventID, msg.FatherUserID, msg.MotherUserID)
 }
