@@ -254,7 +254,7 @@ func NewUserRepo() *UserRepo {
 
 ### 2. 接口定义与验证
 
-Logic 和 Repo 层必须定义接口，并验证实现：
+Logic 和 Repo 层可以在 `enter.go` 定义总接口，用来作为功能目录和编译期约束。只有这种总接口使用 `I` 前缀和 `Logic`/`Repo` 后缀。
 
 ```go
 // 接口定义
@@ -266,6 +266,8 @@ type IUserLogic interface {
 // 接口验证（编译时检查）
 var _ IUserLogic = (*UserLogic)(nil)
 ```
+
+其它小接口定义在使用方，按能力命名，不使用 `I` 前缀，也不要使用 `Logic`/`Repo` 后缀。例如 worker 需要发布事件时定义 `EventPublisher`，需要持久化 outbox 时定义 `OutboxStore`；跨模块读取能力使用 `PartnerReader`、`FollowReader` 这类名字。
 
 ### 3. 泛型参数绑定中间件
 

@@ -124,7 +124,7 @@ func (m *Module) Client() *Client {
 使用规则：
 
 - provider 的 `Client` 放在 `internal/<domain>/client.go`，不要放进 `internal/pkg`。
-- consumer 仍然在自己的 logic 包定义最小接口，例如 `PartnerReader`、`FollowReader`、`BabyGrowthReader`。
+- consumer 仍然在自己的 logic 包定义最小接口，例如 `PartnerReader`、`FollowReader`、`BabyGrowthReader`。这类小接口按能力命名，不使用 `I` 前缀，也不使用 `Logic`/`Repo` 后缀。
 - `Client` 不暴露 handler、logic、repo、sqlc/dao 类型；需要返回数据时定义模块根包自己的边界类型。
 - `router` 或 `main` 只做上层组装：`baby.NewModule(... PartnerReader: userModule.Client())`。
 - 出现构造环时，可以使用模块方法做初始化期 late-bind，例如 `userModule.SetBabySyncer(babyModule.Client())`，不要在 router 中直接 new 另一个模块的 repo。
@@ -136,7 +136,8 @@ func (m *Module) Client() *Client {
 - `internal/<domain>` 不依赖其它业务模块。需要交互时，通过上层编排或明确接口注入。
 - `internal/pkg` 不依赖 `internal/<domain>`、`internal/logic`、`internal/repo`、`internal/handler`。
 - 能注入的基础设施优先注入：DB、Redis、RabbitMQ、logger、token parser、middleware。
-- 不要为了所有东西都可注入而包一层无意义接口；接口定义在使用方，且只定义真实需要的方法。
+- Logic/Repo 可以在 `enter.go` 定义 `I{模块}{Logic|Repo}` 总接口，作为功能目录和编译期约束。
+- 不要为了所有东西都可注入而包一层无意义接口；小接口定义在使用方，且只定义真实需要的方法。
 
 ## 配置与常量
 

@@ -111,19 +111,22 @@ var verifyScript string
 
 ## 2. 接口定义模式
 
-Logic 层和 Repo 层必须定义接口，便于测试和解耦。
+Logic 层和 Repo 层可以定义总接口，便于开发人员阅读模块功能，并用编译期检查强制结构体实现这层能力。除此之外，小接口应定义在使用方，只包含使用方真实需要的方法。
 
 ### 接口命名规范
 
-- 接口名：`I{结构体名}` （如 `IUserLogic`、`IUserRepo`）
-- 放在结构体定义之前
+- 总接口名：`I{模块}{Logic|Repo}`，例如 `IUserLogic`、`IUserRepo`。只有总接口使用 `I` 前缀和 `Logic`/`Repo` 后缀。
+- 小接口名：按能力命名，例如 `EventPublisher`、`EventConsumer`、`OutboxStore`、`PartnerReader`、`ObjectStorage`。
+- 小接口不使用 `I` 前缀，也不要用 `Logic`/`Repo` 后缀。
+- 小接口只在当前包内部使用时不导出；出现在 exported constructor、`Deps` 字段或跨包调用边界时才导出。
+- 接口放在消费它的结构体定义之前。
 
 ### 接口定义示例
 
 ```go
 package logic
 
-// 接口定义（放在文件开头）
+// 总接口：作为 Logic 层功能目录和编译期约束。
 type IUserLogic interface {
     Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error)
     Register(ctx context.Context, req dto.RegisterReq) (dto.RegisterResp, error)
@@ -132,7 +135,7 @@ type IUserLogic interface {
 
 // 结构体定义
 type UserLogic struct {
-    userRepo *repo.UserRepo
+    userRepo repo.IUserRepo
     email    *emailx.EmailX
 }
 
@@ -150,9 +153,26 @@ var _ IUserLogic = (*UserLogic)(nil)
 var _ IUserRepo = (*UserRepo)(nil)
 ```
 
+小接口示例：
+
+```go
+package worker
+
+type EventPublisher interface {
+    DeclareTopicExchange(name string) error
+    Publish(ctx context.Context, exchange, routingKey string, msg rabbitmqx.PublishMessage) error
+}
+
+type OutboxStore interface {
+    ListPendingOutbox(ctx context.Context, now int64, staleBefore int64, limit int) ([]repo.UserOutboxEvent, error)
+    MarkOutboxPublished(ctx context.Context, id int64, now int64) error
+    MarkOutboxFailed(ctx context.Context, id int64, nextRetryAt int64, maxAttempts int32, now int64) error
+}
+```
+
 ### 避免过度接口包装
 
-- Logic/Repo 的接口用于表达业务层契约和便于测试。
+- Logic/Repo 的总接口用于表达业务层功能目录和强制实现。
 - 对已有稳定横切能力，例如 `middleware.Authentication`、`middleware.GetBind`、`jwtx.GetUserID`、`response.Response`，优先直接复用原包。
 - 不要为了“看起来可注入”而额外定义 `AuthUserFunc`、`RespondFunc`、`GetUserIDFunc` 这类只有一处调用且没有替换需求的包装类型。
 - 只有当业务层确实需要 fake、替换实现或隔离外部系统时，才在使用方定义小接口。

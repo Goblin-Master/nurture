@@ -60,20 +60,27 @@ internal/pkg/
 
 | 规范 | 说明 | 示例 |
 |------|------|------|
-| `I{结构体名}` | 以 `I` 开头 | `IUserLogic`, `IUserRepo` |
-| 方法签名 | 与结构体方法一致 | - |
+| `I{模块}{Logic|Repo}` | 只用于 Logic/Repo 总接口 | `IUserLogic`, `IUserRepo` |
+| 能力名 | 小接口按能力命名，不使用 `I` 前缀 | `EventPublisher`, `OutboxStore`, `PartnerReader` |
+| 小写能力名 | 只在当前包内部使用 | `clientStore`, `profileReader` |
+| 方法签名 | 总接口与层能力一致，小接口只包含使用方真实需要的方法 | - |
 
 ```go
-// 接口
+// Logic 总接口
 type IUserLogic interface {
     Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error)
     Register(ctx context.Context, req dto.RegisterReq) (dto.RegisterResp, error)
 }
 
-// 接口
+// Repo 总接口
 type IUserRepo interface {
     LoginWithAccount(ctx context.Context, account, password string) (user.User, error)
     Register(ctx context.Context, userID, username, email, account, password string) error
+}
+
+// 小接口
+type EventPublisher interface {
+    Publish(ctx context.Context, exchange, routingKey string, msg rabbitmqx.PublishMessage) error
 }
 ```
 
