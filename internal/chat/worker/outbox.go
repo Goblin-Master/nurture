@@ -6,6 +6,7 @@ import (
 	"nurture/internal/chat/event"
 	"nurture/internal/chat/repo"
 	"nurture/internal/pkg/rabbitmqx"
+	"nurture/internal/pkg/retryx"
 	"nurture/internal/pkg/zapx"
 	"time"
 
@@ -81,7 +82,11 @@ func (w *OutboxWorker) publishOne(ctx context.Context, item repo.ChatOutboxEvent
 	})
 	if err != nil {
 		w.log.Error(err)
-		nextRetryAt := time.Now().Add(outboxRetryDelay(item.Attempts + 1)).UnixMilli()
+		nextRetryAt := time.Now().Add(retryx.ExponentialBackoff(
+			constant.OutboxRetryBaseDelay,
+			int64(item.Attempts+1),
+			constant.OutboxRetryMaxDelay,
+		)).UnixMilli()
 		if err := w.repo.MarkOutboxFailed(ctx, item.ID, nextRetryAt, constant.OutboxMaxAttempts, now); err != nil {
 			w.log.Error(err)
 		}
@@ -90,15 +95,4 @@ func (w *OutboxWorker) publishOne(ctx context.Context, item repo.ChatOutboxEvent
 	if err := w.repo.MarkOutboxPublished(ctx, item.ID, now); err != nil {
 		w.log.Error(err)
 	}
-}
-
-func outboxRetryDelay(attempt int32) time.Duration {
-	if attempt <= 0 {
-		attempt = 1
-	}
-	shift := attempt - 1
-	if shift > 5 {
-		shift = 5
-	}
-	return constant.OutboxRetryBaseDelay * time.Duration(1<<shift)
 }

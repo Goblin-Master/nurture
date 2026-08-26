@@ -38,5 +38,6 @@ const (
 	OutboxMaxAttempts    = 8
 	OutboxPollInterval   = time.Second
 	OutboxRetryBaseDelay = time.Second
+	OutboxRetryMaxDelay  = 32 * time.Second
 	OutboxClaimTimeout   = time.Minute
 )

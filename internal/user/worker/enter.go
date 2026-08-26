@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"nurture/internal/pkg/rabbitmqx"
+	"nurture/internal/pkg/retryx"
 	"nurture/internal/pkg/zapx"
 	"nurture/internal/user/constant"
 	"nurture/internal/user/event"
@@ -93,22 +94,15 @@ func (w *Worker) Handle(ctx context.Context, item repo.UserOutboxEvent) error {
 		Body:        []byte(item.Payload),
 	})
 	if err != nil {
-		nextRetryAt := time.Now().Add(outboxRetryDelay(item.Attempts + 1)).UnixMilli()
+		nextRetryAt := time.Now().Add(retryx.ExponentialBackoff(
+			constant.OutboxRetryBaseDelay,
+			int64(item.Attempts+1),
+			constant.OutboxRetryMaxDelay,
+		)).UnixMilli()
 		if markErr := w.repo.MarkOutboxFailed(ctx, item.ID, nextRetryAt, constant.OutboxMaxAttempts, now); markErr != nil {
 			return markErr
 		}
 		return err
 	}
 	return w.repo.MarkOutboxPublished(ctx, item.ID, now)
-}
-
-func outboxRetryDelay(attempt int32) time.Duration {
-	if attempt <= 0 {
-		attempt = 1
-	}
-	shift := attempt - 1
-	if shift > 5 {
-		shift = 5
-	}
-	return constant.OutboxRetryBaseDelay * time.Duration(1<<shift)
 }
