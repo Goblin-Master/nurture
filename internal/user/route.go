@@ -12,6 +12,8 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 	userHandler := m.handler
 
 	rg.POST("/login", middleware.BindJsonMiddleware[dto.LoginReq], userHandler.Login)
+	rg.POST("/token/refresh", middleware.BindJsonMiddleware[dto.RefreshTokenReq], userHandler.RefreshToken)
+	rg.POST("/logout", middleware.Authentication(jwtx.COMMON_USER), middleware.BindJsonMiddleware[dto.LogoutReq], userHandler.Logout)
 	rg.POST("/register", middleware.BindJsonMiddleware[dto.RegisterReq], userHandler.Register)
 	rg.POST("/register/sms", middleware.BindJsonMiddleware[dto.RegisterSMSReq], userHandler.RegisterSMS)
 	rg.POST("/code/login", middleware.BindJsonMiddleware[dto.GetCodeReq], userHandler.GetLoginCode)

@@ -23,6 +23,9 @@ var (
 	ErrAccountIsUsed      = errors.New("账号已经被使用")
 	ErrPhoneIsUsed        = errors.New("手机号已经被使用")
 	ErrUserNotExist       = errors.New("用户不存在")
+	ErrAuthUnavailable    = errors.New("认证服务不可用")
+	ErrRTokenInvalid      = errors.New("刷新凭证无效")
+	ErrRTokenReplay       = errors.New("刷新凭证已失效，请重新登录")
 )
 
 var (

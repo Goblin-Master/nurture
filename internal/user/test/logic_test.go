@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"nurture/internal/config"
+	"nurture/internal/pkg/jwtx"
 	userconstant "nurture/internal/user/constant"
 	userdto "nurture/internal/user/dto"
 	userlogic "nurture/internal/user/logic"
@@ -12,6 +14,98 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestLoginReturnsTokenPairWithoutLegacyTokenField(t *testing.T) {
+	configureTokenStore(t)
+	repo := &userRepoFake{
+		loginWithAccountRow: userrepo.UserBaseRow{
+			UserID: "user-1",
+			Role:   int16(jwtx.COMMON_USER),
+		},
+	}
+	l := userlogic.NewUserLogic(repo, &emailFake{}, &smsFake{}, nil)
+
+	resp, err := l.Login(context.Background(), userdto.LoginReq{
+		LoginType: userconstant.LoginWithAccount,
+		Account:   "alice",
+		Password:  "Aa123456",
+	})
+
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	if resp.AToken == "" || resp.RToken == "" {
+		t.Fatalf("Login() = %+v, want atoken and rtoken", resp)
+	}
+	if resp.TokenType != "Bearer" || resp.ExpiresIn != config.Conf.Auth.ATokenExpire || resp.RefreshExpiresIn != config.Conf.Auth.RTokenExpire {
+		t.Fatalf("Login() token metadata = %+v", resp)
+	}
+	claims, err := jwtx.ParseTokenString(resp.AToken)
+	if err != nil {
+		t.Fatalf("ParseTokenString(login atoken) error = %v", err)
+	}
+	if claims.UserID != "user-1" || claims.Role != jwtx.COMMON_USER {
+		t.Fatalf("login atoken claims = %+v", claims)
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("Marshal LoginResp failed: %v", err)
+	}
+	if strings.Contains(string(data), `"token":`) {
+		t.Fatalf("LoginResp exposes legacy token field: %s", data)
+	}
+}
+
+func TestRefreshTokenRotatesRefreshTokenAndRejectsReplay(t *testing.T) {
+	configureTokenStore(t)
+	l := userlogic.NewUserLogic(&userRepoFake{}, &emailFake{}, &smsFake{}, nil)
+	pair, err := jwtx.GenTokenPair(context.Background(), jwtx.Claims{
+		UserID: "user-1",
+		Role:   jwtx.COMMON_USER,
+	})
+	if err != nil {
+		t.Fatalf("GenTokenPair() error = %v", err)
+	}
+
+	resp, err := l.RefreshToken(context.Background(), userdto.RefreshTokenReq{RToken: pair.RToken})
+
+	if err != nil {
+		t.Fatalf("RefreshToken() error = %v", err)
+	}
+	if resp.AToken == "" || resp.RToken == "" || resp.RToken == pair.RToken {
+		t.Fatalf("RefreshToken() = %+v, want rotated token pair", resp)
+	}
+	if _, err := l.RefreshToken(context.Background(), userdto.RefreshTokenReq{RToken: pair.RToken}); !errors.Is(err, userlogic.ErrRTokenReplay) {
+		t.Fatalf("RefreshToken(old rtoken) error = %v, want %v", err, userlogic.ErrRTokenReplay)
+	}
+}
+
+func TestLogoutRevokesTokenPair(t *testing.T) {
+	configureTokenStore(t)
+	l := userlogic.NewUserLogic(&userRepoFake{}, &emailFake{}, &smsFake{}, nil)
+	pair, err := jwtx.GenTokenPair(context.Background(), jwtx.Claims{
+		UserID: "user-1",
+		Role:   jwtx.COMMON_USER,
+	})
+	if err != nil {
+		t.Fatalf("GenTokenPair() error = %v", err)
+	}
+
+	resp, err := l.Logout(context.Background(), pair.AToken, userdto.LogoutReq{RToken: pair.RToken})
+
+	if err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if resp.Message == "" {
+		t.Fatalf("Logout() message is empty")
+	}
+	if _, err := jwtx.ParseTokenString(pair.AToken); !errors.Is(err, jwtx.ErrTokenRevoked) {
+		t.Fatalf("ParseTokenString(revoked atoken) error = %v, want %v", err, jwtx.ErrTokenRevoked)
+	}
+	if _, err := jwtx.RotateRToken(context.Background(), pair.RToken); !errors.Is(err, jwtx.ErrRTokenReplay) {
+		t.Fatalf("RotateRToken(revoked rtoken) error = %v, want %v", err, jwtx.ErrRTokenReplay)
+	}
+}
 
 func TestRegisterMapsEmailConflict(t *testing.T) {
 	email := &emailFake{verifyOK: true}
@@ -152,6 +246,20 @@ func TestUpdateProfileMapsUpdateFailure(t *testing.T) {
 	if !errors.Is(err, userlogic.ErrProfileUpdateFailed) {
 		t.Fatalf("UpdateProfile() error = %v, want %v", err, userlogic.ErrProfileUpdateFailed)
 	}
+}
+
+func configureTokenStore(t *testing.T) {
+	t.Helper()
+	config.Conf.Auth = config.Auth{
+		ATokenSecret: "test-atoken-secret",
+		ATokenExpire: 60,
+		RTokenSecret: "test-rtoken-secret",
+		RTokenExpire: 300,
+	}
+	jwtx.SetTokenStore(jwtx.NewMemoryTokenStore())
+	t.Cleanup(func() {
+		jwtx.SetTokenStore(nil)
+	})
 }
 
 type emailFake struct {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"nurture/internal/middleware"
+	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/response"
 	"nurture/internal/user/dto"
 
@@ -11,6 +12,23 @@ import (
 func (uh *UserHandler) Login(c *gin.Context) {
 	cr := middleware.GetBind[dto.LoginReq](c)
 	resp, err := uh.userLogic.Login(c.Request.Context(), cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) RefreshToken(c *gin.Context) {
+	cr := middleware.GetBind[dto.RefreshTokenReq](c)
+	resp, err := uh.userLogic.RefreshToken(c.Request.Context(), cr)
+	response.Response(c, resp, err)
+}
+
+func (uh *UserHandler) Logout(c *gin.Context) {
+	cr := middleware.GetBind[dto.LogoutReq](c)
+	atoken, err := jwtx.BearerToken(c)
+	if err != nil {
+		response.Response(c, nil, err)
+		return
+	}
+	resp, err := uh.userLogic.Logout(c.Request.Context(), atoken, cr)
 	response.Response(c, resp, err)
 }
 

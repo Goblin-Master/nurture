@@ -17,6 +17,8 @@ func TestUserRoutesUseResourcePaths(t *testing.T) {
 
 	routes := routeSet(r.Routes())
 	for _, route := range []string{
+		"POST /api/user/token/refresh",
+		"POST /api/user/logout",
 		"POST /api/user/password/reset",
 		"POST /api/user/partner",
 		"POST /api/user/following/:target_user_id",

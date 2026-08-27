@@ -24,15 +24,15 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 		if err != nil {
 			return resp, ErrAccountOrPassword
 		}
-		token, err := jwtx.GenToken(jwtx.Claims{
+		pair, err := jwtx.GenTokenPair(ctx, jwtx.Claims{
 			UserID: data.UserID,
 			Role:   jwtx.Role(data.Role),
 		})
 		if err != nil {
 			ul.log.Error(err)
-			return resp, ErrDefault
+			return resp, mapTokenError(err)
 		}
-		resp.Token = token
+		resp.TokenPairResp = tokenPairResp(pair)
 		return resp, nil
 	case userconstant.LoginWithEmail:
 		ok, err := ul.email.VerifyCode(ctx, fmt.Sprintf(userconstant.LoginCodeKey, req.Email), req.Code)
@@ -47,19 +47,83 @@ func (ul *UserLogic) Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp
 		if err != nil {
 			return resp, ErrEmail
 		}
-		token, err := jwtx.GenToken(jwtx.Claims{
+		pair, err := jwtx.GenTokenPair(ctx, jwtx.Claims{
 			UserID: data.UserID,
 			Role:   jwtx.Role(data.Role),
 		})
 		if err != nil {
 			ul.log.Error(err)
-			return resp, ErrDefault
+			return resp, mapTokenError(err)
 		}
-		resp.Token = token
+		resp.TokenPairResp = tokenPairResp(pair)
 		return resp, nil
 	default:
 		ul.log.Warnf("错误的登录方式:%s", req.LoginType)
 		return resp, ErrLoginWithFailedWay
+	}
+}
+
+func (ul *UserLogic) RefreshToken(ctx context.Context, req dto.RefreshTokenReq) (dto.RefreshTokenResp, error) {
+	var resp dto.RefreshTokenResp
+	pair, err := jwtx.RotateRToken(ctx, req.RToken)
+	if err != nil {
+		if !errors.Is(err, jwtx.ErrTokenInvalid) &&
+			!errors.Is(err, jwtx.ErrTokenExpired) &&
+			!errors.Is(err, jwtx.ErrTokenType) &&
+			!errors.Is(err, jwtx.ErrTokenEmpty) &&
+			!errors.Is(err, jwtx.ErrRTokenReplay) &&
+			!errors.Is(err, jwtx.ErrTokenStore) {
+			ul.log.Error(err)
+		}
+		return resp, mapTokenError(err)
+	}
+	resp.TokenPairResp = tokenPairResp(pair)
+	return resp, nil
+}
+
+func (ul *UserLogic) Logout(ctx context.Context, atoken string, req dto.LogoutReq) (dto.LogoutResp, error) {
+	var resp dto.LogoutResp
+	if err := jwtx.RevokeTokenPair(ctx, atoken, req.RToken); err != nil {
+		if !errors.Is(err, jwtx.ErrTokenInvalid) &&
+			!errors.Is(err, jwtx.ErrTokenExpired) &&
+			!errors.Is(err, jwtx.ErrTokenType) &&
+			!errors.Is(err, jwtx.ErrTokenEmpty) &&
+			!errors.Is(err, jwtx.ErrRTokenReplay) &&
+			!errors.Is(err, jwtx.ErrTokenStore) {
+			ul.log.Error(err)
+		}
+		return resp, mapTokenError(err)
+	}
+	resp.Message = "退出登录成功"
+	return resp, nil
+}
+
+func tokenPairResp(pair jwtx.TokenPair) dto.TokenPairResp {
+	return dto.TokenPairResp{
+		AToken:           pair.AToken,
+		RToken:           pair.RToken,
+		TokenType:        pair.TokenType,
+		ExpiresIn:        pair.ExpiresIn,
+		RefreshExpiresIn: pair.RefreshExpiresIn,
+	}
+}
+
+func mapTokenError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, jwtx.ErrTokenStore):
+		return ErrAuthUnavailable
+	case errors.Is(err, jwtx.ErrRTokenReplay):
+		return ErrRTokenReplay
+	case errors.Is(err, jwtx.ErrTokenEmpty),
+		errors.Is(err, jwtx.ErrTokenInvalid),
+		errors.Is(err, jwtx.ErrTokenExpired),
+		errors.Is(err, jwtx.ErrTokenType),
+		errors.Is(err, jwtx.ErrTokenRevoked):
+		return ErrRTokenInvalid
+	default:
+		return ErrDefault
 	}
 }
 

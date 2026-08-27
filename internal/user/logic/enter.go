@@ -13,6 +13,8 @@ import (
 
 type IUserLogic interface {
 	Login(ctx context.Context, req dto.LoginReq) (dto.LoginResp, error)
+	RefreshToken(ctx context.Context, req dto.RefreshTokenReq) (dto.RefreshTokenResp, error)
+	Logout(ctx context.Context, atoken string, req dto.LogoutReq) (dto.LogoutResp, error)
 	Register(ctx context.Context, req dto.RegisterReq) (dto.RegisterResp, error)
 	RegisterSMS(ctx context.Context, req dto.RegisterSMSReq) (dto.RegisterResp, error)
 	GetLoginCode(ctx context.Context, req dto.GetCodeReq) (dto.GetCodeResp, error)

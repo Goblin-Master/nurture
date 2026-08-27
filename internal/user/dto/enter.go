@@ -9,7 +9,26 @@ type (
 		LoginType string `json:"login_type"`
 	}
 	LoginResp struct {
-		Token string `json:"token"`
+		TokenPairResp
+	}
+	RefreshTokenReq struct {
+		RToken string `json:"rtoken" binding:"required"`
+	}
+	RefreshTokenResp struct {
+		TokenPairResp
+	}
+	LogoutReq struct {
+		RToken string `json:"rtoken" binding:"required"`
+	}
+	LogoutResp struct {
+		Message string `json:"message"`
+	}
+	TokenPairResp struct {
+		AToken           string `json:"atoken"`
+		RToken           string `json:"rtoken"`
+		TokenType        string `json:"token_type"`
+		ExpiresIn        int64  `json:"expires_in"`
+		RefreshExpiresIn int64  `json:"refresh_expires_in"`
 	}
 )
 
