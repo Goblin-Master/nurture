@@ -107,7 +107,7 @@ func RotateRToken(ctx context.Context, rtoken string) (TokenPair, error) {
 	if store == nil {
 		return TokenPair{}, ErrTokenStore
 	}
-	claims, err := parseTokenString(rtoken, config.Conf.Auth.RTokenSecret, TokenTypeRToken, false)
+	claims, err := parseTokenString(ctx, rtoken, config.Conf.Auth.RTokenSecret, TokenTypeRToken, false)
 	if err != nil {
 		return TokenPair{}, err
 	}
@@ -141,7 +141,7 @@ func RevokeTokenPair(ctx context.Context, atoken, rtoken string) error {
 	if err := BlacklistAToken(ctx, atoken); err != nil && !errors.Is(err, ErrTokenExpired) {
 		return err
 	}
-	claims, err := parseTokenString(rtoken, config.Conf.Auth.RTokenSecret, TokenTypeRToken, false)
+	claims, err := parseTokenString(ctx, rtoken, config.Conf.Auth.RTokenSecret, TokenTypeRToken, false)
 	if err != nil {
 		if errors.Is(err, ErrTokenExpired) {
 			return nil
@@ -164,7 +164,7 @@ func BlacklistAToken(ctx context.Context, atoken string) error {
 	if store == nil {
 		return ErrTokenStore
 	}
-	claims, err := parseTokenString(atoken, config.Conf.Auth.ATokenSecret, TokenTypeAToken, false)
+	claims, err := parseTokenString(ctx, atoken, config.Conf.Auth.ATokenSecret, TokenTypeAToken, false)
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func ParseToken(c *gin.Context) (string, Role, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	claims, err := ParseTokenString(token)
+	claims, err := parseTokenString(c.Request.Context(), token, config.Conf.Auth.ATokenSecret, TokenTypeAToken, true)
 	if err != nil {
 		return "", 0, err
 	}
@@ -188,11 +188,11 @@ func ParseToken(c *gin.Context) (string, Role, error) {
 }
 
 func ParseTokenString(token string) (*MyClaims, error) {
-	return parseTokenString(token, config.Conf.Auth.ATokenSecret, TokenTypeAToken, true)
+	return parseTokenString(context.Background(), token, config.Conf.Auth.ATokenSecret, TokenTypeAToken, true)
 }
 
 func ParseRTokenString(token string) (*MyClaims, error) {
-	return parseTokenString(token, config.Conf.Auth.RTokenSecret, TokenTypeRToken, false)
+	return parseTokenString(context.Background(), token, config.Conf.Auth.RTokenSecret, TokenTypeRToken, false)
 }
 
 // 必须使用了鉴权中间件才能用
@@ -282,7 +282,7 @@ func genToken(c Claims, tokenType, secret string, ttl time.Duration, now time.Ti
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
 }
 
-func parseTokenString(token, secret, wantType string, checkBlacklist bool) (*MyClaims, error) {
+func parseTokenString(ctx context.Context, token, secret, wantType string, checkBlacklist bool) (*MyClaims, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return nil, ErrTokenEmpty
@@ -316,7 +316,7 @@ func parseTokenString(token, secret, wantType string, checkBlacklist bool) (*MyC
 		return nil, ErrTokenType
 	}
 	if checkBlacklist && tokenStore != nil {
-		revoked, err := tokenStore.IsATokenBlacklisted(context.Background(), TokenHash(token))
+		revoked, err := tokenStore.IsATokenBlacklisted(ctx, TokenHash(token))
 		if err != nil {
 			return nil, err
 		}
