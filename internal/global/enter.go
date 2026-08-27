@@ -3,6 +3,7 @@ package global
 import (
 	"nurture/internal/config"
 	"nurture/internal/pkg/aix"
+	"nurture/internal/pkg/jwtx"
 	"nurture/internal/pkg/miniox"
 	"nurture/internal/pkg/pgsqlx"
 	"nurture/internal/pkg/rabbitmqx"
@@ -28,6 +29,11 @@ func Init() {
 	Log = zapx.InitZap()
 	DB = pgsqlx.InitPgsql()
 	RDB = redisx.InitRedis()
+	if RDB != nil {
+		jwtx.SetTokenStore(jwtx.NewRedisTokenStore(RDB))
+	} else {
+		jwtx.SetTokenStore(nil)
+	}
 	RMQ = rabbitmqx.InitRabbitMQ(Log)
 	MIO = miniox.InitMinio()
 

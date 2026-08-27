@@ -4,8 +4,10 @@ app:
   env: dev
   log: logs/   # 日志文件路径，要加个 /
 auth:
-  access_secret: nurture
-  access_expire: 86400
+  atoken_secret: nurture_atoken
+  atoken_expire: 900
+  rtoken_secret: nurture_rtoken
+  rtoken_expire: 604800
 db:
   enable: false
   host: nurture-pg  # 数据库容器名

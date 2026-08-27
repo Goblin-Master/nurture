@@ -1,8 +1,11 @@
 package jwtx
 
 import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"nurture/internal/config"
 	"strings"
 	"time"
@@ -24,9 +27,16 @@ const (
 	ContextRoleKey   = "Role"
 )
 
+const (
+	TokenTypeAToken = "atoken"
+	TokenTypeRToken = "rtoken"
+)
+
 type MyClaims struct {
-	UserID string `json:"user_id"`
-	Role   Role   `json:"role"`
+	UserID    string `json:"user_id"`
+	Role      Role   `json:"role"`
+	TokenType string `json:"token_type"`
+	Nonce     string `json:"nonce,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -35,31 +45,34 @@ type Claims struct {
 	Role   Role   `json:"role"`
 }
 
+type TokenPair struct {
+	AToken           string `json:"atoken"`
+	RToken           string `json:"rtoken"`
+	TokenType        string `json:"token_type"`
+	ExpiresIn        int64  `json:"expires_in"`
+	RefreshExpiresIn int64  `json:"refresh_expires_in"`
+}
+
 var (
 	ErrDefault          = errors.New("jwt default error")
 	ErrTokenEmpty       = errors.New("token is empty")
 	ErrTokenExpired     = errors.New("token has expired")
 	ErrTokenInvalid     = errors.New("token is invalid")
+	ErrTokenType        = errors.New("token type is invalid")
+	ErrTokenRevoked     = errors.New("token has been revoked")
+	ErrTokenStore       = errors.New("token store unavailable")
+	ErrRTokenReplay     = errors.New("refresh token has been used")
 	ErrPermissionDenied = errors.New("permission denied")
 )
 
+var tokenStore TokenStore
+
+func SetTokenStore(store TokenStore) {
+	tokenStore = store
+}
+
 func GenToken(c Claims) (string, error) {
-	secret := config.Conf.Auth.AccessSecret
-	expiredTime := config.Conf.Auth.AccessExpire
-	// 创建一个我们自己的声明
-	claims := MyClaims{
-		c.UserID,
-		c.Role,
-		jwt.RegisteredClaims{
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expiredTime) * time.Second)), // 过期时间
-			Issuer:    "Nurture",
-		},
-	}
-	// 使用指定的签名方法创建签名对象
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	// 使用指定的secret签名并获得完整的编码后的字符串token
-	return token.SignedString([]byte(secret))
+	return genToken(c, TokenTypeAToken, config.Conf.Auth.ATokenSecret, authDuration(config.Conf.Auth.ATokenExpire), time.Now())
 }
 
 // GenTestToken 用于测试生成 Token，需要确保 config 已加载
@@ -70,12 +83,103 @@ func GenTestToken(userID string, role Role) (string, error) {
 	})
 }
 
-func ParseToken(c *gin.Context) (string, Role, error) {
-	data := c.GetHeader("Authorization")
-	if data == "" {
-		return "", 0, ErrTokenEmpty
+func GenTokenPair(ctx context.Context, c Claims) (TokenPair, error) {
+	store := tokenStore
+	if store == nil {
+		return TokenPair{}, ErrTokenStore
 	}
-	token := strings.TrimPrefix(data, "Bearer ")
+	pair, err := genTokenPair(c)
+	if err != nil {
+		return TokenPair{}, err
+	}
+	err = store.SetActiveRToken(ctx, TokenHash(pair.RToken), RTokenSession{
+		UserID: c.UserID,
+		Role:   c.Role,
+	}, authDuration(config.Conf.Auth.RTokenExpire))
+	if err != nil {
+		return TokenPair{}, err
+	}
+	return pair, nil
+}
+
+func RotateRToken(ctx context.Context, rtoken string) (TokenPair, error) {
+	store := tokenStore
+	if store == nil {
+		return TokenPair{}, ErrTokenStore
+	}
+	claims, err := parseTokenString(rtoken, config.Conf.Auth.RTokenSecret, TokenTypeRToken, false)
+	if err != nil {
+		return TokenPair{}, err
+	}
+	usedTTL := tokenTTL(claims)
+	if usedTTL <= 0 {
+		return TokenPair{}, ErrTokenExpired
+	}
+	pair, err := genTokenPair(Claims{UserID: claims.UserID, Role: claims.Role})
+	if err != nil {
+		return TokenPair{}, err
+	}
+	err = store.RotateRToken(
+		ctx,
+		TokenHash(rtoken),
+		TokenHash(pair.RToken),
+		RTokenSession{UserID: claims.UserID, Role: claims.Role},
+		authDuration(config.Conf.Auth.RTokenExpire),
+		usedTTL,
+	)
+	if err != nil {
+		return TokenPair{}, err
+	}
+	return pair, nil
+}
+
+func RevokeTokenPair(ctx context.Context, atoken, rtoken string) error {
+	store := tokenStore
+	if store == nil {
+		return ErrTokenStore
+	}
+	if err := BlacklistAToken(ctx, atoken); err != nil && !errors.Is(err, ErrTokenExpired) {
+		return err
+	}
+	claims, err := parseTokenString(rtoken, config.Conf.Auth.RTokenSecret, TokenTypeRToken, false)
+	if err != nil {
+		if errors.Is(err, ErrTokenExpired) {
+			return nil
+		}
+		return err
+	}
+	ttl := tokenTTL(claims)
+	hash := TokenHash(rtoken)
+	if err := store.DeleteActiveRToken(ctx, hash); err != nil {
+		return err
+	}
+	if ttl > 0 {
+		return store.MarkRTokenUsed(ctx, hash, ttl)
+	}
+	return nil
+}
+
+func BlacklistAToken(ctx context.Context, atoken string) error {
+	store := tokenStore
+	if store == nil {
+		return ErrTokenStore
+	}
+	claims, err := parseTokenString(atoken, config.Conf.Auth.ATokenSecret, TokenTypeAToken, false)
+	if err != nil {
+		return err
+	}
+	ttl := tokenTTL(claims)
+	if ttl <= 0 {
+		return ErrTokenExpired
+	}
+	return store.BlacklistAToken(ctx, TokenHash(atoken), ttl)
+}
+
+func ParseToken(c *gin.Context) (string, Role, error) {
+	token, err := BearerToken(c)
+	if err != nil {
+		return "", 0, err
+	}
 	claims, err := ParseTokenString(token)
 	if err != nil {
 		return "", 0, err
@@ -84,28 +188,11 @@ func ParseToken(c *gin.Context) (string, Role, error) {
 }
 
 func ParseTokenString(token string) (*MyClaims, error) {
-	// 解析token
-	var claims MyClaims
-	t, err := jwt.ParseWithClaims(token, &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.Conf.Auth.AccessSecret), nil
-	})
-	if err != nil {
-		if strings.Contains(err.Error(), "token is expired") {
-			return nil, ErrTokenExpired
-		}
-		if strings.Contains(err.Error(), "signature is invalid") {
-			return nil, ErrTokenInvalid
-		}
-		if strings.Contains(err.Error(), "token contains an invalid") {
-			return nil, ErrTokenInvalid
-		}
-		fmt.Println(err)
-		return nil, ErrDefault
-	}
-	if claims, ok := t.Claims.(*MyClaims); ok && t.Valid {
-		return claims, nil
-	}
-	return nil, ErrDefault
+	return parseTokenString(token, config.Conf.Auth.ATokenSecret, TokenTypeAToken, true)
+}
+
+func ParseRTokenString(token string) (*MyClaims, error) {
+	return parseTokenString(token, config.Conf.Auth.RTokenSecret, TokenTypeRToken, false)
 }
 
 // 必须使用了鉴权中间件才能用
@@ -135,4 +222,126 @@ func GetRole(c *gin.Context) Role {
 		}
 	}
 	return 0
+}
+
+func BearerToken(c *gin.Context) (string, error) {
+	auth := c.GetHeader("Authorization")
+	if auth == "" {
+		return "", ErrTokenEmpty
+	}
+	token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	if token == "" {
+		return "", ErrTokenEmpty
+	}
+	return token, nil
+}
+
+func TokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func genTokenPair(c Claims) (TokenPair, error) {
+	now := time.Now()
+	atoken, err := genToken(c, TokenTypeAToken, config.Conf.Auth.ATokenSecret, authDuration(config.Conf.Auth.ATokenExpire), now)
+	if err != nil {
+		return TokenPair{}, err
+	}
+	rtoken, err := genToken(c, TokenTypeRToken, config.Conf.Auth.RTokenSecret, authDuration(config.Conf.Auth.RTokenExpire), now)
+	if err != nil {
+		return TokenPair{}, err
+	}
+	return TokenPair{
+		AToken:           atoken,
+		RToken:           rtoken,
+		TokenType:        "Bearer",
+		ExpiresIn:        config.Conf.Auth.ATokenExpire,
+		RefreshExpiresIn: config.Conf.Auth.RTokenExpire,
+	}, nil
+}
+
+func genToken(c Claims, tokenType, secret string, ttl time.Duration, now time.Time) (string, error) {
+	if strings.TrimSpace(secret) == "" || ttl <= 0 {
+		return "", ErrDefault
+	}
+	nonce, err := randomNonce()
+	if err != nil {
+		return "", err
+	}
+	claims := MyClaims{
+		UserID:    c.UserID,
+		Role:      c.Role,
+		TokenType: tokenType,
+		Nonce:     nonce,
+		RegisteredClaims: jwt.RegisteredClaims{
+			NotBefore: jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			Issuer:    "Nurture",
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+}
+
+func parseTokenString(token, secret, wantType string, checkBlacklist bool) (*MyClaims, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, ErrTokenEmpty
+	}
+	var unverified MyClaims
+	if _, _, err := new(jwt.Parser).ParseUnverified(token, &unverified); err == nil && unverified.TokenType != "" && unverified.TokenType != wantType {
+		return nil, ErrTokenType
+	}
+	var claims MyClaims
+	t, err := jwt.ParseWithClaims(token, &claims, func(token *jwt.Token) (interface{}, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, ErrTokenInvalid
+		}
+		return []byte(secret), nil
+	})
+	if err != nil {
+		var validationErr *jwt.ValidationError
+		if errors.As(err, &validationErr) {
+			if validationErr.Errors&jwt.ValidationErrorExpired != 0 {
+				return nil, ErrTokenExpired
+			}
+			return nil, ErrTokenInvalid
+		}
+		return nil, ErrDefault
+	}
+	parsedClaims, ok := t.Claims.(*MyClaims)
+	if !ok || !t.Valid {
+		return nil, ErrTokenInvalid
+	}
+	if parsedClaims.TokenType != wantType {
+		return nil, ErrTokenType
+	}
+	if checkBlacklist && tokenStore != nil {
+		revoked, err := tokenStore.IsATokenBlacklisted(context.Background(), TokenHash(token))
+		if err != nil {
+			return nil, err
+		}
+		if revoked {
+			return nil, ErrTokenRevoked
+		}
+	}
+	return parsedClaims, nil
+}
+
+func authDuration(seconds int64) time.Duration {
+	return time.Duration(seconds) * time.Second
+}
+
+func tokenTTL(claims *MyClaims) time.Duration {
+	if claims == nil || claims.ExpiresAt == nil {
+		return 0
+	}
+	return time.Until(claims.ExpiresAt.Time)
+}
+
+func randomNonce() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }

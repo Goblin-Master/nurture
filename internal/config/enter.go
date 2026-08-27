@@ -141,8 +141,10 @@ type Minio struct {
 
 // JWT 认证需要的密钥和过期时间配置
 type Auth struct {
-	AccessSecret string `mapstructure:"access_secret" json:"access_secret"`
-	AccessExpire int64  `mapstructure:"access_expire" json:"access_expire"`
+	ATokenSecret string `mapstructure:"atoken_secret" json:"atoken_secret"`
+	ATokenExpire int64  `mapstructure:"atoken_expire" json:"atoken_expire"`
+	RTokenSecret string `mapstructure:"rtoken_secret" json:"rtoken_secret"`
+	RTokenExpire int64  `mapstructure:"rtoken_expire" json:"rtoken_expire"`
 }
 
 type Email struct {
