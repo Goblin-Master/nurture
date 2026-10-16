@@ -60,6 +60,34 @@ func skipAIVectorIntegration(t *testing.T) {
 	}
 }
 
+/*
+	curl -X POST "https://open.bigmodel.cn/api/paas/v4/chat/completions" \
+	    -H "Content-Type: application/json" \
+	    -H "Authorization: Bearer YOUR_API_KEY" \
+	    -d '{
+	        "model": "glm-4-flash",
+	        "messages": [
+	            {
+	                "role": "user",
+	                "content": "作为一名营销专家，请为我的产品创作一个吸引人的口号"
+	            },
+	            {
+	                "role": "assistant",
+	                "content": "当然，要创作一个吸引人的口号，请告诉我一些关于您产品的信息"
+	            },
+	            {
+	                "role": "user",
+	                "content": "智谱开放平台"
+	            }
+	        ],
+	        "thinking": {
+	            "type": "enabled"
+	        },
+	        "stream": true,
+	        "max_tokens": 65536,
+	        "temperature": 1.0
+	    }'
+*/
 func TestStreamChat(t *testing.T) {
 	loadConfig(t)
 	skipAIChatIntegration(t)
@@ -103,6 +131,15 @@ func TestStreamChat(t *testing.T) {
 	}
 }
 
+/*
+	curl -X POST https://api.siliconflow.cn/v1/embeddings \
+	    -H "Authorization: Bearer YOUR_API_KEY" \
+	    -H "Content-Type: application/json" \
+	    -d '{
+	      "input": "Hello, world!",
+	      "model": "BAAI/bge-m3"
+	    }'
+*/
 func TestEmbedding(t *testing.T) {
 	loadConfig(t)
 	skipAIEmbeddingIntegration(t)
